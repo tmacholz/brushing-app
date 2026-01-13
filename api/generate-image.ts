@@ -60,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
 
           // Add consistency instruction
-          fullPrompt = `Reference the style, color palette, and artistic approach from the provided image. Maintain visual consistency with the reference. ${fullPrompt}`;
+          fullPrompt = `Using the attached image as a style reference: match the exact art style, color palette, lighting, and line quality. Keep the same exact character designs, proportions, and visual appearance for any characters that appear. Maintain complete visual consistency. New scene: ${fullPrompt}`;
         }
       } catch (refError) {
         console.error('Failed to fetch reference image:', refError);
