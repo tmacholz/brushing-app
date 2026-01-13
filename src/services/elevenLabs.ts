@@ -1,6 +1,5 @@
-// Child-friendly voice from ElevenLabs
-// George - Warm, Captivating Storyteller
-const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb';
+// Custom child-friendly voice from ElevenLabs
+const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
 export interface TTSOptions {
   voiceId?: string;
