@@ -11,7 +11,6 @@ import { createStoryArcForWorld } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { getPetById } from '../data/pets';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
-import type { StoryChapter } from '../types';
 
 interface BrushingScreenProps {
   onComplete: (pointsEarned: number) => void;
@@ -34,17 +33,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const imageGenerationStarted = useRef(false);
 
   // Get or create story arc
-  const [currentChapter, setCurrentChapter] = useState<StoryChapter | null>(null);
-  const [chapterIndex, setChapterIndex] = useState(0);
-
   useEffect(() => {
     if (!child) return;
 
-    let storyArc = child.currentStoryArc;
-
     // Create new story if needed
-    if (!storyArc) {
-      storyArc = createStoryArcForWorld(
+    if (!child.currentStoryArc) {
+      const storyArc = createStoryArcForWorld(
         child.activeWorldId,
         child.name,
         child.activePetId
@@ -53,13 +47,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         setCurrentStoryArc(storyArc);
       }
     }
-
-    if (storyArc) {
-      const idx = storyArc.currentChapterIndex;
-      setChapterIndex(idx);
-      setCurrentChapter(storyArc.chapters[idx] ?? null);
-    }
   }, [child, setCurrentStoryArc]);
+
+  // Derive chapter directly from context so it updates when images are added
+  const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;
+  const currentChapter = child?.currentStoryArc?.chapters[chapterIndex] ?? null;
 
   const pet = child ? getPetById(child.activePetId) : null;
 
