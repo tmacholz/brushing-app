@@ -2,8 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-// Use the image generation model (nano banana)
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
+// Use the image generation model (nano banana) - gemini-2.5-flash-image is the stable version
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent';
 
 // Consistent style prefix for all story images
 const STYLE_PREFIX = `Children's book illustration style, soft watercolor and digital art hybrid,
