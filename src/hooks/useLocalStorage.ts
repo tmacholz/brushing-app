@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 export function useLocalStorage<T>(
   key: string,
-  initialValue: T
+  initialValue: T,
+  sanitizer?: (value: T) => T
 ): [T, (value: T | ((prev: T) => T)) => void, () => void] {
   // Get initial value from localStorage or use provided initial value
   const readValue = useCallback((): T => {
@@ -29,7 +30,9 @@ export function useLocalStorage<T>(
           const valueToStore =
             value instanceof Function ? value(currentValue) : value;
           if (typeof window !== 'undefined') {
-            window.localStorage.setItem(key, JSON.stringify(valueToStore));
+            // Apply sanitizer before saving to localStorage (but keep full value in state)
+            const valueForStorage = sanitizer ? sanitizer(valueToStore) : valueToStore;
+            window.localStorage.setItem(key, JSON.stringify(valueForStorage));
           }
           return valueToStore;
         });
@@ -37,7 +40,7 @@ export function useLocalStorage<T>(
         console.warn(`Error setting localStorage key "${key}":`, error);
       }
     },
-    [key]
+    [key, sanitizer]
   );
 
   // Remove item from localStorage

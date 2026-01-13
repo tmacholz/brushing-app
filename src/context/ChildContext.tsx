@@ -47,6 +47,30 @@ const ChildContext = createContext<ChildContextType | undefined>(undefined);
 const STORAGE_KEY = 'brushquest_data';
 const OLD_STORAGE_KEY = 'brushquest_child';
 
+// Strip large data URLs from app data before saving to localStorage
+// Blob URLs are short and safe to store, but base64 data URLs are huge
+const sanitizeForStorage = (data: AppData): AppData => {
+  return {
+    ...data,
+    children: data.children.map((child) => ({
+      ...child,
+      currentStoryArc: child.currentStoryArc
+        ? {
+            ...child.currentStoryArc,
+            chapters: child.currentStoryArc.chapters.map((chapter) => ({
+              ...chapter,
+              segments: chapter.segments.map((segment) => ({
+                ...segment,
+                // Only keep blob URLs, strip data URLs (they're too large)
+                imageUrl: segment.imageUrl?.startsWith('data:') ? null : segment.imageUrl,
+              })),
+            })),
+          }
+        : null,
+    })),
+  };
+};
+
 const createDefaultChild = (name: string, age: number, petId?: string, worldId?: string): Child => {
   const starterPets = getStarterPets();
   const starterBrushes = getStarterBrushes();
@@ -102,7 +126,8 @@ const getInitialData = (): AppData => {
 export function ChildProvider({ children }: { children: ReactNode }) {
   const [appData, setAppData, removeAppData] = useLocalStorage<AppData>(
     STORAGE_KEY,
-    getInitialData()
+    getInitialData(),
+    sanitizeForStorage
   );
 
   // Get active child
