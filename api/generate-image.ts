@@ -15,6 +15,7 @@ pastel color palette with vibrant accents. Scene: `;
 interface GenerateImageRequest {
   prompt: string;
   segmentId: string;
+  referenceImageUrl?: string; // Previous image for style/character consistency
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -27,15 +28,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
-  const { prompt, segmentId } = req.body as GenerateImageRequest;
+  const { prompt, segmentId, referenceImageUrl } = req.body as GenerateImageRequest;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
   }
 
   try {
-    // Combine style prefix with the scene prompt
-    const fullPrompt = `${STYLE_PREFIX}${prompt}`;
+    // Build the prompt with style consistency instructions
+    let fullPrompt = `${STYLE_PREFIX}${prompt}`;
+
+    // Build the parts array for the request
+    const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+    // If we have a reference image, fetch it and add consistency instructions
+    if (referenceImageUrl) {
+      try {
+        // Fetch the reference image
+        const imageResponse = await fetch(referenceImageUrl);
+        if (imageResponse.ok) {
+          const imageBuffer = await imageResponse.arrayBuffer();
+          const base64Image = Buffer.from(imageBuffer).toString('base64');
+          const mimeType = imageResponse.headers.get('content-type') || 'image/png';
+
+          // Add reference image first
+          parts.push({
+            inlineData: {
+              mimeType,
+              data: base64Image,
+            },
+          });
+
+          // Add consistency instruction
+          fullPrompt = `Reference the style, color palette, and artistic approach from the provided image. Maintain visual consistency with the reference. ${fullPrompt}`;
+        }
+      } catch (refError) {
+        console.error('Failed to fetch reference image:', refError);
+        // Continue without reference image
+      }
+    }
+
+    // Add the text prompt
+    parts.push({ text: fullPrompt });
 
     // Call Gemini API for image generation
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
@@ -45,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       body: JSON.stringify({
         contents: [{
-          parts: [{ text: fullPrompt }]
+          parts,
         }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],

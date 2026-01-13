@@ -6,7 +6,8 @@ interface GenerateImageResult {
 }
 
 export async function generateImageForSegment(
-  segment: StorySegment
+  segment: StorySegment,
+  referenceImageUrl?: string
 ): Promise<GenerateImageResult | null> {
   if (!segment.imagePrompt) {
     return null;
@@ -21,6 +22,7 @@ export async function generateImageForSegment(
       body: JSON.stringify({
         prompt: segment.imagePrompt,
         segmentId: segment.id,
+        referenceImageUrl, // Pass previous image for style consistency
       }),
     });
 
@@ -105,6 +107,7 @@ export async function generateImagesForChapter(
 
   const total = segmentsToGenerate.length;
   let completed = 0;
+  let previousImageUrl: string | undefined;
 
   for (const segment of segmentsToGenerate) {
     onProgress?.({
@@ -113,9 +116,12 @@ export async function generateImagesForChapter(
       currentSegment: segment.id,
     });
 
-    const result = await generateImageForSegment(segment);
+    // Pass the previous image URL for style/character consistency
+    const result = await generateImageForSegment(segment, previousImageUrl);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
+      // Use this image as reference for the next one
+      previousImageUrl = result.imageUrl;
     }
 
     completed++;
