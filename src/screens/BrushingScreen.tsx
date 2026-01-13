@@ -32,7 +32,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Get or create story arc
   const [currentChapter, setCurrentChapter] = useState<StoryChapter | null>(null);
   const [chapterIndex, setChapterIndex] = useState(0);
-  const [previousChapterSummary, setPreviousChapterSummary] = useState<string | null>(null);
 
   useEffect(() => {
     if (!child) return;
@@ -55,16 +54,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       const idx = storyArc.currentChapterIndex;
       setChapterIndex(idx);
       setCurrentChapter(storyArc.chapters[idx] ?? null);
-
-      // Get previous chapter cliffhanger for recap
-      if (idx > 0) {
-        const prevChapter = storyArc.chapters[idx - 1];
-        setPreviousChapterSummary(prevChapter?.cliffhanger ?? null);
-      }
     }
   }, [child, setCurrentStoryArc]);
 
-  const isFirstChapter = chapterIndex === 0;
   const pet = child ? getPetById(child.activePetId) : null;
 
   const handleBrushingComplete = () => {
@@ -110,7 +102,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     currentSegment,
     phase,
     getSegmentForTime,
-  } = useStoryProgression(currentChapter, isFirstChapter);
+  } = useStoryProgression(currentChapter);
 
   // Update story progression based on timer
   useEffect(() => {
@@ -157,13 +149,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     switch (phase) {
       case 'recap':
-        if (previousChapterSummary && child && pet) {
-          const cleanedSummary = previousChapterSummary
-            .replace(/^But /i, '')
-            .replace(/^As /i, 'as ')
-            .replace(/^Suddenly, /i, 'suddenly ')
-            .replace(/^And /i, '');
-          textToSpeak = `Last time... ${child.name} and ${pet.displayName} ${cleanedSummary}`;
+        if (currentChapter?.recap) {
+          textToSpeak = `Last time... ${currentChapter.recap}`;
         }
         break;
       case 'title':
@@ -197,7 +184,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       lastSpokenTextRef.current = textToSpeak;
       speak(textToSpeak);
     }
-  }, [phase, currentSegment, currentChapter, previousChapterSummary, narrationEnabled, isRunning, speak, child, pet]);
+  }, [phase, currentSegment, currentChapter, narrationEnabled, isRunning, speak]);
 
   // Stop narration when brushing completes or pauses
   useEffect(() => {
@@ -337,7 +324,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           >
             <p className="text-white/60 text-sm mb-2">Last time...</p>
             <p className="text-white text-xl italic leading-relaxed">
-              {child?.name} and {pet?.displayName} {previousChapterSummary?.replace(/^But /i, '').replace(/^As /i, 'as ').replace(/^Suddenly, /i, 'suddenly ').replace(/^And /i, '')}
+              {currentChapter?.recap}
             </p>
           </motion.div>
         );

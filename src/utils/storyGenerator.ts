@@ -37,6 +37,7 @@ const personalizeChapter = (
   petName: string
 ): StoryChapter => ({
   ...chapter,
+  recap: chapter.recap ? replaceTokens(chapter.recap, childName, petName) : null,
   segments: chapter.segments.map((segment) =>
     personalizeSegment(segment, childName, petName)
   ),

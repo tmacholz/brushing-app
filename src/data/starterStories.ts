@@ -14,6 +14,7 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
         id: 'mf-ch1',
         chapterNumber: 1,
         title: 'The Strange Discovery',
+        recap: null,
         segments: [
           {
             id: 'mf-ch1-s1',
@@ -60,6 +61,7 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
         id: 'mf-ch2',
         chapterNumber: 2,
         title: 'The Lost Butterfly',
+        recap: '[CHILD] and [PET] discovered magical glowing Melody Blossoms in the forest. A wise owl told them the flowers only bloom when someone needs help!',
         segments: [
           {
             id: 'mf-ch2-s1',
@@ -106,6 +108,7 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
         id: 'mf-ch3',
         chapterNumber: 3,
         title: 'The Grumpy Bridge Troll',
+        recap: '[CHILD] and [PET] met a tiny lost butterfly named Flutter. She was blown far from her home in Rainbow Meadow, and [PET] used the Melody Blossoms to find the way!',
         segments: [
           {
             id: 'mf-ch3-s1',
@@ -152,6 +155,7 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
         id: 'mf-ch4',
         chapterNumber: 4,
         title: 'Almost Home',
+        recap: '[CHILD] and [PET] helped a grumpy troll fall asleep by singing him a lullaby. As they crossed his bridge, Flutter spotted something sparkling in the distance!',
         segments: [
           {
             id: 'mf-ch4-s1',
@@ -198,6 +202,7 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
         id: 'mf-ch5',
         chapterNumber: 5,
         title: 'Home Sweet Home',
+        recap: '[CHILD] and [PET] found Rainbow Meadow, but thorny bushes blocked the way! [PET] called the Melody Blossoms to light a safe path through.',
         segments: [
           {
             id: 'mf-ch5-s1',

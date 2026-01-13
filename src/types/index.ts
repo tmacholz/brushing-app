@@ -68,6 +68,7 @@ export interface StoryChapter {
   id: string;
   chapterNumber: number;
   title: string;
+  recap: string | null; // Summary of previous chapter for "Last time..." intro
   segments: StorySegment[];
   cliffhanger: string;
   nextChapterTeaser: string;

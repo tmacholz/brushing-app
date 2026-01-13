@@ -31,12 +31,12 @@ const CLIFFHANGER_END = 115;
 const TEASER_END = 120;
 
 export function useStoryProgression(
-  chapter: StoryChapter | null,
-  isFirstChapter: boolean = false
+  chapter: StoryChapter | null
 ): UseStoryProgressionReturn {
+  const hasRecap = Boolean(chapter?.recap);
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [phase, setPhase] = useState<StoryProgressionState['phase']>(
-    isFirstChapter ? 'title' : 'recap'
+    hasRecap ? 'recap' : 'title'
   );
 
   const segments = chapter?.segments ?? [];
@@ -71,7 +71,7 @@ export function useStoryProgression(
   const getSegmentForTime = useCallback(
     (elapsedSeconds: number) => {
       // Determine phase based on elapsed time
-      if (!isFirstChapter && elapsedSeconds < RECAP_END) {
+      if (hasRecap && elapsedSeconds < RECAP_END) {
         setPhase('recap');
         return;
       }
@@ -110,7 +110,7 @@ export function useStoryProgression(
 
       setPhase('complete');
     },
-    [isFirstChapter, segmentTimings, totalSegments]
+    [hasRecap, segmentTimings, totalSegments]
   );
 
   const advanceToSegment = useCallback((index: number) => {
