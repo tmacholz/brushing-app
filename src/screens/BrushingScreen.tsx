@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, X } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
@@ -103,6 +103,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     isComplete,
     start,
     pause,
+    resume,
   } = useBrushingTimer(handleBrushingComplete);
 
   const {
@@ -492,13 +493,30 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         </motion.div>
       )}
 
-      {/* Pause button */}
-      <div className="mt-auto pt-6">
+      {/* Control buttons */}
+      <div className="mt-auto pt-6 flex gap-3">
         <button
-          onClick={isRunning ? pause : onExit}
-          className="w-full bg-white/20 text-white font-medium py-3 rounded-xl"
+          onClick={isRunning ? pause : resume}
+          className="flex-1 bg-white/20 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2"
         >
-          {isRunning ? 'Pause' : 'Exit'}
+          {isRunning ? (
+            <>
+              <Pause className="w-5 h-5" />
+              Pause
+            </>
+          ) : (
+            <>
+              <Play className="w-5 h-5" />
+              Resume
+            </>
+          )}
+        </button>
+        <button
+          onClick={onExit}
+          className="bg-white/10 text-white/80 font-medium py-3 px-4 rounded-xl flex items-center justify-center"
+          title="Exit"
+        >
+          <X className="w-5 h-5" />
         </button>
       </div>
     </div>
