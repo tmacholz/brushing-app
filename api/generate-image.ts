@@ -99,8 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = await response.json();
 
     // Extract the image from the response
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    const imagePart = parts.find((part: { inlineData?: { mimeType: string; data: string } }) => part.inlineData);
+    const responseParts = data.candidates?.[0]?.content?.parts || [];
+    const imagePart = responseParts.find((part: { inlineData?: { mimeType: string; data: string } }) => part.inlineData);
 
     if (!imagePart?.inlineData) {
       console.error('No image in response:', JSON.stringify(data, null, 2));
