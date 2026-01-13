@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Volume2, VolumeX } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
+import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -18,11 +20,14 @@ interface BrushingScreenProps {
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter } = useChild();
   const { playSound } = useAudio();
+  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
+  const [narrationEnabled, setNarrationEnabled] = useState(true);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
+  const lastSpokenTextRef = useRef<string | null>(null);
 
   // Get or create story arc
   const [currentChapter, setCurrentChapter] = useState<StoryChapter | null>(null);
@@ -142,6 +147,67 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       }
     }
   }, [currentSegment, phase, playSound]);
+
+  // Text-to-speech narration
+  useEffect(() => {
+    if (!narrationEnabled || !isRunning) return;
+
+    let textToSpeak: string | null = null;
+
+    switch (phase) {
+      case 'recap':
+        if (previousChapterSummary) {
+          textToSpeak = `Previously... ${previousChapterSummary}`;
+        }
+        break;
+      case 'title':
+        if (currentChapter) {
+          textToSpeak = `Chapter ${currentChapter.chapterNumber}: ${currentChapter.title}`;
+        }
+        break;
+      case 'story':
+        if (currentSegment) {
+          // Combine story text with brushing prompt if present
+          textToSpeak = currentSegment.text;
+          if (currentSegment.brushingPrompt) {
+            textToSpeak += ` ${currentSegment.brushingPrompt}`;
+          }
+        }
+        break;
+      case 'cliffhanger':
+        if (currentChapter?.cliffhanger) {
+          textToSpeak = currentChapter.cliffhanger;
+        }
+        break;
+      case 'teaser':
+        if (currentChapter?.nextChapterTeaser) {
+          textToSpeak = `To be continued... ${currentChapter.nextChapterTeaser}`;
+        }
+        break;
+    }
+
+    // Only speak if we have new text
+    if (textToSpeak && textToSpeak !== lastSpokenTextRef.current) {
+      lastSpokenTextRef.current = textToSpeak;
+      speak(textToSpeak);
+    }
+  }, [phase, currentSegment, currentChapter, previousChapterSummary, narrationEnabled, isRunning, speak]);
+
+  // Stop narration when brushing completes or pauses
+  useEffect(() => {
+    if (!isRunning && !showCountdown) {
+      pauseSpeaking();
+    } else if (isRunning) {
+      resumeSpeaking();
+    }
+  }, [isRunning, showCountdown, pauseSpeaking, resumeSpeaking]);
+
+  // Cleanup narration on exit
+  useEffect(() => {
+    return () => {
+      stopSpeaking();
+    };
+  }, [stopSpeaking]);
 
   // Countdown before starting
   useEffect(() => {
@@ -355,13 +421,45 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     <div
       className={`min-h-screen bg-gradient-to-b ${getBackgroundClass()} flex flex-col p-6`}
     >
-      {/* Header with progress */}
+      {/* Header with progress and narration toggle */}
       <div className="mb-8">
-        <ProgressBar
-          progress={progress}
-          showTime
-          timeRemaining={formatTime(remainingSeconds)}
-        />
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex-1">
+            <ProgressBar
+              progress={progress}
+              showTime
+              timeRemaining={formatTime(remainingSeconds)}
+            />
+          </div>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => {
+              if (narrationEnabled) {
+                stopSpeaking();
+              }
+              setNarrationEnabled(!narrationEnabled);
+            }}
+            className={`p-2 rounded-full transition-colors ${
+              narrationEnabled ? 'bg-white/30 text-white' : 'bg-white/10 text-white/50'
+            }`}
+            title={narrationEnabled ? 'Turn off narration' : 'Turn on narration'}
+          >
+            {narrationEnabled ? (
+              <Volume2 className={`w-5 h-5 ${isSpeaking ? 'animate-pulse' : ''}`} />
+            ) : (
+              <VolumeX className="w-5 h-5" />
+            )}
+          </motion.button>
+        </div>
+        {isTTSLoading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-white/60 text-xs text-center"
+          >
+            Loading narration...
+          </motion.div>
+        )}
       </div>
 
       {/* Story content area */}
