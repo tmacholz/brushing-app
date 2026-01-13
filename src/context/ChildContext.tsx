@@ -34,6 +34,7 @@ interface ChildContextType {
   updateStreak: () => { newStreak: number; streakBroken: boolean };
   setCurrentStoryArc: (storyArc: StoryArc | null) => void;
   completeChapter: (chapterIndex: number) => void;
+  updateStoryImages: (imageUrlMap: Map<string, string>) => void;
   unlockPet: (petId: string) => boolean;
   unlockBrush: (brushId: string) => boolean;
   unlockWorld: (worldId: string) => boolean;
@@ -286,6 +287,38 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     [setAppData]
   );
 
+  const updateStoryImages = useCallback(
+    (imageUrlMap: Map<string, string>) => {
+      setAppData((prev) => {
+        if (!prev.activeChildId) return prev;
+
+        return {
+          ...prev,
+          children: prev.children.map((c) => {
+            if (c.id !== prev.activeChildId || !c.currentStoryArc) return c;
+
+            const updatedChapters = c.currentStoryArc.chapters.map((chapter) => ({
+              ...chapter,
+              segments: chapter.segments.map((segment) => ({
+                ...segment,
+                imageUrl: imageUrlMap.get(segment.id) ?? segment.imageUrl,
+              })),
+            }));
+
+            return {
+              ...c,
+              currentStoryArc: {
+                ...c.currentStoryArc,
+                chapters: updatedChapters,
+              },
+            };
+          }),
+        };
+      });
+    },
+    [setAppData]
+  );
+
   const unlockItem = useCallback(
     (
       itemId: string,
@@ -371,6 +404,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         updateStreak,
         setCurrentStoryArc,
         completeChapter,
+        updateStoryImages,
         unlockPet,
         unlockBrush,
         unlockWorld,

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, VolumeX, Pause, Play, X } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, X, Loader2 } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
@@ -10,6 +10,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { createStoryArcForWorld } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { getPetById } from '../data/pets';
+import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 import type { StoryChapter } from '../types';
 
 interface BrushingScreenProps {
@@ -18,16 +19,19 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
   const { playSound } = useAudio();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
+  const [isPreparingImages, setIsPreparingImages] = useState(true);
+  const [imageProgress, setImageProgress] = useState<ImageGenerationProgress | null>(null);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
+  const imageGenerationStarted = useRef(false);
 
   // Get or create story arc
   const [currentChapter, setCurrentChapter] = useState<StoryChapter | null>(null);
@@ -58,6 +62,38 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }, [child, setCurrentStoryArc]);
 
   const pet = child ? getPetById(child.activePetId) : null;
+
+  // Generate images for the current chapter
+  useEffect(() => {
+    if (!child?.currentStoryArc || imageGenerationStarted.current) return;
+
+    const storyArc = child.currentStoryArc;
+    const chapter = storyArc.chapters[storyArc.currentChapterIndex];
+
+    // Check if images already exist for this chapter
+    const hasAllImages = chapter?.segments.every(s => s.imageUrl);
+    if (hasAllImages) {
+      setIsPreparingImages(false);
+      return;
+    }
+
+    imageGenerationStarted.current = true;
+
+    // Generate images in the background
+    generateImagesForChapter(
+      storyArc.currentChapterIndex,
+      storyArc,
+      (progress) => setImageProgress(progress)
+    ).then((imageUrlMap) => {
+      if (imageUrlMap.size > 0) {
+        updateStoryImages(imageUrlMap);
+      }
+      setIsPreparingImages(false);
+    }).catch((error) => {
+      console.error('Failed to generate images:', error);
+      setIsPreparingImages(false);
+    });
+  }, [child?.currentStoryArc, updateStoryImages]);
 
   const handleBrushingComplete = () => {
     if (!child) return;
@@ -226,6 +262,33 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return () => clearInterval(timer);
   }, [showCountdown, start, playSound]);
 
+  // Render image preparation screen
+  if (isPreparingImages) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            className="mb-6"
+          >
+            <Loader2 className="w-16 h-16 text-white" />
+          </motion.div>
+          <p className="text-white text-xl mb-2">Preparing your adventure...</p>
+          {imageProgress && (
+            <p className="text-white/60 text-sm">
+              Creating scene {imageProgress.completed + 1} of {imageProgress.total}
+            </p>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
   // Render countdown
   if (showCountdown) {
     return (
@@ -355,16 +418,29 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0, x: 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -50 }}
-            className="text-center"
+            className="text-center flex flex-col items-center"
           >
-            <p className="text-white text-2xl leading-relaxed mb-6">
+            {currentSegment?.imageUrl && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mb-4 rounded-2xl overflow-hidden shadow-lg max-w-xs"
+              >
+                <img
+                  src={currentSegment.imageUrl}
+                  alt="Story scene"
+                  className="w-full h-auto object-cover"
+                />
+              </motion.div>
+            )}
+            <p className="text-white text-xl leading-relaxed mb-4">
               {currentSegment?.text}
             </p>
             {currentSegment?.brushingPrompt && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-white/20 rounded-xl p-4 mt-4"
+                className="bg-white/20 rounded-xl p-4"
               >
                 <p className="text-accent font-bold text-lg">
                   {currentSegment.brushingPrompt}

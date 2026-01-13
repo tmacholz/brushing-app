@@ -82,6 +82,8 @@ export interface StorySegment {
   durationSeconds: number;
   brushingZone: BrushingZone | null;
   brushingPrompt: string | null;
+  imageUrl: string | null;
+  imagePrompt: string | null; // Prompt used to generate the image
 }
 
 export type BrushingZone =

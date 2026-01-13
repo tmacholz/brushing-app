@@ -22,6 +22,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'A mystical enchanted forest with tall ancient trees, soft golden sunlight filtering through leaves, and a mysterious colorful glow emanating from between the trees in the distance',
           },
           {
             id: 'mf-ch1-s2',
@@ -29,6 +31,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-left',
             brushingPrompt: "Quick! Brush your top left teeth while [PET] leads the way!",
+            imageUrl: null,
+            imagePrompt: 'Close-up of magical glowing flowers in a forest clearing, each petal shimmering with rainbow colors like little lanterns, soft bioluminescent light, whimsical and enchanting atmosphere',
           },
           {
             id: 'mf-ch1-s3',
@@ -36,6 +40,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'A wise old owl with soft feathers perched on a mossy branch, looking down kindly at glowing musical flowers below, visible sound waves or musical notes floating in the air, magical forest setting',
           },
           {
             id: 'mf-ch1-s4',
@@ -43,6 +49,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-right',
             brushingPrompt: "Now brush your top right teeth while we listen to the owl!",
+            imageUrl: null,
+            imagePrompt: 'The wise owl speaking with concern, the glowing Melody Blossoms below pulsing with urgency, moonlight filtering through trees, mysterious and slightly worried atmosphere in the magical forest',
           },
           {
             id: 'mf-ch1-s5',
@@ -50,6 +58,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-left',
             brushingPrompt: "Scrub your bottom left teeth - we need to hurry!",
+            imageUrl: null,
+            imagePrompt: 'A pathway of glowing Melody Blossoms creating a luminous trail leading deeper into the enchanted forest, flowers bending and pointing the way, magical mist, sense of adventure and urgency',
           },
         ],
         cliffhanger: 'But just as they started to follow the glowing path, they heard a tiny voice crying for help...',
@@ -69,6 +79,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'A tiny delicate butterfly with iridescent wings sitting sadly on a spotted red and white mushroom, surrounded by glowing flowers, dewdrops on petals, soft magical forest lighting',
           },
           {
             id: 'mf-ch2-s2',
@@ -76,6 +88,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-left',
             brushingPrompt: "Brush your top left teeth while [PET] comforts Flutter!",
+            imageUrl: null,
+            imagePrompt: 'Close-up of Flutter the tiny butterfly looking sad with a small tear, delicate translucent wings drooping, sitting among oversized forest plants, emotional and sympathetic scene',
           },
           {
             id: 'mf-ch2-s3',
@@ -83,6 +97,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'The tiny butterfly Flutter starting to smile hopefully, wings perking up slightly, warm comforting light surrounding the scene, magical forest backdrop with glowing flowers',
           },
           {
             id: 'mf-ch2-s4',
@@ -90,6 +106,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-right',
             brushingPrompt: "Now brush your bottom right teeth while we think of a plan!",
+            imageUrl: null,
+            imagePrompt: 'A dreamy vision of Rainbow Meadow in the distance - a beautiful meadow with flowers that shimmer and change colors like a rainbow, butterflies dancing, magical and hopeful atmosphere',
           },
           {
             id: 'mf-ch2-s5',
@@ -97,6 +115,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'tongue',
             brushingPrompt: "Don\'t forget your tongue - [PET] is counting on you!",
+            imageUrl: null,
+            imagePrompt: 'Melody Blossoms glowing brighter as they respond to humming, musical notes visible in the air, flowers swaying in harmony, magical connection between music and light',
           },
         ],
         cliffhanger: 'Suddenly, all the flowers started glowing brighter and pointing in a new direction!',
@@ -116,6 +136,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'A charming old wooden bridge arching over a crystal-clear bubbling stream, glowing flowers lining the path, magical forest setting, warm inviting but mysterious atmosphere',
           },
           {
             id: 'mf-ch3-s2',
@@ -123,6 +145,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-right',
             brushingPrompt: "Brush your top right teeth while we talk to the troll!",
+            imageUrl: null,
+            imagePrompt: 'A small cute fuzzy troll with tired baggy eyes peeking out from under the wooden bridge, not scary but grumpy looking, soft fur, yawning, comedic and endearing character design',
           },
           {
             id: 'mf-ch3-s3',
@@ -130,6 +154,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'The fuzzy troll covering his ears with his small paws, Melody Blossoms humming loudly nearby with visible sound waves, the troll looking exhausted and frustrated but still cute',
           },
           {
             id: 'mf-ch3-s4',
@@ -137,6 +163,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-left',
             brushingPrompt: "Scrub your bottom left teeth - nice and gentle like the lullaby!",
+            imageUrl: null,
+            imagePrompt: 'Soft gentle musical notes floating through the air in soothing colors, the atmosphere becoming calm and dreamy, moonlight and starlight creating a peaceful lullaby scene',
           },
           {
             id: 'mf-ch3-s5',
@@ -144,6 +172,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-right',
             brushingPrompt: "Now your bottom right teeth while the troll falls asleep!",
+            imageUrl: null,
+            imagePrompt: 'The fuzzy troll curled up in a cozy ball under the bridge, peacefully sleeping with a content smile, soft Zs floating above, warm gentle lighting, heartwarming scene',
           },
         ],
         cliffhanger: 'As they quietly crossed the bridge, Flutter gasped - she could see something sparkling in the distance!',
@@ -163,6 +193,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'Flutter the butterfly excitedly pointing toward a distant sparkling meadow, rainbow colors visible on the horizon, hope and excitement in the scene, magical forest edge',
           },
           {
             id: 'mf-ch4-s2',
@@ -170,6 +202,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-left',
             brushingPrompt: "Brush your top left teeth while we figure out what to do!",
+            imageUrl: null,
+            imagePrompt: 'A tall imposing hedge of thorny bushes blocking the path, Rainbow Meadow visible through small gaps, dramatic obstacle, the hedge looking like a wall of tangled vines and thorns',
           },
           {
             id: 'mf-ch4-s3',
@@ -177,6 +211,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'Close-up of the thorny hedge showing small gaps and passages between the brambles, darkness within making it hard to see the path, mysterious and challenging',
           },
           {
             id: 'mf-ch4-s4',
@@ -184,6 +220,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-right',
             brushingPrompt: "Now brush your top right teeth while [PET] calls the flowers!",
+            imageUrl: null,
+            imagePrompt: 'Melody Blossoms floating through the air responding to a call, glowing flowers drifting toward the thorny hedge like little lanterns, magical and hopeful moment',
           },
           {
             id: 'mf-ch4-s5',
@@ -191,6 +229,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'tongue',
             brushingPrompt: "Brush your tongue while we follow the magical path!",
+            imageUrl: null,
+            imagePrompt: 'A magical illuminated pathway through the thorny hedge, Melody Blossoms lining the safe route with their glow, light defeating darkness, triumphant and beautiful scene',
           },
         ],
         cliffhanger: 'They squeezed through the last gap in the hedge and stepped into the most beautiful meadow they had ever seen...',
@@ -210,6 +250,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: null,
             brushingPrompt: null,
+            imageUrl: null,
+            imagePrompt: 'A breathtaking Rainbow Meadow filled with flowers that shimmer and change colors, petals transitioning from pink to blue to gold, butterflies everywhere, magical paradise landscape',
           },
           {
             id: 'mf-ch5-s2',
@@ -217,6 +259,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-left',
             brushingPrompt: "Brush your top left teeth during this happy reunion!",
+            imageUrl: null,
+            imagePrompt: 'A joyful swarm of colorful butterflies flying together in reunion, sparkling iridescent wings catching the light, emotional happy moment, Rainbow Meadow backdrop',
           },
           {
             id: 'mf-ch5-s3',
@@ -224,6 +268,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'top-right',
             brushingPrompt: "Now your top right teeth while everyone celebrates!",
+            imageUrl: null,
+            imagePrompt: 'Butterfly family embrace - parent butterflies wrapping their wings around little Flutter in a loving hug, tears of joy, warm golden light, heartwarming reunion scene',
           },
           {
             id: 'mf-ch5-s4',
@@ -231,6 +277,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-left',
             brushingPrompt: "Brush your bottom left teeth - almost done!",
+            imageUrl: null,
+            imagePrompt: 'A magical tiny glass jar filled with swirling rainbow sparkles, glowing with inner light, precious gift, butterflies presenting it with gratitude, enchanting and special',
           },
           {
             id: 'mf-ch5-s5',
@@ -238,6 +286,8 @@ export const starterStories: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>
             durationSeconds: 15,
             brushingZone: 'bottom-right',
             brushingPrompt: "Finish with your bottom right teeth - great job!",
+            imageUrl: null,
+            imagePrompt: 'Sunset view of the magical forest path leading home, Rainbow Meadow in the background with butterflies waving goodbye, warm golden hour lighting, happy ending, sense of accomplishment',
           },
         ],
         cliffhanger: '',
