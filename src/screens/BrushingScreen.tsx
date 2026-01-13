@@ -157,8 +157,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     switch (phase) {
       case 'recap':
-        if (previousChapterSummary) {
-          textToSpeak = `Previously... ${previousChapterSummary}`;
+        if (previousChapterSummary && child && pet) {
+          const cleanedSummary = previousChapterSummary
+            .replace(/^But /i, '')
+            .replace(/^As /i, 'as ')
+            .replace(/^Suddenly, /i, 'suddenly ')
+            .replace(/^And /i, '');
+          textToSpeak = `Last time... ${child.name} and ${pet.displayName} ${cleanedSummary}`;
         }
         break;
       case 'title':
@@ -192,7 +197,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       lastSpokenTextRef.current = textToSpeak;
       speak(textToSpeak);
     }
-  }, [phase, currentSegment, currentChapter, previousChapterSummary, narrationEnabled, isRunning, speak]);
+  }, [phase, currentSegment, currentChapter, previousChapterSummary, narrationEnabled, isRunning, speak, child, pet]);
 
   // Stop narration when brushing completes or pauses
   useEffect(() => {
@@ -330,9 +335,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             exit={{ opacity: 0, y: -20 }}
             className="text-center"
           >
-            <p className="text-white/60 text-sm mb-2">Previously...</p>
+            <p className="text-white/60 text-sm mb-2">Last time...</p>
             <p className="text-white text-xl italic leading-relaxed">
-              {previousChapterSummary}
+              {child?.name} and {pet?.displayName} {previousChapterSummary?.replace(/^But /i, '').replace(/^As /i, 'as ').replace(/^Suddenly, /i, 'suddenly ').replace(/^And /i, '')}
             </p>
           </motion.div>
         );
