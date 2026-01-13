@@ -83,9 +83,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
-          imageConfig: {
-            aspectRatio: '16:9',
-          },
         },
       }),
     });
