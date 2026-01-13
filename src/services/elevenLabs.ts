@@ -1,6 +1,3 @@
-const API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
-const API_BASE = 'https://api.elevenlabs.io/v1';
-
 // Child-friendly voice from ElevenLabs
 const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
@@ -42,34 +39,28 @@ export async function generateSpeech(
     return cached;
   }
 
-  if (!API_KEY) {
-    throw new Error('ElevenLabs API key not configured');
-  }
-
-  const response = await fetch(
-    `${API_BASE}/text-to-speech/${opts.voiceId}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': API_KEY,
+  // Call our serverless function instead of ElevenLabs directly
+  const response = await fetch('/api/tts', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      text,
+      voiceId: opts.voiceId,
+      modelId: opts.modelId,
+      voiceSettings: {
+        stability: opts.stability,
+        similarity_boost: opts.similarityBoost,
+        style: opts.style,
+        use_speaker_boost: opts.useSpeakerBoost,
       },
-      body: JSON.stringify({
-        text,
-        model_id: opts.modelId,
-        voice_settings: {
-          stability: opts.stability,
-          similarity_boost: opts.similarityBoost,
-          style: opts.style,
-          use_speaker_boost: opts.useSpeakerBoost,
-        },
-      }),
-    }
-  );
+    }),
+  });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`ElevenLabs API error: ${response.status} - ${error}`);
+    throw new Error(`TTS API error: ${response.status} - ${error}`);
   }
 
   // Convert response to blob URL for audio playback
@@ -80,46 +71,6 @@ export async function generateSpeech(
   audioCache.set(cacheKey, audioUrl);
 
   return audioUrl;
-}
-
-// Streaming version for lower latency
-export async function streamSpeech(
-  text: string,
-  options: TTSOptions = {}
-): Promise<ReadableStream<Uint8Array>> {
-  const opts = { ...defaultOptions, ...options };
-
-  if (!API_KEY) {
-    throw new Error('ElevenLabs API key not configured');
-  }
-
-  const response = await fetch(
-    `${API_BASE}/text-to-speech/${opts.voiceId}/stream`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': API_KEY,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: opts.modelId,
-        voice_settings: {
-          stability: opts.stability,
-          similarity_boost: opts.similarityBoost,
-          style: opts.style,
-          use_speaker_boost: opts.useSpeakerBoost,
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`ElevenLabs API error: ${response.status} - ${error}`);
-  }
-
-  return response.body!;
 }
 
 // Clear cache (useful for memory management)
