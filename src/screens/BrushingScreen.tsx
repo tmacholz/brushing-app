@@ -230,9 +230,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     };
   }, [stopSpeaking]);
 
-  // Countdown before starting
+  // Countdown before starting (wait for images to be ready first)
   useEffect(() => {
-    if (!showCountdown) return;
+    if (!showCountdown || isPreparingImages) return;
 
     // Play initial countdown sound
     playSound('countdown');
@@ -252,7 +252,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showCountdown, start, playSound]);
+  }, [showCountdown, isPreparingImages, start, playSound]);
 
   // Render image preparation screen
   if (isPreparingImages) {
