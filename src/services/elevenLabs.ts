@@ -1,9 +1,8 @@
 const API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
 const API_BASE = 'https://api.elevenlabs.io/v1';
 
-// Child-friendly voices from ElevenLabs
-// Using "Rachel" as default - warm, friendly voice good for storytelling
-const DEFAULT_VOICE_ID = '21m00Tcm4TlvDq8ikWAM'; // Rachel
+// Child-friendly voice from ElevenLabs
+const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
 export interface TTSOptions {
   voiceId?: string;
