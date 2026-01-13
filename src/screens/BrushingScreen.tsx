@@ -12,6 +12,13 @@ import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { getPetById } from '../data/pets';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 
+// Helper to replace any remaining placeholder tokens before TTS
+const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
+  return text
+    .replace(/\[CHILD\]/g, childName)
+    .replace(/\[PET\]/g, petName);
+};
+
 interface BrushingScreenProps {
   onComplete: (pointsEarned: number) => void;
   onExit: () => void;
@@ -171,7 +178,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Text-to-speech narration
   useEffect(() => {
-    if (!narrationEnabled || !isRunning) return;
+    if (!narrationEnabled || !isRunning || !child) return;
+
+    const childName = child.name;
+    const petName = pet?.displayName ?? 'Friend';
 
     let textToSpeak: string | null = null;
 
@@ -209,10 +219,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     // Only speak if we have new text
     if (textToSpeak && textToSpeak !== lastSpokenTextRef.current) {
+      // Ensure any remaining placeholders are replaced before TTS
+      const finalText = replaceStoryPlaceholders(textToSpeak, childName, petName);
       lastSpokenTextRef.current = textToSpeak;
-      speak(textToSpeak);
+      speak(finalText);
     }
-  }, [phase, currentSegment, currentChapter, narrationEnabled, isRunning, speak]);
+  }, [phase, currentSegment, currentChapter, narrationEnabled, isRunning, speak, child, pet]);
 
   // Stop narration when brushing completes or pauses
   useEffect(() => {
