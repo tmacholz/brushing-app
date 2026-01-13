@@ -407,38 +407,27 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         return (
           <motion.div
             key={`segment-${currentSegment?.id}`}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
-            className="text-center flex flex-col items-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="text-center flex flex-col items-center justify-end flex-1"
           >
-            {currentSegment?.imageUrl && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="mb-4 rounded-2xl overflow-hidden shadow-lg max-w-xs"
-              >
-                <img
-                  src={currentSegment.imageUrl}
-                  alt="Story scene"
-                  className="w-full h-auto object-cover"
-                />
-              </motion.div>
-            )}
-            <p className="text-white text-xl leading-relaxed mb-4">
-              {currentSegment?.text}
-            </p>
-            {currentSegment?.brushingPrompt && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white/20 rounded-xl p-4"
-              >
-                <p className="text-accent font-bold text-lg">
-                  {currentSegment.brushingPrompt}
-                </p>
-              </motion.div>
-            )}
+            <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 max-w-lg">
+              <p className="text-white text-xl leading-relaxed mb-2 drop-shadow-lg">
+                {currentSegment?.text}
+              </p>
+              {currentSegment?.brushingPrompt && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-white/20 rounded-xl p-3 mt-2"
+                >
+                  <p className="text-accent font-bold text-lg drop-shadow">
+                    {currentSegment.brushingPrompt}
+                  </p>
+                </motion.div>
+              )}
+            </div>
           </motion.div>
         );
 
@@ -478,12 +467,38 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   };
 
+  // Get background image for story phase
+  const backgroundImage = phase === 'story' && currentSegment?.imageUrl
+    ? currentSegment.imageUrl
+    : null;
+
   return (
     <div
-      className={`min-h-screen bg-gradient-to-b ${getBackgroundClass()} flex flex-col p-6`}
+      className={`min-h-screen bg-gradient-to-b ${getBackgroundClass()} flex flex-col p-6 relative overflow-hidden`}
     >
+      {/* Full-screen background image for story phase */}
+      <AnimatePresence mode="wait">
+        {backgroundImage && (
+          <motion.div
+            key={backgroundImage}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="absolute inset-0 z-0"
+          >
+            <img
+              src={backgroundImage}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            {/* Gradient overlay for readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/40" />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Header with progress and narration toggle */}
-      <div className="mb-8">
+      <div className="relative z-10 mb-8">
         <div className="flex items-center gap-3 mb-3">
           <div className="flex-1">
             <ProgressBar
@@ -524,14 +539,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       </div>
 
       {/* Story content area */}
-      <div className="flex-1 flex flex-col items-center justify-center px-4">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4">
         <AnimatePresence mode="wait">{renderStoryContent()}</AnimatePresence>
       </div>
 
       {/* Pet companion */}
       {pet && (
         <motion.div
-          className="absolute bottom-24 right-6"
+          className="absolute bottom-24 right-6 z-10"
           animate={{
             y: [0, -5, 0],
           }}
@@ -554,7 +569,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       )}
 
       {/* Control buttons */}
-      <div className="mt-auto pt-6 flex gap-3">
+      <div className="relative z-10 mt-auto pt-6 flex gap-3">
         <button
           onClick={isRunning ? pause : resume}
           className="flex-1 bg-white/20 text-white font-medium py-3 rounded-xl flex items-center justify-center gap-2"
