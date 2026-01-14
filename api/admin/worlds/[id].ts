@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../lib/ai.js';
+import { getDb } from '../../../lib/db.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../../../lib/ai.js';
 
 // Handles all world-specific operations and story creation
 export default async function handler(req: VercelRequest, res: VercelResponse) {

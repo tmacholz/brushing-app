@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './lib/db.js';
-import { generateWorld } from './lib/ai.js';
+import { getDb } from '../../lib/db.js';
+import { generateWorld } from '../../lib/ai.js';
 
 // GET /api/admin/worlds - List all worlds
 // POST /api/admin/worlds - Create world or generate with AI

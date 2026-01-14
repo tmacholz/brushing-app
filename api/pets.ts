@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './admin/lib/db.js';
+import { getDb } from '../lib/db.js';
 
 // Static pets as fallback (in case database is not available)
 const staticPets = [

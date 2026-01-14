@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../lib/db.js';
+import { getDb } from '../../../lib/db.js';
 
 // GET /api/admin/pets/[id] - Get pet details
 // PUT /api/admin/pets/[id] - Update pet

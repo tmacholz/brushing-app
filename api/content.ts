@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './admin/lib/db.js';
+import { getDb } from '../lib/db.js';
 
 // GET /api/content - Get all published worlds and stories for the frontend
 export default async function handler(req: VercelRequest, res: VercelResponse) {

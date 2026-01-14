@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './lib/db.js';
-import { generatePetSuggestions } from './lib/ai.js';
+import { getDb } from '../../lib/db.js';
+import { generatePetSuggestions } from '../../lib/ai.js';
 
 // GET /api/admin/pets - List all pets and pending suggestions
 // POST /api/admin/pets - Create pet manually or generate suggestions

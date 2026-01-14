@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from './lib/db.js';
+import { getDb } from '../../lib/db.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'brushquest-admin';
 
