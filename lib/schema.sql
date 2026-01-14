@@ -53,8 +53,9 @@ CREATE TABLE IF NOT EXISTS segments (
   brushing_prompt TEXT,
   image_prompt TEXT,
   image_url TEXT,
-  base_audio_url TEXT, -- Pre-recorded narration without personalized names
-  splice_points JSONB DEFAULT '[]' -- Array of {placeholder: 'CHILD'|'PET', timestampMs: number}
+  -- Audio narration as sequence of clips and name placeholders
+  -- Array of {type: 'audio', url: string} | {type: 'name', placeholder: 'CHILD'|'PET'}
+  narration_sequence JSONB DEFAULT NULL
 );
 
 -- Pre-generated name audio for pets (static, generated once)

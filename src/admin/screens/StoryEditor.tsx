@@ -12,18 +12,15 @@ import {
   Loader2,
   Clock,
   Sparkles,
-  Volume2,
   Play,
   Pause,
-  Plus,
-  X,
   Mic,
 } from 'lucide-react';
 
-interface SplicePoint {
-  placeholder: 'CHILD' | 'PET';
-  timestampMs: number;
-}
+// Narration sequence item - matches the type in src/types/index.ts
+type NarrationSequenceItem =
+  | { type: 'audio'; url: string }
+  | { type: 'name'; placeholder: 'CHILD' | 'PET' };
 
 interface Segment {
   id: string;
@@ -34,8 +31,7 @@ interface Segment {
   brushing_prompt: string | null;
   image_prompt: string | null;
   image_url: string | null;
-  base_audio_url: string | null;
-  splice_points: SplicePoint[];
+  narration_sequence: NarrationSequenceItem[] | null;
 }
 
 interface Chapter {
@@ -75,12 +71,10 @@ interface SegmentAudioEditorProps {
 function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: SegmentAudioEditorProps) {
   const [generating, setGenerating] = useState(false);
   const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [showSpliceEditor, setShowSpliceEditor] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const hasPlaceholders = segment.text.includes('[CHILD]') || segment.text.includes('[PET]');
+  const hasNarration = segment.narration_sequence && segment.narration_sequence.length > 0;
+  const audioClipsCount = segment.narration_sequence?.filter(item => item.type === 'audio').length ?? 0;
 
   const handleGenerateAudio = async () => {
     setGenerating(true);
@@ -103,25 +97,25 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
       }
 
       const data = await res.json();
-      console.log('Audio generated, saving to database:', { segmentId: segment.id, audioUrl: data.audioUrl });
+      console.log('Audio generated:', { segmentId: segment.id, clipCount: data.clipCount, sequence: data.narrationSequence });
 
       // Save to database
       const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseAudioUrl: data.audioUrl }),
+        body: JSON.stringify({ narrationSequence: data.narrationSequence }),
       });
 
       if (!saveRes.ok) {
         const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to save audio URL to database:', saveError);
-        throw new Error(`Failed to save audio URL: ${saveError.details || saveError.error}`);
+        console.error('Failed to save narration sequence to database:', saveError);
+        throw new Error(`Failed to save: ${saveError.details || saveError.error}`);
       }
 
       const saveData = await saveRes.json();
       console.log('Database save response:', saveData);
 
-      onUpdate(segment.id, { base_audio_url: data.audioUrl });
+      onUpdate(segment.id, { narration_sequence: data.narrationSequence });
     } catch (error) {
       console.error('Failed to generate audio:', error);
       alert('Failed to generate audio. Check console for details.');
@@ -130,91 +124,35 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
     }
   };
 
-  const togglePlayback = () => {
-    if (!audioRef.current) return;
+  // Simple preview - just plays the first audio clip
+  const handlePreview = () => {
+    if (!segment.narration_sequence) return;
 
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
-    setPlaying(!playing);
-  };
-
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime * 1000);
-    }
-  };
-
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration * 1000);
+    const firstAudioClip = segment.narration_sequence.find(item => item.type === 'audio');
+    if (firstAudioClip && firstAudioClip.type === 'audio') {
+      if (audioRef.current) {
+        if (playing) {
+          audioRef.current.pause();
+          setPlaying(false);
+        } else {
+          audioRef.current.src = firstAudioClip.url;
+          audioRef.current.play();
+          setPlaying(true);
+        }
+      }
     }
   };
 
   const handleEnded = () => {
     setPlaying(false);
-    setCurrentTime(0);
   };
 
-  const addSplicePoint = (placeholder: 'CHILD' | 'PET') => {
-    const newPoint: SplicePoint = {
-      placeholder,
-      timestampMs: Math.round(currentTime),
-    };
-    const updatedPoints = [...(segment.splice_points || []), newPoint].sort(
-      (a, b) => a.timestampMs - b.timestampMs
-    );
-    saveSplicePoints(updatedPoints);
-  };
-
-  const removeSplicePoint = (index: number) => {
-    const updatedPoints = segment.splice_points.filter((_, i) => i !== index);
-    saveSplicePoints(updatedPoints);
-  };
-
-  const saveSplicePoints = async (splicePoints: SplicePoint[]) => {
-    try {
-      console.log('Saving splice points:', { segmentId: segment.id, splicePoints });
-      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ splicePoints }),
-      });
-      if (!res.ok) {
-        const error = await res.text();
-        console.error('Failed to save splice points:', error);
-        alert('Failed to save splice points. Check console for details.');
-        return;
-      }
-      const data = await res.json();
-      console.log('Splice points save response:', data);
-      onUpdate(segment.id, { splice_points: splicePoints });
-    } catch (error) {
-      console.error('Failed to save splice points:', error);
-      alert('Failed to save splice points. Check console for details.');
-    }
-  };
-
-  const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
-    const milliseconds = Math.floor((ms % 1000) / 10);
-    return `${seconds}.${milliseconds.toString().padStart(2, '0')}s`;
-  };
+  // Count placeholders in the narration sequence
+  const placeholderCount = segment.narration_sequence?.filter(item => item.type === 'name').length ?? 0;
 
   return (
     <div className="mt-3 pt-3 border-t border-slate-600/50">
-      {/* Hidden audio element */}
-      {segment.base_audio_url && (
-        <audio
-          ref={audioRef}
-          src={segment.base_audio_url}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onEnded={handleEnded}
-        />
-      )}
+      <audio ref={audioRef} onEnded={handleEnded} />
 
       <div className="flex items-center gap-2 flex-wrap">
         {/* Generate/Regenerate Audio Button */}
@@ -228,140 +166,33 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
           ) : (
             <Mic className="w-3.5 h-3.5" />
           )}
-          {segment.base_audio_url ? 'Regenerate Audio' : 'Generate Audio'}
+          {hasNarration ? 'Regenerate Audio' : 'Generate Audio'}
         </button>
 
-        {/* Audio Controls */}
-        {segment.base_audio_url && (
-          <>
-            <button
-              onClick={togglePlayback}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
-            >
-              {playing ? (
-                <Pause className="w-3.5 h-3.5" />
-              ) : (
-                <Play className="w-3.5 h-3.5" />
-              )}
-              {playing ? 'Pause' : 'Play'}
-            </button>
-
-            <span className="text-xs text-slate-400">
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
-
-            {hasPlaceholders && (
-              <button
-                onClick={() => setShowSpliceEditor(!showSpliceEditor)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                  showSpliceEditor
-                    ? 'bg-amber-500/30 text-amber-300'
-                    : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300'
-                }`}
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-                Splice Points ({segment.splice_points?.length || 0})
-              </button>
+        {/* Preview Button */}
+        {hasNarration && (
+          <button
+            onClick={handlePreview}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+          >
+            {playing ? (
+              <Pause className="w-3.5 h-3.5" />
+            ) : (
+              <Play className="w-3.5 h-3.5" />
             )}
-          </>
+            Preview
+          </button>
         )}
 
         {/* Audio status indicator */}
-        {segment.base_audio_url && (
+        {hasNarration && (
           <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
             <CheckCircle className="w-3 h-3" />
-            Audio ready
+            {audioClipsCount} clip{audioClipsCount !== 1 ? 's' : ''}
+            {placeholderCount > 0 && ` + ${placeholderCount} name insert${placeholderCount !== 1 ? 's' : ''}`}
           </span>
         )}
       </div>
-
-      {/* Splice Point Editor */}
-      {showSpliceEditor && segment.base_audio_url && (
-        <motion.div
-          initial={{ height: 0, opacity: 0 }}
-          animate={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          className="mt-3 p-3 bg-slate-800/50 rounded-lg"
-        >
-          <div className="text-xs text-slate-400 mb-2">
-            Play audio and click to mark where [CHILD] or [PET] names should be inserted.
-          </div>
-
-          {/* Progress bar with splice markers */}
-          <div className="relative h-6 bg-slate-700 rounded mb-3">
-            {/* Progress */}
-            <div
-              className="absolute top-0 left-0 h-full bg-cyan-500/30 rounded"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            />
-            {/* Splice point markers */}
-            {segment.splice_points?.map((point, idx) => (
-              <div
-                key={idx}
-                className={`absolute top-0 w-1 h-full ${
-                  point.placeholder === 'CHILD' ? 'bg-pink-400' : 'bg-orange-400'
-                }`}
-                style={{ left: `${(point.timestampMs / duration) * 100}%` }}
-                title={`${point.placeholder} at ${formatTime(point.timestampMs)}`}
-              />
-            ))}
-          </div>
-
-          {/* Add splice point buttons */}
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-xs text-slate-400">Add at current time:</span>
-            {segment.text.includes('[CHILD]') && (
-              <button
-                onClick={() => addSplicePoint('CHILD')}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                [CHILD]
-              </button>
-            )}
-            {segment.text.includes('[PET]') && (
-              <button
-                onClick={() => addSplicePoint('PET')}
-                className="flex items-center gap-1 px-2 py-1 text-xs bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 rounded transition-colors"
-              >
-                <Plus className="w-3 h-3" />
-                [PET]
-              </button>
-            )}
-          </div>
-
-          {/* List of splice points */}
-          {segment.splice_points && segment.splice_points.length > 0 && (
-            <div className="space-y-1">
-              {segment.splice_points.map((point, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between px-2 py-1 bg-slate-700/50 rounded text-xs"
-                >
-                  <span className="flex items-center gap-2">
-                    <span
-                      className={`px-1.5 py-0.5 rounded ${
-                        point.placeholder === 'CHILD'
-                          ? 'bg-pink-500/20 text-pink-300'
-                          : 'bg-orange-500/20 text-orange-300'
-                      }`}
-                    >
-                      {point.placeholder}
-                    </span>
-                    <span className="text-slate-400">at {formatTime(point.timestampMs)}</span>
-                  </span>
-                  <button
-                    onClick={() => removeSplicePoint(idx)}
-                    className="p-1 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </motion.div>
-      )}
     </div>
   );
 }

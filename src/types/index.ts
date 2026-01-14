@@ -93,11 +93,10 @@ export interface StoryChapter {
   readAt: string | null;
 }
 
-// Splice point for inserting name audio into base narration
-export interface AudioSplicePoint {
-  placeholder: 'CHILD' | 'PET';
-  timestampMs: number; // Milliseconds into the base audio where name should be inserted
-}
+// Item in the narration sequence - either an audio clip or a name placeholder
+export type NarrationSequenceItem =
+  | { type: 'audio'; url: string }
+  | { type: 'name'; placeholder: 'CHILD' | 'PET' };
 
 export interface StorySegment {
   id: string;
@@ -107,8 +106,8 @@ export interface StorySegment {
   brushingPrompt: string | null;
   imageUrl: string | null;
   imagePrompt: string | null; // Prompt used to generate the image
-  baseAudioUrl: string | null; // Pre-recorded narration (without personalized names)
-  splicePoints: AudioSplicePoint[]; // Where to insert child/pet names
+  // Audio narration as a sequence of clips and name placeholders for gapless playback
+  narrationSequence: NarrationSequenceItem[] | null;
 }
 
 export type BrushingZone =

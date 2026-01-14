@@ -225,13 +225,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     const childName = child.name;
     const petName = pet?.displayName ?? 'Friend';
 
-    // For story segments with pre-recorded audio, use audio splicing
-    if (phase === 'story' && currentSegment?.baseAudioUrl && currentSegment.splicePoints) {
+    // For story segments with pre-recorded audio, use gapless audio splicing
+    if (phase === 'story' && currentSegment?.narrationSequence && currentSegment.narrationSequence.length > 0) {
       // Only play if this is a new segment
       if (currentSegment.id !== lastSplicedSegmentRef.current) {
         lastSplicedSegmentRef.current = currentSegment.id;
         lastSpokenTextRef.current = null; // Reset TTS ref so we don't duplicate
-        playSplicedAudio(currentSegment.baseAudioUrl, currentSegment.splicePoints);
+        playSplicedAudio(currentSegment.narrationSequence);
       }
       return;
     }

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { AudioSplicePoint } from '../types';
+import type { NarrationSequenceItem } from '../types';
 
 interface AudioSplicingOptions {
   childNameAudioUrl: string | null;
@@ -7,7 +7,7 @@ interface AudioSplicingOptions {
 }
 
 interface UseAudioSplicingReturn {
-  play: (baseAudioUrl: string, splicePoints: AudioSplicePoint[]) => Promise<void>;
+  play: (narrationSequence: NarrationSequenceItem[]) => Promise<void>;
   stop: () => void;
   pause: () => void;
   resume: () => void;
@@ -44,6 +44,10 @@ async function getAudioBuffer(
   return buffer;
 }
 
+/**
+ * Hook for playing narration sequences with gapless audio.
+ * Uses Web Audio API to schedule clips precisely without gaps.
+ */
 export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicingReturn {
   const { childNameAudioUrl, petNameAudioUrl } = options;
 
@@ -57,7 +61,6 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
   const sourceNodesRef = useRef<AudioBufferSourceNode[]>([]);
   const startTimeRef = useRef<number>(0);
   const totalDurationRef = useRef<number>(0);
-  const pausedAtRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
 
   // Cleanup on unmount
@@ -94,7 +97,7 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
   }, [isPlaying]);
 
   const play = useCallback(
-    async (baseAudioUrl: string, splicePoints: AudioSplicePoint[]) => {
+    async (narrationSequence: NarrationSequenceItem[]) => {
       // Stop any current playback
       sourceNodesRef.current.forEach((node) => {
         try {
@@ -104,6 +107,11 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         }
       });
       sourceNodesRef.current = [];
+
+      if (!narrationSequence || narrationSequence.length === 0) {
+        console.log('[AudioSplicing] No narration sequence provided');
+        return;
+      }
 
       setIsLoading(true);
       setError(null);
@@ -122,85 +130,57 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           await ctx.resume();
         }
 
-        // Load all required audio buffers in parallel
-        const buffersToLoad: Promise<AudioBuffer | null>[] = [
-          getAudioBuffer(ctx, baseAudioUrl),
-        ];
+        // Collect all URLs we need to load
+        const urlsToLoad = new Set<string>();
 
-        // Pre-load name audio if we have splice points that need them
-        const needsChildName = splicePoints.some((sp) => sp.placeholder === 'CHILD');
-        const needsPetName = splicePoints.some((sp) => sp.placeholder === 'PET');
-
-        if (needsChildName && childNameAudioUrl) {
-          buffersToLoad.push(getAudioBuffer(ctx, childNameAudioUrl));
-        } else {
-          buffersToLoad.push(Promise.resolve(null));
+        for (const item of narrationSequence) {
+          if (item.type === 'audio') {
+            urlsToLoad.add(item.url);
+          } else if (item.type === 'name') {
+            if (item.placeholder === 'CHILD' && childNameAudioUrl) {
+              urlsToLoad.add(childNameAudioUrl);
+            } else if (item.placeholder === 'PET' && petNameAudioUrl) {
+              urlsToLoad.add(petNameAudioUrl);
+            }
+          }
         }
 
-        if (needsPetName && petNameAudioUrl) {
-          buffersToLoad.push(getAudioBuffer(ctx, petNameAudioUrl));
-        } else {
-          buffersToLoad.push(Promise.resolve(null));
+        // Load all audio buffers in parallel
+        const loadPromises: Promise<[string, AudioBuffer]>[] = [];
+        for (const url of urlsToLoad) {
+          loadPromises.push(
+            getAudioBuffer(ctx, url).then((buffer) => [url, buffer] as [string, AudioBuffer])
+          );
         }
 
-        const [baseBuffer, childNameBuffer, petNameBuffer] = await Promise.all(buffersToLoad);
+        const loadedBuffers = await Promise.all(loadPromises);
+        const bufferMap = new Map<string, AudioBuffer>(loadedBuffers);
 
-        if (!baseBuffer) {
-          throw new Error('Failed to load base audio');
-        }
-
-        // Sort splice points by timestamp
-        const sortedSplicePoints = [...splicePoints].sort(
-          (a, b) => a.timestampMs - b.timestampMs
-        );
-
-        // Schedule audio playback
+        // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         let scheduleTime = ctx.currentTime;
-        let basePosition = 0; // Current position in base buffer (seconds)
         const sources: AudioBufferSourceNode[] = [];
 
-        for (const splicePoint of sortedSplicePoints) {
-          const spliceTimeSec = splicePoint.timestampMs / 1000;
+        for (const item of narrationSequence) {
+          let buffer: AudioBuffer | undefined;
 
-          // Play base audio from current position to splice point
-          if (spliceTimeSec > basePosition) {
-            const source = ctx.createBufferSource();
-            source.buffer = baseBuffer;
-            source.connect(ctx.destination);
-
-            const duration = spliceTimeSec - basePosition;
-            source.start(scheduleTime, basePosition, duration);
-            sources.push(source);
-
-            scheduleTime += duration;
+          if (item.type === 'audio') {
+            buffer = bufferMap.get(item.url);
+          } else if (item.type === 'name') {
+            const url = item.placeholder === 'CHILD' ? childNameAudioUrl : petNameAudioUrl;
+            if (url) {
+              buffer = bufferMap.get(url);
+            }
           }
 
-          // Insert name audio
-          const nameBuffer =
-            splicePoint.placeholder === 'CHILD' ? childNameBuffer : petNameBuffer;
-
-          if (nameBuffer) {
+          if (buffer) {
             const source = ctx.createBufferSource();
-            source.buffer = nameBuffer;
+            source.buffer = buffer;
             source.connect(ctx.destination);
             source.start(scheduleTime);
             sources.push(source);
 
-            scheduleTime += nameBuffer.duration;
+            scheduleTime += buffer.duration;
           }
-
-          basePosition = spliceTimeSec;
-        }
-
-        // Play remaining base audio after last splice point
-        if (basePosition < baseBuffer.duration) {
-          const source = ctx.createBufferSource();
-          source.buffer = baseBuffer;
-          source.connect(ctx.destination);
-          source.start(scheduleTime, basePosition);
-          sources.push(source);
-
-          scheduleTime += baseBuffer.duration - basePosition;
         }
 
         // Calculate total duration
@@ -224,9 +204,13 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
               cancelAnimationFrame(animationFrameRef.current);
             }
           };
+        } else {
+          // No sources scheduled (no audio)
+          setIsLoading(false);
+          setIsPlaying(false);
         }
       } catch (err) {
-        console.error('Audio splicing error:', err);
+        console.error('Audio playback error:', err);
         setError(err instanceof Error ? err.message : 'Failed to play audio');
         setIsLoading(false);
         setIsPlaying(false);
@@ -254,7 +238,6 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
 
   const pause = useCallback(() => {
     if (audioContextRef.current && isPlaying) {
-      pausedAtRef.current = audioContextRef.current.currentTime - startTimeRef.current;
       audioContextRef.current.suspend();
       setIsPaused(true);
       setIsPlaying(false);
