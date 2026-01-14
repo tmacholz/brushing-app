@@ -1,9 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getDb } from '../../../lib/db';
+import { getDb } from '../lib/db.js';
 
-// GET /api/admin/stories/[id] - Get full story with chapters and segments
-// PUT /api/admin/stories/[id] - Update story metadata
-// DELETE /api/admin/stories/[id] - Delete story
+// Handles story CRUD and publish operations
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
   const { id } = req.query;
@@ -12,23 +10,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid story ID' });
   }
 
+  // GET - Get full story with chapters and segments
   if (req.method === 'GET') {
     try {
       const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
+      if (!story) return res.status(404).json({ error: 'Story not found' });
 
-      if (!story) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
-      const chapters = await sql`
-        SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number
-      `;
-
+      const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
       const chaptersWithSegments = await Promise.all(
         chapters.map(async (chapter) => {
-          const segments = await sql`
-            SELECT * FROM segments WHERE chapter_id = ${chapter.id} ORDER BY segment_order
-          `;
+          const segments = await sql`SELECT * FROM segments WHERE chapter_id = ${chapter.id} ORDER BY segment_order`;
           return { ...chapter, segments };
         })
       );
@@ -40,25 +31,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // PUT - Update story metadata
   if (req.method === 'PUT') {
     const { title, description, status, isPublished } = req.body;
 
     try {
       const [story] = await sql`
-        UPDATE stories
-        SET
+        UPDATE stories SET
           title = COALESCE(${title}, title),
           description = COALESCE(${description}, description),
           status = COALESCE(${status}, status),
           is_published = COALESCE(${isPublished}, is_published)
-        WHERE id = ${id}
-        RETURNING *
+        WHERE id = ${id} RETURNING *
       `;
-
-      if (!story) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
+      if (!story) return res.status(404).json({ error: 'Story not found' });
       return res.status(200).json({ story });
     } catch (error) {
       console.error('Error updating story:', error);
@@ -66,20 +52,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // DELETE - Delete story
   if (req.method === 'DELETE') {
     try {
-      const [story] = await sql`
-        DELETE FROM stories WHERE id = ${id} RETURNING id
-      `;
-
-      if (!story) {
-        return res.status(404).json({ error: 'Story not found' });
-      }
-
+      const [story] = await sql`DELETE FROM stories WHERE id = ${id} RETURNING id`;
+      if (!story) return res.status(404).json({ error: 'Story not found' });
       return res.status(200).json({ success: true });
     } catch (error) {
       console.error('Error deleting story:', error);
       return res.status(500).json({ error: 'Failed to delete story' });
+    }
+  }
+
+  // POST - Publish/unpublish
+  if (req.method === 'POST') {
+    const { publish = true } = req.body;
+
+    try {
+      const [story] = await sql`
+        UPDATE stories SET
+          is_published = ${publish},
+          status = ${publish ? 'published' : 'draft'}
+        WHERE id = ${id} RETURNING *
+      `;
+      if (!story) return res.status(404).json({ error: 'Story not found' });
+      return res.status(200).json({ story });
+    } catch (error) {
+      console.error('Error publishing story:', error);
+      return res.status(500).json({ error: 'Failed to publish story' });
     }
   }
 

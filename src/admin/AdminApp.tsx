@@ -24,10 +24,10 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
     setError('');
 
     try {
-      const res = await fetch('/api/admin/auth', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ action: 'auth', password }),
       });
 
       if (res.ok) {

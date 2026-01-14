@@ -104,7 +104,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   const handlePublish = async (publish: boolean) => {
     try {
-      const res = await fetch(`/api/admin/stories/${storyId}/publish`, {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publish }),

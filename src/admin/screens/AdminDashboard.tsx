@@ -45,7 +45,12 @@ export function AdminDashboard({ onSelectWorld, onLogout }: AdminDashboardProps)
   const handleGenerateWorld = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/admin/worlds/generate', { method: 'POST' });
+      // Generate world with AI
+      const res = await fetch('/api/admin/worlds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate' }),
+      });
       if (!res.ok) throw new Error('Failed to generate world');
       const data = await res.json();
 

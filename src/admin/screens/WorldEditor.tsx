@@ -134,10 +134,10 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/worlds/${worldId}/stories/outline`, {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idea: storyIdea }),
+        body: JSON.stringify({ action: 'outline', idea: storyIdea }),
       });
 
       if (!res.ok) throw new Error('Failed to generate outline');
@@ -156,10 +156,10 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/worlds/${worldId}/stories/pitches`, {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: 3 }),
+        body: JSON.stringify({ action: 'pitches', count: 3 }),
       });
 
       if (!res.ok) throw new Error('Failed to generate pitches');
@@ -177,10 +177,10 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/worlds/${worldId}/stories/generate`, {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pitchId: pitch.id }),
+        body: JSON.stringify({ action: 'generate', pitchId: pitch.id }),
       });
 
       if (!res.ok) throw new Error('Failed to generate story');
