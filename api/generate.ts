@@ -320,6 +320,7 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     const blob = await put(storagePath, Buffer.from(audioBuffer), {
       access: 'public',
       contentType: 'audio/mpeg',
+      allowOverwrite: true,
     });
 
     console.log('Blob upload success:', blob.url);
