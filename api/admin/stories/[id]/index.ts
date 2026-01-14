@@ -1,0 +1,87 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getDb } from '../../../lib/db';
+
+// GET /api/admin/stories/[id] - Get full story with chapters and segments
+// PUT /api/admin/stories/[id] - Update story metadata
+// DELETE /api/admin/stories/[id] - Delete story
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const sql = getDb();
+  const { id } = req.query;
+
+  if (typeof id !== 'string') {
+    return res.status(400).json({ error: 'Invalid story ID' });
+  }
+
+  if (req.method === 'GET') {
+    try {
+      const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
+
+      if (!story) {
+        return res.status(404).json({ error: 'Story not found' });
+      }
+
+      const chapters = await sql`
+        SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number
+      `;
+
+      const chaptersWithSegments = await Promise.all(
+        chapters.map(async (chapter) => {
+          const segments = await sql`
+            SELECT * FROM segments WHERE chapter_id = ${chapter.id} ORDER BY segment_order
+          `;
+          return { ...chapter, segments };
+        })
+      );
+
+      return res.status(200).json({ story: { ...story, chapters: chaptersWithSegments } });
+    } catch (error) {
+      console.error('Error fetching story:', error);
+      return res.status(500).json({ error: 'Failed to fetch story' });
+    }
+  }
+
+  if (req.method === 'PUT') {
+    const { title, description, status, isPublished } = req.body;
+
+    try {
+      const [story] = await sql`
+        UPDATE stories
+        SET
+          title = COALESCE(${title}, title),
+          description = COALESCE(${description}, description),
+          status = COALESCE(${status}, status),
+          is_published = COALESCE(${isPublished}, is_published)
+        WHERE id = ${id}
+        RETURNING *
+      `;
+
+      if (!story) {
+        return res.status(404).json({ error: 'Story not found' });
+      }
+
+      return res.status(200).json({ story });
+    } catch (error) {
+      console.error('Error updating story:', error);
+      return res.status(500).json({ error: 'Failed to update story' });
+    }
+  }
+
+  if (req.method === 'DELETE') {
+    try {
+      const [story] = await sql`
+        DELETE FROM stories WHERE id = ${id} RETURNING id
+      `;
+
+      if (!story) {
+        return res.status(404).json({ error: 'Story not found' });
+      }
+
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      console.error('Error deleting story:', error);
+      return res.status(500).json({ error: 'Failed to delete story' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
+}
