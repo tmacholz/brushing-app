@@ -4,6 +4,7 @@ import { Volume2, VolumeX, Pause, Play, X, Loader2 } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
+import { useAudioSplicing } from '../hooks/useAudioSplicing';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -11,6 +12,7 @@ import { createStoryArcForWorld } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { getPetById } from '../data/pets';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
+import { getPetAudioUrl } from '../services/petAudio';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -34,10 +36,32 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [isPreparingImages, setIsPreparingImages] = useState(true);
   const [imageProgress, setImageProgress] = useState<ImageGenerationProgress | null>(null);
+  const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
   const imageGenerationStarted = useRef(false);
+  const lastSplicedSegmentRef = useRef<string | null>(null);
+
+  // Audio splicing hook for pre-recorded narration with name insertion
+  const {
+    play: playSplicedAudio,
+    stop: stopSplicedAudio,
+    pause: pauseSplicedAudio,
+    resume: resumeSplicedAudio,
+    isPlaying: isSplicedAudioPlaying,
+    isLoading: isSplicedAudioLoading,
+  } = useAudioSplicing({
+    childNameAudioUrl: child?.nameAudioUrl ?? null,
+    petNameAudioUrl,
+  });
+
+  // Fetch pet audio URL on mount
+  useEffect(() => {
+    if (child?.activePetId) {
+      getPetAudioUrl(child.activePetId).then(setPetNameAudioUrl);
+    }
+  }, [child?.activePetId]);
 
   // Get or create story arc
   useEffect(() => {
@@ -178,13 +202,25 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [currentSegment, phase, playSound]);
 
-  // Text-to-speech narration
+  // Text-to-speech narration (with audio splicing support for story segments)
   useEffect(() => {
     if (!narrationEnabled || !isRunning || !child) return;
 
     const childName = child.name;
     const petName = pet?.displayName ?? 'Friend';
 
+    // For story segments with pre-recorded audio, use audio splicing
+    if (phase === 'story' && currentSegment?.baseAudioUrl && currentSegment.splicePoints) {
+      // Only play if this is a new segment
+      if (currentSegment.id !== lastSplicedSegmentRef.current) {
+        lastSplicedSegmentRef.current = currentSegment.id;
+        lastSpokenTextRef.current = null; // Reset TTS ref so we don't duplicate
+        playSplicedAudio(currentSegment.baseAudioUrl, currentSegment.splicePoints);
+      }
+      return;
+    }
+
+    // Fall back to TTS for segments without pre-recorded audio
     let textToSpeak: string | null = null;
 
     switch (phase) {
@@ -221,28 +257,32 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     // Only speak if we have new text
     if (textToSpeak && textToSpeak !== lastSpokenTextRef.current) {
+      lastSplicedSegmentRef.current = null; // Reset splicing ref
       // Ensure any remaining placeholders are replaced before TTS
       const finalText = replaceStoryPlaceholders(textToSpeak, childName, petName);
       lastSpokenTextRef.current = textToSpeak;
       speak(finalText);
     }
-  }, [phase, currentSegment, currentChapter, narrationEnabled, isRunning, speak, child, pet]);
+  }, [phase, currentSegment, currentChapter, narrationEnabled, isRunning, speak, playSplicedAudio, child, pet]);
 
   // Stop narration when brushing completes or pauses
   useEffect(() => {
     if (!isRunning && !showCountdown) {
       pauseSpeaking();
+      pauseSplicedAudio();
     } else if (isRunning) {
       resumeSpeaking();
+      resumeSplicedAudio();
     }
-  }, [isRunning, showCountdown, pauseSpeaking, resumeSpeaking]);
+  }, [isRunning, showCountdown, pauseSpeaking, resumeSpeaking, pauseSplicedAudio, resumeSplicedAudio]);
 
   // Cleanup narration on exit
   useEffect(() => {
     return () => {
       stopSpeaking();
+      stopSplicedAudio();
     };
-  }, [stopSpeaking]);
+  }, [stopSpeaking, stopSplicedAudio]);
 
   // Countdown before starting (wait for images to be ready first)
   useEffect(() => {
@@ -526,6 +566,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             onClick={() => {
               if (narrationEnabled) {
                 stopSpeaking();
+                stopSplicedAudio();
               }
               setNarrationEnabled(!narrationEnabled);
             }}
@@ -535,13 +576,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             title={narrationEnabled ? 'Turn off narration' : 'Turn on narration'}
           >
             {narrationEnabled ? (
-              <Volume2 className={`w-5 h-5 ${isSpeaking ? 'animate-pulse' : ''}`} />
+              <Volume2 className={`w-5 h-5 ${(isSpeaking || isSplicedAudioPlaying) ? 'animate-pulse' : ''}`} />
             ) : (
               <VolumeX className="w-5 h-5" />
             )}
           </motion.button>
         </div>
-        {isTTSLoading && (
+        {(isTTSLoading || isSplicedAudioLoading) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

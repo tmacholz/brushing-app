@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2 } from 'lucide-react';
+import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, Mic } from 'lucide-react';
 
 interface World {
   id: string;
@@ -15,10 +15,12 @@ interface World {
 
 interface AdminDashboardProps {
   onSelectWorld: (worldId: string) => void;
+  onPetAudio: () => void;
+  onStarterAudio: () => void;
   onLogout: () => void;
 }
 
-export function AdminDashboard({ onSelectWorld, onLogout }: AdminDashboardProps) {
+export function AdminDashboard({ onSelectWorld, onPetAudio, onStarterAudio, onLogout }: AdminDashboardProps) {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +109,27 @@ export function AdminDashboard({ onSelectWorld, onLogout }: AdminDashboardProps)
       </header>
 
       <main className="max-w-6xl mx-auto px-6 py-8">
+        {/* Quick Tools */}
+        <div className="mb-8">
+          <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">Quick Tools</h2>
+          <div className="flex gap-3 flex-wrap">
+            <button
+              onClick={onPetAudio}
+              className="flex items-center gap-2 px-4 py-3 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-xl transition-colors"
+            >
+              <Volume2 className="w-5 h-5" />
+              <span>Pet Name Audio</span>
+            </button>
+            <button
+              onClick={onStarterAudio}
+              className="flex items-center gap-2 px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl transition-colors"
+            >
+              <Mic className="w-5 h-5" />
+              <span>Starter Story Audio</span>
+            </button>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex items-center justify-between mb-8">
           <h2 className="text-2xl font-bold">Worlds</h2>

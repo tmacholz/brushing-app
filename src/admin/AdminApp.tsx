@@ -4,8 +4,10 @@ import { Lock } from 'lucide-react';
 import { AdminDashboard } from './screens/AdminDashboard';
 import { WorldEditor } from './screens/WorldEditor';
 import { StoryEditor } from './screens/StoryEditor';
+import { PetAudioManager } from './screens/PetAudioManager';
+import { StarterStoryAudio } from './screens/StarterStoryAudio';
 
-type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor';
+type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'starter-audio';
 
 interface AdminState {
   screen: AdminScreen;
@@ -129,6 +131,8 @@ export function AdminApp() {
           >
             <AdminDashboard
               onSelectWorld={(worldId) => navigateTo('world-editor', { worldId })}
+              onPetAudio={() => navigateTo('pet-audio')}
+              onStarterAudio={() => navigateTo('starter-audio')}
               onLogout={handleLogout}
             />
           </motion.div>
@@ -160,6 +164,28 @@ export function AdminApp() {
               storyId={adminState.storyId}
               onBack={() => adminState.worldId ? navigateTo('world-editor', { worldId: adminState.worldId }) : navigateTo('dashboard')}
             />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'pet-audio' && (
+          <motion.div
+            key="pet-audio"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <PetAudioManager onBack={() => navigateTo('dashboard')} />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'starter-audio' && (
+          <motion.div
+            key="starter-audio"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <StarterStoryAudio onBack={() => navigateTo('dashboard')} />
           </motion.div>
         )}
       </AnimatePresence>
