@@ -91,19 +91,28 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Generate images for the current chapter
   useEffect(() => {
+    console.log('[BrushingScreen] Image generation effect running', {
+      hasStoryArc: !!child?.currentStoryArc,
+      alreadyStarted: imageGenerationStarted.current,
+    });
+
     if (!child?.currentStoryArc || imageGenerationStarted.current) return;
 
     const storyArc = child.currentStoryArc;
     const chapter = storyArc.chapters[storyArc.currentChapterIndex];
 
+    console.log('[BrushingScreen] Chapter:', storyArc.currentChapterIndex, 'Segments:', chapter?.segments?.length);
+
     // Check if images already exist for this chapter
     const hasAllImages = chapter?.segments.every(s => s.imageUrl);
+    console.log('[BrushingScreen] hasAllImages:', hasAllImages);
     if (hasAllImages) {
       setIsPreparingImages(false);
       return;
     }
 
     imageGenerationStarted.current = true;
+    console.log('[BrushingScreen] Starting image generation...');
 
     // Generate images in the background with character context for avatar consistency
     generateImagesForChapter(

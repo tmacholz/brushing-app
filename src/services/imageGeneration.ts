@@ -47,8 +47,10 @@ export async function generateImageForSegment(
   characterContext?: CharacterContext
 ): Promise<GenerateImageResult | null> {
   if (!segment.imagePrompt) {
+    console.log('[ImageGen] Segment has no imagePrompt, skipping:', segment.id);
     return null;
   }
+  console.log('[ImageGen] Starting image generation for segment:', segment.id);
 
   // Detect if characters should be in this scene
   let includeUser = false;
@@ -73,6 +75,7 @@ export async function generateImageForSegment(
   }
 
   try {
+    console.log('[ImageGen] Calling /api/generate for segment:', segment.id);
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
@@ -92,15 +95,19 @@ export async function generateImageForSegment(
       }),
     });
 
+    console.log('[ImageGen] Response status:', response.status, 'for segment:', segment.id);
+
     if (!response.ok) {
       const error = await response.text();
-      console.error(`Failed to generate image for segment ${segment.id}:`, error);
+      console.error(`[ImageGen] Failed for segment ${segment.id}:`, error);
       return null;
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('[ImageGen] Success for segment:', segment.id);
+    return result;
   } catch (error) {
-    console.error(`Error generating image for segment ${segment.id}:`, error);
+    console.error(`[ImageGen] Error for segment ${segment.id}:`, error);
     return null;
   }
 }
@@ -175,10 +182,12 @@ export async function generateImagesForChapter(
   child?: Child | null,
   pet?: Pet | null
 ): Promise<Map<string, string>> {
+  console.log('[ImageGen] generateImagesForChapter called for chapter:', chapterIndex);
   const imageUrlMap = new Map<string, string>();
   const chapter = storyArc.chapters[chapterIndex];
 
   if (!chapter) {
+    console.log('[ImageGen] No chapter found at index:', chapterIndex);
     return imageUrlMap;
   }
 
@@ -200,6 +209,8 @@ export async function generateImagesForChapter(
   );
 
   const total = segmentsToGenerate.length;
+  console.log('[ImageGen] Segments to generate:', total, 'out of', chapter.segments.length, 'total segments');
+
   let completed = 0;
   let previousImageUrl: string | undefined;
 
