@@ -123,13 +123,13 @@ function WorldPlanet({
 
         {/* Planet */}
         <div
-          className={`relative w-28 h-28 rounded-full bg-gradient-to-br ${colors.gradient} shadow-xl ${colors.glow} shadow-2xl flex items-center justify-center overflow-hidden`}
+          className={`relative w-36 h-36 rounded-full bg-gradient-to-br ${colors.gradient} shadow-xl ${colors.glow} shadow-2xl flex items-center justify-center overflow-hidden`}
         >
           {/* Shine effect */}
           <div className="absolute top-2 left-4 w-6 h-6 bg-white/30 rounded-full blur-sm" />
 
           {/* Emoji */}
-          <span className="text-4xl relative z-10">{getWorldEmoji(world.id)}</span>
+          <span className="text-5xl relative z-10">{getWorldEmoji(world.id)}</span>
 
           {/* Lock overlay */}
           {!isUnlocked && (
@@ -161,13 +161,13 @@ function WorldPlanet({
       </motion.div>
 
       {/* World name */}
-      <p className={`mt-3 font-bold text-center ${isUnlocked ? 'text-text' : 'text-text/50'}`}>
+      <p className={`mt-3 font-bold text-center ${isUnlocked ? 'text-white' : 'text-white/50'}`}>
         {world.displayName}
       </p>
 
       {/* Unlock cost */}
       {!isUnlocked && (
-        <p className="text-xs text-text/50 flex items-center gap-1">
+        <p className="text-xs text-white/50 flex items-center gap-1">
           <Lock className="w-3 h-3" />
           {world.unlockCost} pts
         </p>
