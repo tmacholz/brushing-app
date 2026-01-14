@@ -117,8 +117,12 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             className="relative"
           >
             {/* Pet circle */}
-            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center shadow-lg">
-              <span className="text-8xl">{getPetEmoji(child.activePetId)}</span>
+            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center shadow-lg overflow-hidden">
+              {pet?.avatarUrl ? (
+                <img src={pet.avatarUrl} alt={pet.displayName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-8xl">{getPetEmoji(child.activePetId)}</span>
+              )}
             </div>
 
             {/* Sparkle effects */}

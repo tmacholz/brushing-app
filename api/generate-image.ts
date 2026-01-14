@@ -10,12 +10,35 @@ const STYLE_PREFIX = `Children's book illustration style, soft watercolor and di
 warm and inviting colors, gentle lighting, whimsical and magical atmosphere,
 suitable for ages 4-8, no text in image, dreamlike quality,
 Studio Ghibli inspired soft aesthetic, rounded friendly shapes,
-pastel color palette with vibrant accents. Scene: `;
+pastel color palette with vibrant accents.`;
 
 interface GenerateImageRequest {
   prompt: string;
   segmentId: string;
-  referenceImageUrl?: string; // Previous image for style/character consistency
+  referenceImageUrl?: string; // Previous scene for style consistency
+  userAvatarUrl?: string | null; // User's illustrated avatar
+  petAvatarUrl?: string | null; // Pet's illustrated avatar
+  includeUser?: boolean; // Whether to include user character in scene
+  includePet?: boolean; // Whether to include pet character in scene
+  childName?: string; // Name of the child character
+  petName?: string; // Name of the pet character
+}
+
+// Helper to fetch and convert image to base64
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    const mimeType = response.headers.get('content-type') || 'image/png';
+
+    return { mimeType, data: base64 };
+  } catch (error) {
+    console.error('Failed to fetch image:', url, error);
+    return null;
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -28,45 +51,101 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
-  const { prompt, segmentId, referenceImageUrl } = req.body as GenerateImageRequest;
+  const {
+    prompt,
+    segmentId,
+    referenceImageUrl,
+    userAvatarUrl,
+    petAvatarUrl,
+    includeUser,
+    includePet,
+    childName,
+    petName,
+  } = req.body as GenerateImageRequest;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
   }
 
   try {
-    // Build the prompt with style consistency instructions
-    let fullPrompt = `${STYLE_PREFIX}${prompt}`;
-
     // Build the parts array for the request
     const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
 
-    // If we have a reference image, fetch it and add consistency instructions
+    // Track which reference images we're including
+    const referenceDescriptions: string[] = [];
+    let imageIndex = 1;
+
+    // Add previous scene reference (for style consistency)
     if (referenceImageUrl) {
-      try {
-        // Fetch the reference image
-        const imageResponse = await fetch(referenceImageUrl);
-        if (imageResponse.ok) {
-          const imageBuffer = await imageResponse.arrayBuffer();
-          const base64Image = Buffer.from(imageBuffer).toString('base64');
-          const mimeType = imageResponse.headers.get('content-type') || 'image/png';
-
-          // Add reference image first
-          parts.push({
-            inlineData: {
-              mimeType,
-              data: base64Image,
-            },
-          });
-
-          // Add consistency instruction
-          fullPrompt = `Using the attached image as a style reference: match the exact art style, color palette, lighting, and line quality. Keep the same exact character designs, proportions, and visual appearance for any characters that appear. Maintain complete visual consistency. New scene: ${fullPrompt}`;
-        }
-      } catch (refError) {
-        console.error('Failed to fetch reference image:', refError);
-        // Continue without reference image
+      const imageData = await fetchImageAsBase64(referenceImageUrl);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        referenceDescriptions.push(`[Image ${imageIndex}] Previous scene - use for style, color palette, and lighting consistency`);
+        imageIndex++;
       }
     }
+
+    // Add user avatar reference (if user should appear in scene)
+    if (includeUser && userAvatarUrl) {
+      const imageData = await fetchImageAsBase64(userAvatarUrl);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        referenceDescriptions.push(
+          `[Image ${imageIndex}] ${childName || 'The child character'}'s appearance - this character MUST appear in the scene with EXACT same features, hair, face, and clothing style`
+        );
+        imageIndex++;
+      }
+    }
+
+    // Add pet avatar reference (if pet should appear in scene)
+    if (includePet && petAvatarUrl) {
+      const imageData = await fetchImageAsBase64(petAvatarUrl);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        referenceDescriptions.push(
+          `[Image ${imageIndex}] ${petName || 'The pet companion'}'s appearance - this character MUST appear in the scene with EXACT same design and features`
+        );
+        imageIndex++;
+      }
+    }
+
+    // Build the complete prompt with character instructions
+    let fullPrompt = STYLE_PREFIX + '\n\n';
+
+    // Add reference image instructions if we have any
+    if (referenceDescriptions.length > 0) {
+      fullPrompt += 'REFERENCE IMAGES PROVIDED:\n';
+      fullPrompt += referenceDescriptions.join('\n');
+      fullPrompt += '\n\n';
+    }
+
+    // Add character inclusion instructions
+    if (includeUser || includePet) {
+      fullPrompt += 'CHARACTER REQUIREMENTS:\n';
+
+      if (includeUser) {
+        fullPrompt += `- ${childName || 'The child'} MUST be clearly visible in this scene. `;
+        if (userAvatarUrl) {
+          fullPrompt += 'Match their appearance EXACTLY from the reference image.\n';
+        } else {
+          fullPrompt += 'Show them as a friendly child protagonist.\n';
+        }
+      }
+
+      if (includePet) {
+        fullPrompt += `- ${petName || 'The pet companion'} MUST be clearly visible in this scene. `;
+        if (petAvatarUrl) {
+          fullPrompt += 'Match their appearance EXACTLY from the reference image.\n';
+        } else {
+          fullPrompt += 'Show them as an adorable, friendly companion.\n';
+        }
+      }
+
+      fullPrompt += '- Characters should be interacting with the scene appropriately.\n';
+      fullPrompt += '- Maintain consistent character designs throughout.\n\n';
+    }
+
+    fullPrompt += `SCENE TO ILLUSTRATE:\n${prompt}`;
 
     // Add the text prompt
     parts.push({ text: fullPrompt });
@@ -78,9 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        contents: [{
-          parts,
-        }],
+        contents: [{ parts }],
         generationConfig: {
           responseModalities: ['TEXT', 'IMAGE'],
         },
@@ -97,7 +174,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Extract the image from the response
     const responseParts = data.candidates?.[0]?.content?.parts || [];
-    const imagePart = responseParts.find((part: { inlineData?: { mimeType: string; data: string } }) => part.inlineData);
+    const imagePart = responseParts.find(
+      (part: { inlineData?: { mimeType: string; data: string } }) => part.inlineData
+    );
 
     if (!imagePart?.inlineData) {
       console.error('No image in response:', JSON.stringify(data, null, 2));

@@ -10,6 +10,7 @@ export const pets: Pet[] = [
     storyPersonality: 'brave and optimistic',
     unlockCost: 0,
     isStarter: true,
+    avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/sparkle.png',
   },
   {
     id: 'bubbles',
@@ -20,6 +21,7 @@ export const pets: Pet[] = [
     storyPersonality: 'silly and curious',
     unlockCost: 0,
     isStarter: true,
+    avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/bubbles.png',
   },
   {
     id: 'cosmo',
@@ -30,6 +32,7 @@ export const pets: Pet[] = [
     storyPersonality: 'smart and helpful',
     unlockCost: 75,
     isStarter: false,
+    avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/cosmo.png',
   },
   {
     id: 'fern',
@@ -40,6 +43,7 @@ export const pets: Pet[] = [
     storyPersonality: 'shy but fierce',
     unlockCost: 100,
     isStarter: false,
+    avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/fern.png',
   },
   {
     id: 'captain-whiskers',
@@ -50,6 +54,7 @@ export const pets: Pet[] = [
     storyPersonality: 'dramatic and bold',
     unlockCost: 150,
     isStarter: false,
+    avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/captain-whiskers.png',
   },
 ];
 

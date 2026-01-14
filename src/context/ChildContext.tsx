@@ -23,8 +23,8 @@ interface ChildContextType {
   hasMultipleChildren: boolean;
 
   // Child management
-  createChild: (name: string, age: number, petId?: string, worldId?: string) => void;
-  addChild: (name: string, age: number, petId?: string, worldId?: string) => void;
+  createChild: (name: string, age: number, characterId: string, petId?: string, worldId?: string) => void;
+  addChild: (name: string, age: number, characterId: string, petId?: string, worldId?: string) => void;
   switchChild: (childId: string) => void;
   deleteChild: (childId: string) => void;
 
@@ -38,6 +38,7 @@ interface ChildContextType {
   unlockPet: (petId: string) => boolean;
   unlockBrush: (brushId: string) => boolean;
   unlockWorld: (worldId: string) => boolean;
+  updateCharacter: (characterId: string) => void;
   resetChild: () => void;
   resetAllData: () => void;
 }
@@ -71,7 +72,13 @@ const sanitizeForStorage = (data: AppData): AppData => {
   };
 };
 
-const createDefaultChild = (name: string, age: number, petId?: string, worldId?: string): Child => {
+const createDefaultChild = (
+  name: string,
+  age: number,
+  characterId: string,
+  petId?: string,
+  worldId?: string
+): Child => {
   const starterPets = getStarterPets();
   const starterBrushes = getStarterBrushes();
   const starterWorlds = getStarterWorlds();
@@ -94,6 +101,7 @@ const createDefaultChild = (name: string, age: number, petId?: string, worldId?:
     completedStoryArcs: [],
     lastBrushDate: null,
     createdAt: new Date().toISOString(),
+    characterId,
   };
 };
 
@@ -142,8 +150,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
 
   // Create first child (used during onboarding)
   const createChild = useCallback(
-    (name: string, age: number, petId?: string, worldId?: string) => {
-      const newChild = createDefaultChild(name, age, petId, worldId);
+    (name: string, age: number, characterId: string, petId?: string, worldId?: string) => {
+      const newChild = createDefaultChild(name, age, characterId, petId, worldId);
       setAppData((prev) => ({
         children: [...prev.children, newChild],
         activeChildId: newChild.id,
@@ -154,8 +162,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
 
   // Add additional child
   const addChild = useCallback(
-    (name: string, age: number, petId?: string, worldId?: string) => {
-      const newChild = createDefaultChild(name, age, petId, worldId);
+    (name: string, age: number, characterId: string, petId?: string, worldId?: string) => {
+      const newChild = createDefaultChild(name, age, characterId, petId, worldId);
       setAppData((prev) => ({
         children: [...prev.children, newChild],
         activeChildId: newChild.id,
@@ -402,6 +410,24 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     [unlockItem]
   );
 
+  // Update character for current child
+  const updateCharacter = useCallback(
+    (characterId: string) => {
+      setAppData((prev) => {
+        if (!prev.activeChildId) return prev;
+        return {
+          ...prev,
+          children: prev.children.map((c) =>
+            c.id === prev.activeChildId
+              ? { ...c, characterId }
+              : c
+          ),
+        };
+      });
+    },
+    [setAppData]
+  );
+
   // Reset current child (delete and switch)
   const resetChild = useCallback(() => {
     if (!child) return;
@@ -433,6 +459,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         unlockPet,
         unlockBrush,
         unlockWorld,
+        updateCharacter,
         resetChild,
         resetAllData,
       }}

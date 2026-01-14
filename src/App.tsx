@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, Check } from 'lucide-react';
+import { characters } from './data/characters';
 import { ChildProvider, useChild } from './context/ChildContext';
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { HomeScreen } from './screens/HomeScreen';
@@ -8,6 +9,7 @@ import { BrushingScreen } from './screens/BrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
 import { ProfileSelectScreen } from './screens/ProfileSelectScreen';
 import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
+import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
 import { pets } from './data/pets';
 import { worlds } from './data/worlds';
@@ -82,7 +84,13 @@ function PetCard({ pet, isSelected, onSelect }: PetCardProps) {
           <Check className="w-4 h-4" />
         </motion.div>
       )}
-      <div className="text-5xl mb-2">{getPetEmoji(pet.id)}</div>
+      <div className="w-20 h-20 mx-auto mb-2 rounded-full overflow-hidden bg-white/20">
+        {pet.avatarUrl ? (
+          <img src={pet.avatarUrl} alt={pet.displayName} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-5xl flex items-center justify-center h-full">{getPetEmoji(pet.id)}</span>
+        )}
+      </div>
       <p className={`font-bold ${isLocked ? 'text-white/40' : isSelected ? 'text-primary' : 'text-white'}`}>
         {pet.displayName}
       </p>
@@ -152,16 +160,22 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { playSound } = useAudio();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
+  const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
   const [selectedPetId, setSelectedPetId] = useState(pets.find(p => p.isStarter)?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
-  const [step, setStep] = useState<'name' | 'age' | 'pet' | 'world'>('name');
+  const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
       playSound('tap');
-      setStep('age');
+      setStep('character');
     }
+  };
+
+  const handleCharacterSubmit = () => {
+    playSound('tap');
+    setStep('age');
   };
 
   const handleAgeSubmit = () => {
@@ -176,7 +190,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
   const handleComplete = () => {
     playSound('success');
-    createChild(name.trim(), age, selectedPetId, selectedWorldId);
+    createChild(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
     onComplete();
   };
 
@@ -191,7 +205,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   };
 
   // Progress indicator
-  const steps = ['name', 'age', 'pet', 'world'];
+  const steps = ['name', 'character', 'age', 'pet', 'world'];
   const currentStepIndex = steps.indexOf(step);
 
   return (
@@ -258,6 +272,80 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
                   Next
                 </button>
               </form>
+            </motion.div>
+          )}
+
+          {step === 'character' && (
+            <motion.div
+              key="character"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              className="w-full max-w-sm"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', damping: 10 }}
+                className="text-5xl text-center mb-4"
+              >
+                ✨
+              </motion.div>
+
+              <h2 className="text-3xl font-bold text-white text-center mb-2">
+                Choose Your Character
+              </h2>
+              <p className="text-white/80 text-center mb-6">
+                Who will {name} be in the story?
+              </p>
+
+              <div className="flex justify-center gap-6 mb-8">
+                {characters.map((character) => (
+                  <motion.button
+                    key={character.id}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      playSound('tap');
+                      setSelectedCharacterId(character.id);
+                    }}
+                    className={`relative p-3 rounded-2xl transition-all ${
+                      selectedCharacterId === character.id
+                        ? 'bg-white ring-4 ring-accent shadow-lg'
+                        : 'bg-white/20 hover:bg-white/30'
+                    }`}
+                  >
+                    {selectedCharacterId === character.id && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-2 -right-2 bg-accent text-white rounded-full p-1"
+                      >
+                        <Check className="w-4 h-4" />
+                      </motion.div>
+                    )}
+                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2">
+                      <img
+                        src={character.avatarUrl}
+                        alt={character.displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <p className={`font-bold text-center ${
+                      selectedCharacterId === character.id ? 'text-primary' : 'text-white'
+                    }`}>
+                      {character.displayName}
+                    </p>
+                  </motion.button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleCharacterSubmit}
+                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg"
+              >
+                Next
+              </button>
             </motion.div>
           )}
 
@@ -475,14 +563,11 @@ function AppContent() {
         {currentScreen === 'settings' && (
           <motion.div
             key="settings"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="min-h-screen bg-background p-6 pb-24 flex flex-col items-center justify-center"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
           >
-            <p className="text-2xl mb-2">⚙️</p>
-            <p className="text-xl font-medium text-text">Settings</p>
-            <p className="text-text/60">Coming soon!</p>
+            <SettingsScreen onBack={() => setCurrentScreen('home')} />
           </motion.div>
         )}
       </AnimatePresence>

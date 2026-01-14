@@ -1,16 +1,75 @@
-import type { StoryArc, StorySegment } from '../types';
+import type { StoryArc, StorySegment, Child, Pet } from '../types';
+import { getCharacterById } from '../data/characters';
 
 interface GenerateImageResult {
   imageUrl: string;
   segmentId: string;
 }
 
+interface CharacterContext {
+  childName: string;
+  petName: string;
+  userAvatarUrl: string | null;
+  petAvatarUrl: string | null;
+}
+
+// Detect if characters should appear in a segment based on text content
+function detectCharacterPresence(
+  segmentText: string,
+  childName: string,
+  petName: string
+): { includeUser: boolean; includePet: boolean } {
+  const text = segmentText.toLowerCase();
+  const childNameLower = childName.toLowerCase();
+  const petNameLower = petName.toLowerCase();
+
+  // Check if child is mentioned (by name or common pronouns in context)
+  const includeUser =
+    text.includes(childNameLower) ||
+    text.includes('[child]') || // In case placeholders weren't replaced
+    // Common patterns that suggest the child is in the scene
+    text.includes('they walked') ||
+    text.includes('they looked') ||
+    text.includes('they saw') ||
+    text.includes('their eyes');
+
+  // Check if pet is mentioned
+  const includePet =
+    text.includes(petNameLower) ||
+    text.includes('[pet]'); // In case placeholders weren't replaced
+
+  return { includeUser, includePet };
+}
+
 export async function generateImageForSegment(
   segment: StorySegment,
-  referenceImageUrl?: string
+  referenceImageUrl?: string,
+  characterContext?: CharacterContext
 ): Promise<GenerateImageResult | null> {
   if (!segment.imagePrompt) {
     return null;
+  }
+
+  // Detect if characters should be in this scene
+  let includeUser = false;
+  let includePet = false;
+  let childName: string | undefined;
+  let petName: string | undefined;
+  let userAvatarUrl: string | null | undefined;
+  let petAvatarUrl: string | null | undefined;
+
+  if (characterContext) {
+    const presence = detectCharacterPresence(
+      segment.text,
+      characterContext.childName,
+      characterContext.petName
+    );
+    includeUser = presence.includeUser;
+    includePet = presence.includePet;
+    childName = characterContext.childName;
+    petName = characterContext.petName;
+    userAvatarUrl = characterContext.userAvatarUrl;
+    petAvatarUrl = characterContext.petAvatarUrl;
   }
 
   try {
@@ -22,7 +81,13 @@ export async function generateImageForSegment(
       body: JSON.stringify({
         prompt: segment.imagePrompt,
         segmentId: segment.id,
-        referenceImageUrl, // Pass previous image for style consistency
+        referenceImageUrl,
+        userAvatarUrl,
+        petAvatarUrl,
+        includeUser,
+        includePet,
+        childName,
+        petName,
       }),
     });
 
@@ -47,9 +112,23 @@ export interface ImageGenerationProgress {
 
 export async function generateImagesForStory(
   storyArc: StoryArc,
-  onProgress?: (progress: ImageGenerationProgress) => void
+  onProgress?: (progress: ImageGenerationProgress) => void,
+  child?: Child | null,
+  pet?: Pet | null
 ): Promise<Map<string, string>> {
   const imageUrlMap = new Map<string, string>();
+
+  // Build character context if we have child and pet data
+  const character = child ? getCharacterById(child.characterId) : undefined;
+  const characterContext: CharacterContext | undefined =
+    child && pet
+      ? {
+          childName: child.name,
+          petName: pet.displayName,
+          userAvatarUrl: character?.avatarUrl ?? null,
+          petAvatarUrl: pet.avatarUrl,
+        }
+      : undefined;
 
   // Collect all segments that need images
   const segmentsToGenerate: StorySegment[] = [];
@@ -72,7 +151,7 @@ export async function generateImagesForStory(
       currentSegment: segment.id,
     });
 
-    const result = await generateImageForSegment(segment);
+    const result = await generateImageForSegment(segment, undefined, characterContext);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
     }
@@ -91,7 +170,9 @@ export async function generateImagesForStory(
 export async function generateImagesForChapter(
   chapterIndex: number,
   storyArc: StoryArc,
-  onProgress?: (progress: ImageGenerationProgress) => void
+  onProgress?: (progress: ImageGenerationProgress) => void,
+  child?: Child | null,
+  pet?: Pet | null
 ): Promise<Map<string, string>> {
   const imageUrlMap = new Map<string, string>();
   const chapter = storyArc.chapters[chapterIndex];
@@ -99,6 +180,18 @@ export async function generateImagesForChapter(
   if (!chapter) {
     return imageUrlMap;
   }
+
+  // Build character context if we have child and pet data
+  const character = child ? getCharacterById(child.characterId) : undefined;
+  const characterContext: CharacterContext | undefined =
+    child && pet
+      ? {
+          childName: child.name,
+          petName: pet.displayName,
+          userAvatarUrl: character?.avatarUrl ?? null,
+          petAvatarUrl: pet.avatarUrl,
+        }
+      : undefined;
 
   // Filter segments that need images
   const segmentsToGenerate = chapter.segments.filter(
@@ -116,8 +209,8 @@ export async function generateImagesForChapter(
       currentSegment: segment.id,
     });
 
-    // Pass the previous image URL for style/character consistency
-    const result = await generateImageForSegment(segment, previousImageUrl);
+    // Pass the previous image URL for style consistency plus character context
+    const result = await generateImageForSegment(segment, previousImageUrl, characterContext);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
       // Use this image as reference for the next one

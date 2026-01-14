@@ -66,18 +66,24 @@ function PetCard({ pet, isUnlocked, isActive, onSelect }: PetCardProps) {
       )}
 
       <div className="flex items-center gap-4">
-        {/* Pet emoji */}
+        {/* Pet avatar */}
         <div
-          className={`w-16 h-16 rounded-xl flex items-center justify-center text-4xl ${
+          className={`w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center ${
             isUnlocked
               ? 'bg-gradient-to-br from-primary/20 to-secondary/20'
               : 'bg-gray-200'
           }`}
         >
-          {isUnlocked ? (
-            getPetEmoji(pet.id)
+          {pet.avatarUrl ? (
+            <img
+              src={pet.avatarUrl}
+              alt={pet.displayName}
+              className={`w-full h-full object-cover ${!isUnlocked ? 'opacity-50 grayscale' : ''}`}
+            />
+          ) : isUnlocked ? (
+            <span className="text-4xl">{getPetEmoji(pet.id)}</span>
           ) : (
-            <span className="opacity-50">{getPetEmoji(pet.id)}</span>
+            <span className="text-4xl opacity-50">{getPetEmoji(pet.id)}</span>
           )}
         </div>
 

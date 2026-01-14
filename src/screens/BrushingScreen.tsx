@@ -78,11 +78,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     imageGenerationStarted.current = true;
 
-    // Generate images in the background
+    // Generate images in the background with character context for avatar consistency
     generateImagesForChapter(
       storyArc.currentChapterIndex,
       storyArc,
-      (progress) => setImageProgress(progress)
+      (progress) => setImageProgress(progress),
+      child,
+      pet
     ).then((imageUrlMap) => {
       if (imageUrlMap.size > 0) {
         updateStoryImages(imageUrlMap);
@@ -92,7 +94,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       console.error('Failed to generate images:', error);
       setIsPreparingImages(false);
     });
-  }, [child?.currentStoryArc, updateStoryImages]);
+  }, [child?.currentStoryArc, updateStoryImages, child, pet]);
 
   const handleBrushingComplete = () => {
     if (!child) return;

@@ -5,6 +5,7 @@ import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { pets } from '../data/pets';
 import { worlds } from '../data/worlds';
+import { characters } from '../data/characters';
 import type { Child, Pet, StoryWorld } from '../types';
 
 interface ProfileSelectScreenProps {
@@ -211,7 +212,13 @@ function PetCard({ pet, isSelected, onSelect }: PetCardProps) {
           <Check className="w-4 h-4" />
         </motion.div>
       )}
-      <div className="text-5xl mb-2">{getPetEmoji(pet.id)}</div>
+      <div className="w-20 h-20 mx-auto mb-2 rounded-full overflow-hidden bg-white/20">
+        {pet.avatarUrl ? (
+          <img src={pet.avatarUrl} alt={pet.displayName} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-5xl flex items-center justify-center h-full">{getPetEmoji(pet.id)}</span>
+        )}
+      </div>
       <p className={`font-bold ${isLocked ? 'text-white/40' : isSelected ? 'text-primary' : 'text-white'}`}>
         {pet.displayName}
       </p>
@@ -279,7 +286,7 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 
 // Full-screen add profile flow
 interface AddProfileFlowProps {
-  onComplete: (name: string, age: number, petId: string, worldId: string) => void;
+  onComplete: (name: string, age: number, characterId: string, petId: string, worldId: string) => void;
   onCancel: () => void;
 }
 
@@ -287,16 +294,22 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
   const { playSound } = useAudio();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
+  const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
   const [selectedPetId, setSelectedPetId] = useState(pets.find(p => p.isStarter)?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
-  const [step, setStep] = useState<'name' | 'age' | 'pet' | 'world'>('name');
+  const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
       playSound('tap');
-      setStep('age');
+      setStep('character');
     }
+  };
+
+  const handleCharacterSubmit = () => {
+    playSound('tap');
+    setStep('age');
   };
 
   const handleAgeSubmit = () => {
@@ -311,7 +324,7 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
 
   const handleComplete = () => {
     playSound('success');
-    onComplete(name.trim(), age, selectedPetId, selectedWorldId);
+    onComplete(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
   };
 
   const handleSelectPet = (petId: string) => {
@@ -328,8 +341,10 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
     playSound('tap');
     if (step === 'name') {
       onCancel();
-    } else if (step === 'age') {
+    } else if (step === 'character') {
       setStep('name');
+    } else if (step === 'age') {
+      setStep('character');
     } else if (step === 'pet') {
       setStep('age');
     } else if (step === 'world') {
@@ -338,7 +353,7 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
   };
 
   // Progress indicator
-  const steps = ['name', 'age', 'pet', 'world'];
+  const steps = ['name', 'character', 'age', 'pet', 'world'];
   const currentStepIndex = steps.indexOf(step);
 
   return (
@@ -424,6 +439,80 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
                   Next
                 </button>
               </form>
+            </motion.div>
+          )}
+
+          {step === 'character' && (
+            <motion.div
+              key="character"
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              className="w-full max-w-sm"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: 'spring', damping: 10 }}
+                className="text-5xl text-center mb-4"
+              >
+                ✨
+              </motion.div>
+
+              <h2 className="text-3xl font-bold text-white text-center mb-2">
+                Choose {name}'s Character
+              </h2>
+              <p className="text-white/80 text-center mb-6">
+                Who will they be in the story?
+              </p>
+
+              <div className="flex justify-center gap-6 mb-8">
+                {characters.map((character) => (
+                  <motion.button
+                    key={character.id}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                      playSound('tap');
+                      setSelectedCharacterId(character.id);
+                    }}
+                    className={`relative p-3 rounded-2xl transition-all ${
+                      selectedCharacterId === character.id
+                        ? 'bg-white ring-4 ring-accent shadow-lg'
+                        : 'bg-white/20 hover:bg-white/30'
+                    }`}
+                  >
+                    {selectedCharacterId === character.id && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-2 -right-2 bg-accent text-white rounded-full p-1"
+                      >
+                        <Check className="w-4 h-4" />
+                      </motion.div>
+                    )}
+                    <div className="w-28 h-28 rounded-xl overflow-hidden mb-2">
+                      <img
+                        src={character.avatarUrl}
+                        alt={character.displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <p className={`font-bold text-center ${
+                      selectedCharacterId === character.id ? 'text-primary' : 'text-white'
+                    }`}>
+                      {character.displayName}
+                    </p>
+                  </motion.button>
+                ))}
+              </div>
+
+              <button
+                onClick={handleCharacterSubmit}
+                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg"
+              >
+                Next
+              </button>
             </motion.div>
           )}
 
@@ -554,8 +643,8 @@ export function ProfileSelectScreen({ onBack }: ProfileSelectScreenProps) {
     onBack();
   };
 
-  const handleAddProfile = (name: string, age: number, petId: string, worldId: string) => {
-    addChild(name, age, petId, worldId);
+  const handleAddProfile = (name: string, age: number, characterId: string, petId: string, worldId: string) => {
+    addChild(name, age, characterId, petId, worldId);
     setShowAddFlow(false);
     onBack();
   };

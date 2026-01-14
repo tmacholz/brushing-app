@@ -16,6 +16,7 @@ export interface Child {
   completedStoryArcs: string[];
   lastBrushDate: string | null;
   createdAt: string;
+  characterId: string; // Selected character ('boy' or 'girl')
 }
 
 export interface Pet {
@@ -27,6 +28,7 @@ export interface Pet {
   storyPersonality: string;
   unlockCost: number;
   isStarter: boolean;
+  avatarUrl: string | null; // Illustrated pet avatar for story consistency
 }
 
 export interface ToothBrush {
