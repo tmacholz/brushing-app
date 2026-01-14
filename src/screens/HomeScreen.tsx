@@ -176,7 +176,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </motion.button>
       </motion.div>
 
-      {/* Chapter Progression */}
+      {/* Chapter Progression - Vertical */}
       {hasStoryInProgress && child.currentStoryArc && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -184,28 +184,26 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           transition={{ delay: 0.2 }}
           className="bg-white rounded-2xl shadow-md p-4 mb-6"
         >
-          <p className="text-sm font-medium text-text/70 mb-1">
+          <p className="text-sm font-medium text-text mb-3">
             {child.currentStoryArc.title}
           </p>
-          <p className="text-xs text-text/50 mb-4">
-            Chapter {currentChapter + 1} of {totalChapters}
-          </p>
 
-          {/* Chapter circles */}
-          <div className="flex items-center justify-between">
+          {/* Vertical chapter list */}
+          <div className="flex flex-col">
             {Array.from({ length: totalChapters }).map((_, index) => {
               const isCompleted = index < currentChapter;
               const isCurrent = index === currentChapter;
 
               return (
-                <div key={index} className="flex items-center flex-1">
-                  {/* Circle */}
-                  <div className="relative flex flex-col items-center">
+                <div key={index} className="flex items-stretch">
+                  {/* Circle and connector column */}
+                  <div className="flex flex-col items-center mr-3">
+                    {/* Circle */}
                     <motion.div
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.3 + index * 0.05 }}
-                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                      className={`relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         isCompleted
                           ? 'bg-accent text-white'
                           : isCurrent
@@ -218,24 +216,45 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                       ) : (
                         <span className="text-xs font-bold">{index + 1}</span>
                       )}
+                      {isCurrent && (
+                        <motion.div
+                          animate={{ scale: [1, 1.4, 1] }}
+                          transition={{ duration: 2, repeat: Infinity }}
+                          className="absolute inset-0 rounded-full bg-primary/30"
+                        />
+                      )}
                     </motion.div>
-                    {isCurrent && (
-                      <motion.div
-                        animate={{ scale: [1, 1.3, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute inset-0 rounded-full bg-primary/30"
+
+                    {/* Vertical connector line */}
+                    {index < totalChapters - 1 && (
+                      <div
+                        className={`w-0.5 flex-1 min-h-[16px] ${
+                          index < currentChapter ? 'bg-accent' : 'bg-gray-200'
+                        }`}
                       />
                     )}
                   </div>
 
-                  {/* Connector line */}
-                  {index < totalChapters - 1 && (
-                    <div
-                      className={`flex-1 h-1 mx-1 rounded ${
-                        index < currentChapter ? 'bg-accent' : 'bg-gray-200'
+                  {/* Chapter label */}
+                  <div className={`pb-4 pt-1 ${index === totalChapters - 1 ? 'pb-0' : ''}`}>
+                    <p
+                      className={`text-sm font-medium ${
+                        isCompleted
+                          ? 'text-accent'
+                          : isCurrent
+                          ? 'text-primary'
+                          : 'text-text/40'
                       }`}
-                    />
-                  )}
+                    >
+                      Chapter {index + 1}
+                    </p>
+                    {isCurrent && (
+                      <p className="text-xs text-primary/60">Current chapter</p>
+                    )}
+                    {isCompleted && (
+                      <p className="text-xs text-accent/60">Complete</p>
+                    )}
+                  </div>
                 </div>
               );
             })}
