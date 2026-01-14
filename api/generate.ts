@@ -264,15 +264,20 @@ interface NameAudioRequest {
 async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   const { name, nameType, id } = req;
 
+  console.log('handleNameAudio called with:', { name, nameType, id });
+
   if (!name || !nameType || !id) {
+    console.log('Missing fields:', { name: !!name, nameType: !!nameType, id: !!id });
     return res.status(400).json({ error: 'Missing required fields: name, nameType, id' });
   }
 
   if (!ELEVENLABS_API_KEY) {
+    console.log('ELEVENLABS_API_KEY not set');
     return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.log('BLOB_READ_WRITE_TOKEN not set');
     return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN not configured' });
   }
 
@@ -280,40 +285,49 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Name too long (max 50 characters)' });
   }
 
-  const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': ELEVENLABS_API_KEY,
-    },
-    body: JSON.stringify({
-      text: name,
-      model_id: 'eleven_turbo_v2_5',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.5,
-        use_speaker_boost: true,
+  try {
+    console.log('Calling ElevenLabs API...');
+    const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY,
       },
-    }),
-  });
+      body: JSON.stringify({
+        text: name,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.5,
+          use_speaker_boost: true,
+        },
+      }),
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`ElevenLabs API error: ${error}`);
+    if (!response.ok) {
+      const error = await response.text();
+      console.log('ElevenLabs API error:', response.status, error);
+      return res.status(500).json({ error: `ElevenLabs API error: ${error}` });
+    }
+
+    console.log('ElevenLabs API success, uploading to blob...');
+    const audioBuffer = await response.arrayBuffer();
+    const storagePath = nameType === 'child'
+      ? `name-audio/children/${id}.mp3`
+      : `name-audio/pets/${id}.mp3`;
+
+    const blob = await put(storagePath, Buffer.from(audioBuffer), {
+      access: 'public',
+      contentType: 'audio/mpeg',
+    });
+
+    console.log('Blob upload success:', blob.url);
+    return res.status(200).json({ audioUrl: blob.url, name, type: nameType, id });
+  } catch (error) {
+    console.error('handleNameAudio error:', error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate name audio' });
   }
-
-  const audioBuffer = await response.arrayBuffer();
-  const storagePath = nameType === 'child'
-    ? `name-audio/children/${id}.mp3`
-    : `name-audio/pets/${id}.mp3`;
-
-  const blob = await put(storagePath, Buffer.from(audioBuffer), {
-    access: 'public',
-    contentType: 'audio/mpeg',
-  });
-
-  return res.status(200).json({ audioUrl: blob.url, name, type: nameType, id });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
