@@ -4,6 +4,11 @@ import { put } from '@vercel/blob';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
 
+// ElevenLabs for name audio
+const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
+const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
+const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
+
 // Consistent style prefix for all images
 const STYLE_PREFIX = `Children's book illustration style, soft watercolor and digital art hybrid,
 warm and inviting colors, gentle lighting, whimsical and magical atmosphere,
@@ -248,13 +253,72 @@ IMPORTANT:
   return res.status(200).json({ avatarUrl: result.url, type: 'pet', ...(result.isDataUrl && { warning: 'Using data URL fallback' }) });
 }
 
+// Name audio generation (child or pet name TTS)
+interface NameAudioRequest {
+  type: 'nameAudio';
+  name: string;
+  nameType: 'child' | 'pet';
+  id: string;
+}
+
+async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
+  const { name, nameType, id } = req;
+
+  if (!name || !nameType || !id) {
+    return res.status(400).json({ error: 'Missing required fields: name, nameType, id' });
+  }
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN not configured' });
+  }
+
+  if (name.length > 50) {
+    return res.status(400).json({ error: 'Name too long (max 50 characters)' });
+  }
+
+  const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'xi-api-key': ELEVENLABS_API_KEY,
+    },
+    body: JSON.stringify({
+      text: name,
+      model_id: 'eleven_turbo_v2_5',
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0.5,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`ElevenLabs API error: ${error}`);
+  }
+
+  const audioBuffer = await response.arrayBuffer();
+  const storagePath = nameType === 'child'
+    ? `name-audio/children/${id}.mp3`
+    : `name-audio/pets/${id}.mp3`;
+
+  const blob = await put(storagePath, Buffer.from(audioBuffer), {
+    access: 'public',
+    contentType: 'audio/mpeg',
+  });
+
+  return res.status(200).json({ audioUrl: blob.url, name, type: nameType, id });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  if (!GEMINI_API_KEY) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
   const { type } = req.body;
@@ -262,15 +326,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     switch (type) {
       case 'image':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handleStoryImage(req.body, res);
       case 'userAvatar':
       case 'user': // backwards compatibility
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handleUserAvatar({ ...req.body, type: 'userAvatar' }, res);
       case 'petAvatar':
       case 'pet': // backwards compatibility
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handlePetAvatar({ ...req.body, type: 'petAvatar' }, res);
+      case 'nameAudio':
+        return handleNameAudio(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, or petAvatar' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, or nameAudio' });
     }
   } catch (error) {
     console.error('Generation error:', error);

@@ -57,8 +57,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'DELETE') {
     try {
-      const result = await sql`DELETE FROM pets WHERE id = ${id}`;
-      if (result.count === 0) {
+      const result = await sql`DELETE FROM pets WHERE id = ${id} RETURNING id`;
+      if (result.length === 0) {
         return res.status(404).json({ error: 'Pet not found' });
       }
       return res.status(200).json({ success: true });
@@ -100,8 +100,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Reject suggestion - deletes the suggestion
     if (action === 'reject') {
       try {
-        const result = await sql`DELETE FROM pet_suggestions WHERE id = ${id}`;
-        if (result.count === 0) {
+        const result = await sql`DELETE FROM pet_suggestions WHERE id = ${id} RETURNING id`;
+        if (result.length === 0) {
           return res.status(404).json({ error: 'Suggestion not found' });
         }
         return res.status(200).json({ success: true });

@@ -12,14 +12,15 @@ export async function generateChildNameAudio(
   name: string
 ): Promise<GenerateNameAudioResult | null> {
   try {
-    const response = await fetch('/api/generate-name-audio', {
+    const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        type: 'nameAudio',
         name,
-        type: 'child',
+        nameType: 'child',
         id: childId,
       }),
     });
@@ -51,14 +52,15 @@ export async function generatePetNameAudio(
   name: string
 ): Promise<GenerateNameAudioResult | null> {
   try {
-    const response = await fetch('/api/generate-name-audio', {
+    const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        type: 'nameAudio',
         name,
-        type: 'pet',
+        nameType: 'pet',
         id: petId,
       }),
     });

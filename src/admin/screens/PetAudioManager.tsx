@@ -74,12 +74,13 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
     }));
 
     try {
-      const res = await fetch('/api/generate-name-audio', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'nameAudio',
           name: petName,
-          type: 'pet',
+          nameType: 'pet',
           id: petId,
         }),
       });

@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { name: 'captain-whiskers', displayName: 'Captain Whiskers', description: 'A cat who dreams of sailing', storyPersonality: 'dramatic and bold' },
         ];
 
-        const allExistingPets = [...existingFromStatic, ...existingPets];
+        const allExistingPets = [...existingFromStatic, ...existingPets as typeof existingFromStatic];
         const suggestions = await generatePetSuggestions(allExistingPets, count || 3);
 
         // Save suggestions to database
