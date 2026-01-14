@@ -189,57 +189,67 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           </p>
 
           {/* Horizontal layout for larger screens */}
-          <div className="hidden md:flex items-center justify-between">
-            {child.currentStoryArc.chapters.map((chapter, index) => {
-              const isCompleted = index < currentChapter;
-              const isCurrent = index === currentChapter;
+          <div className="hidden md:block">
+            <div className="flex items-start justify-between">
+              {child.currentStoryArc.chapters.map((chapter, index) => {
+                const isCompleted = index < currentChapter;
+                const isCurrent = index === currentChapter;
 
-              return (
-                <div key={index} className="flex items-center flex-1">
-                  {/* Circle with tooltip */}
-                  <div className="relative flex flex-col items-center group">
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: 0.3 + index * 0.05 }}
-                      className={`w-10 h-10 rounded-full flex items-center justify-center cursor-default ${
-                        isCompleted
-                          ? 'bg-accent text-white'
-                          : isCurrent
-                          ? 'bg-primary text-white'
-                          : 'bg-gray-200 text-gray-400'
-                      }`}
-                    >
-                      {isCompleted ? (
-                        <Check className="w-5 h-5" />
-                      ) : (
-                        <span className="text-sm font-bold">{index + 1}</span>
-                      )}
-                    </motion.div>
-                    {isCurrent && (
+                return (
+                  <div key={index} className="flex items-start flex-1">
+                    {/* Circle and label */}
+                    <div className="flex flex-col items-center">
                       <motion.div
-                        animate={{ scale: [1, 1.3, 1] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="absolute inset-0 rounded-full bg-primary/30"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.3 + index * 0.05 }}
+                        className={`relative w-10 h-10 rounded-full flex items-center justify-center ${
+                          isCompleted
+                            ? 'bg-accent text-white'
+                            : isCurrent
+                            ? 'bg-primary text-white'
+                            : 'bg-gray-200 text-gray-400'
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <Check className="w-5 h-5" />
+                        ) : (
+                          <span className="text-sm font-bold">{index + 1}</span>
+                        )}
+                        {isCurrent && (
+                          <motion.div
+                            animate={{ scale: [1, 1.3, 1] }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                            className="absolute inset-0 rounded-full bg-primary/30"
+                          />
+                        )}
+                      </motion.div>
+                      {/* Chapter name */}
+                      <p
+                        className={`mt-2 text-xs text-center max-w-[80px] leading-tight ${
+                          isCompleted
+                            ? 'text-accent'
+                            : isCurrent
+                            ? 'text-primary font-medium'
+                            : 'text-text/40'
+                        }`}
+                      >
+                        {chapter.title}
+                      </p>
+                    </div>
+
+                    {/* Connector line */}
+                    {index < totalChapters - 1 && (
+                      <div
+                        className={`flex-1 h-1 mx-2 mt-5 rounded ${
+                          index < currentChapter ? 'bg-accent' : 'bg-gray-200'
+                        }`}
                       />
                     )}
-                    {/* Chapter name tooltip */}
-                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity bg-text text-white text-xs px-2 py-1 rounded">
-                      {chapter.title}
-                    </div>
                   </div>
-
-                  {/* Connector line */}
-                  {index < totalChapters - 1 && (
-                    <div
-                      className={`flex-1 h-1 mx-2 rounded ${
-                        index < currentChapter ? 'bg-accent' : 'bg-gray-200'
-                      }`}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
           {/* Vertical layout for mobile */}
