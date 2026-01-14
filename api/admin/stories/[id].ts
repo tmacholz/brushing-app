@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PUT - Update segment
     if (req.method === 'PUT') {
       const { narrationSequence } = req.body;
-      console.log('Updating segment:', segmentId, { narrationSequence: narrationSequence?.length ?? 0, 'items' });
+      console.log('Updating segment:', segmentId, 'narrationSequence items:', narrationSequence?.length ?? 0);
       try {
         const [segment] = await sql`
           UPDATE segments SET
