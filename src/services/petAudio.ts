@@ -12,7 +12,7 @@ export async function fetchPetAudioUrls(): Promise<Record<string, string>> {
   }
 
   try {
-    const res = await fetch('/api/admin/pet-audio');
+    const res = await fetch('/api/admin/pets?audio=true');
     if (res.ok) {
       const data = await res.json();
       petAudioCache = data.petAudio || {};

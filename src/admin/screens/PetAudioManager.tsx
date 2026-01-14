@@ -31,7 +31,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
   useEffect(() => {
     const fetchPetAudio = async () => {
       try {
-        const res = await fetch('/api/admin/pet-audio');
+        const res = await fetch('/api/admin/pets?audio=true');
         if (res.ok) {
           const data = await res.json();
           const audioMap: Record<string, PetAudioData> = {};
@@ -91,10 +91,11 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
       const data = await res.json();
 
       // Save to database
-      await fetch('/api/admin/pet-audio', {
+      await fetch('/api/admin/pets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'saveAudio',
           petId,
           audioUrl: data.audioUrl,
         }),

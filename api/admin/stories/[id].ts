@@ -1,14 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../lib/db.js';
 
-// Handles story CRUD and publish operations
+// Handles story CRUD, publish operations, and segment updates
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
-  const { id } = req.query;
+  const { id, segment: segmentId } = req.query;
 
   if (typeof id !== 'string') {
     return res.status(400).json({ error: 'Invalid story ID' });
   }
+
+  // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
+  if (typeof segmentId === 'string') {
+    // PUT - Update segment
+    if (req.method === 'PUT') {
+      const { baseAudioUrl, splicePoints } = req.body;
+      try {
+        const [segment] = await sql`
+          UPDATE segments SET
+            base_audio_url = COALESCE(${baseAudioUrl}, base_audio_url),
+            splice_points = COALESCE(${JSON.stringify(splicePoints)}, splice_points)
+          WHERE id = ${segmentId} RETURNING *
+        `;
+        if (!segment) return res.status(404).json({ error: 'Segment not found' });
+        return res.status(200).json({ segment });
+      } catch (error) {
+        console.error('Error updating segment:', error);
+        return res.status(500).json({ error: 'Failed to update segment' });
+      }
+    }
+
+    // GET - Get single segment
+    if (req.method === 'GET') {
+      try {
+        const [segment] = await sql`SELECT * FROM segments WHERE id = ${segmentId}`;
+        if (!segment) return res.status(404).json({ error: 'Segment not found' });
+        return res.status(200).json({ segment });
+      } catch (error) {
+        console.error('Error fetching segment:', error);
+        return res.status(500).json({ error: 'Failed to fetch segment' });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed for segment' });
+  }
+
+  // ===== STORY OPERATIONS =====
 
   // GET - Get full story with chapters and segments
   if (req.method === 'GET') {

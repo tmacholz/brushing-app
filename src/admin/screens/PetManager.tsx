@@ -561,7 +561,7 @@ function EditPetModal({
     setError(null);
 
     try {
-      const res = await fetch('/api/generate-avatar', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

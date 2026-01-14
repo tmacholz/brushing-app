@@ -105,7 +105,7 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
       const data = await res.json();
 
       // Save to database
-      await fetch(`/api/admin/segments/${segment.id}`, {
+      await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseAudioUrl: data.audioUrl }),
@@ -166,7 +166,7 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
 
   const saveSplicePoints = async (splicePoints: SplicePoint[]) => {
     try {
-      await fetch(`/api/admin/segments/${segment.id}`, {
+      await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ splicePoints }),

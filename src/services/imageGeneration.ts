@@ -73,12 +73,13 @@ export async function generateImageForSegment(
   }
 
   try {
-    const response = await fetch('/api/generate-image', {
+    const response = await fetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
+        type: 'image',
         prompt: segment.imagePrompt,
         segmentId: segment.id,
         referenceImageUrl,
