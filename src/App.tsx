@@ -4,6 +4,7 @@ import { Lock, Check } from 'lucide-react';
 import { characters } from './data/characters';
 import { ChildProvider, useChild } from './context/ChildContext';
 import { AudioProvider, useAudio } from './context/AudioContext';
+import { PetsProvider, usePets } from './context/PetsContext';
 import { HomeScreen } from './screens/HomeScreen';
 import { BrushingScreen } from './screens/BrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
@@ -12,7 +13,6 @@ import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
 import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
-import { pets } from './data/pets';
 import { worlds } from './data/worlds';
 import { generateChildNameAudio } from './services/nameAudioGeneration';
 import type { ScreenName, Pet, StoryWorld } from './types';
@@ -160,10 +160,11 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { createChild, child, updateChild } = useChild();
   const { playSound } = useAudio();
+  const { pets, getStarterPets } = usePets();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
   const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
-  const [selectedPetId, setSelectedPetId] = useState(pets.find(p => p.isStarter)?.id ?? '');
+  const [selectedPetId, setSelectedPetId] = useState(getStarterPets()[0]?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
   const [isCreatingProfile, setIsCreatingProfile] = useState(false);
@@ -620,9 +621,11 @@ function AppContent() {
 function App() {
   return (
     <AudioProvider>
-      <ChildProvider>
-        <AppContent />
-      </ChildProvider>
+      <PetsProvider>
+        <ChildProvider>
+          <AppContent />
+        </ChildProvider>
+      </PetsProvider>
     </AudioProvider>
   );
 }

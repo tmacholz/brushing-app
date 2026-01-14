@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Check, AlertTriangle, BookOpen } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
+import { usePets } from '../context/PetsContext';
 import { worlds } from '../data/worlds';
 import { getStoriesForWorld } from '../data/starterStories';
 import { createStoryArc } from '../utils/storyGenerator';
@@ -190,6 +191,7 @@ function ConfirmModal({ isOpen, storyTitle, onConfirm, onCancel }: ConfirmModalP
 export function StorySelectScreen({ worldId, onBack, onStartStory }: StorySelectScreenProps) {
   const { child, updateChild, setCurrentStoryArc } = useChild();
   const { playSound } = useAudio();
+  const { getPetById } = usePets();
   const [confirmStory, setConfirmStory] = useState<StoryTemplate | null>(null);
 
   if (!child) return null;
@@ -197,6 +199,7 @@ export function StorySelectScreen({ worldId, onBack, onStartStory }: StorySelect
   const world = worlds.find((w) => w.id === worldId);
   const stories = getStoriesForWorld(worldId);
   const hasStoryInProgress = child.currentStoryArc !== null;
+  const activePet = getPetById(child.activePetId);
 
   const handleSelectStory = (story: StoryTemplate) => {
     playSound('tap');
@@ -224,7 +227,12 @@ export function StorySelectScreen({ worldId, onBack, onStartStory }: StorySelect
     updateChild({ activeWorldId: worldId });
 
     // Create new story arc
-    const newStoryArc = createStoryArc(story.id, child.name, child.activePetId);
+    const newStoryArc = createStoryArc(
+      story.id,
+      child.name,
+      child.activePetId,
+      activePet?.displayName ?? 'Friend'
+    );
 
     if (newStoryArc) {
       setCurrentStoryArc(newStoryArc);

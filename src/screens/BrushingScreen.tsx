@@ -7,10 +7,10 @@ import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { useAudioSplicing } from '../hooks/useAudioSplicing';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
+import { usePets } from '../context/PetsContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { createStoryArcForWorld } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
-import { getPetById } from '../data/pets';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 import { getPetAudioUrl } from '../services/petAudio';
 
@@ -29,6 +29,7 @@ interface BrushingScreenProps {
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
   const { playSound } = useAudio();
+  const { getPetById } = usePets();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
@@ -69,16 +70,18 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     // Create new story if needed
     if (!child.currentStoryArc) {
+      const activePet = getPetById(child.activePetId);
       const storyArc = createStoryArcForWorld(
         child.activeWorldId,
         child.name,
-        child.activePetId
+        child.activePetId,
+        activePet?.displayName ?? 'Friend'
       );
       if (storyArc) {
         setCurrentStoryArc(storyArc);
       }
     }
-  }, [child, setCurrentStoryArc]);
+  }, [child, setCurrentStoryArc, getPetById]);
 
   // Derive chapter directly from context so it updates when images are added
   const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;

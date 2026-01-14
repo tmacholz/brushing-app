@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Flame, Star, Sparkles, ChevronDown, Check } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
-import { getPetById } from '../data/pets';
+import { usePets } from '../context/PetsContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import type { ScreenName } from '../types';
 
@@ -37,6 +37,7 @@ const getPetEmoji = (petId: string): string => {
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const { child, hasMultipleChildren } = useChild();
   const { playSound } = useAudio();
+  const { getPetById } = usePets();
 
   if (!child) return null;
 

@@ -1,6 +1,5 @@
 import type { StoryArc, StoryChapter, StorySegment, StoryTemplate } from '../types';
 import { getStoryById, getStoriesForWorld } from '../data/starterStories';
-import { getPetById } from '../data/pets';
 
 const CHILD_PLACEHOLDER = '[CHILD]';
 const PET_PLACEHOLDER = '[PET]';
@@ -48,11 +47,9 @@ const personalizeChapter = (
 export const personalizeStory = (
   storyTemplate: StoryTemplate,
   childName: string,
-  petId: string
+  petId: string,
+  petName: string = 'Friend'
 ): StoryArc => {
-  const pet = getPetById(petId);
-  const petName = pet?.displayName ?? 'Friend';
-
   return {
     id: generateUniqueId(),
     storyTemplateId: storyTemplate.id,
@@ -74,12 +71,13 @@ export const personalizeStory = (
 export const createStoryArc = (
   storyId: string,
   childName: string,
-  petId: string
+  petId: string,
+  petName: string = 'Friend'
 ): StoryArc | null => {
   const template = getStoryById(storyId);
   if (!template) return null;
 
-  return personalizeStory(template, childName, petId);
+  return personalizeStory(template, childName, petId, petName);
 };
 
 // Legacy function for backwards compatibility - creates first story from world
@@ -87,13 +85,14 @@ export const createStoryArc = (
 export const createStoryArcForWorld = (
   worldId: string,
   childName: string,
-  petId: string
+  petId: string,
+  petName: string = 'Friend'
 ): StoryArc | null => {
   const stories = getStoriesForWorld(worldId);
   if (stories.length === 0) return null;
 
   // Default to first story in the world
-  return personalizeStory(stories[0], childName, petId);
+  return personalizeStory(stories[0], childName, petId, petName);
 };
 
 export const generateUniqueId = (): string => {

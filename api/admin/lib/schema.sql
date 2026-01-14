@@ -76,11 +76,41 @@ CREATE TABLE IF NOT EXISTS story_pitches (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Pets table (managed content for unlockable companions)
+CREATE TABLE IF NOT EXISTS pets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL UNIQUE,
+  display_name VARCHAR(100) NOT NULL,
+  description TEXT NOT NULL,
+  story_personality TEXT NOT NULL,
+  image_url TEXT,
+  avatar_url TEXT,
+  unlock_cost INTEGER DEFAULT 0,
+  is_starter BOOLEAN DEFAULT false,
+  is_published BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Pet suggestions (AI-generated pet ideas for approval)
+CREATE TABLE IF NOT EXISTS pet_suggestions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(100) NOT NULL,
+  display_name VARCHAR(100) NOT NULL,
+  description TEXT NOT NULL,
+  story_personality TEXT NOT NULL,
+  unlock_cost INTEGER DEFAULT 0,
+  is_starter BOOLEAN DEFAULT false,
+  is_approved BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_stories_world_id ON stories(world_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_story_id ON chapters(story_id);
 CREATE INDEX IF NOT EXISTS idx_segments_chapter_id ON segments(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_story_pitches_world_id ON story_pitches(world_id);
+CREATE INDEX IF NOT EXISTS idx_pet_suggestions_is_approved ON pet_suggestions(is_approved);
 
 -- Update trigger for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -100,5 +130,11 @@ CREATE TRIGGER update_worlds_updated_at
 DROP TRIGGER IF EXISTS update_stories_updated_at ON stories;
 CREATE TRIGGER update_stories_updated_at
     BEFORE UPDATE ON stories
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_pets_updated_at ON pets;
+CREATE TRIGGER update_pets_updated_at
+    BEFORE UPDATE ON pets
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();

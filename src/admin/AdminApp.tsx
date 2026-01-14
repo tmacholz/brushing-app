@@ -5,8 +5,9 @@ import { AdminDashboard } from './screens/AdminDashboard';
 import { WorldEditor } from './screens/WorldEditor';
 import { StoryEditor } from './screens/StoryEditor';
 import { PetAudioManager } from './screens/PetAudioManager';
+import { PetManager } from './screens/PetManager';
 
-type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio';
+type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'pet-manager';
 
 interface AdminState {
   screen: AdminScreen;
@@ -130,9 +131,21 @@ export function AdminApp() {
           >
             <AdminDashboard
               onSelectWorld={(worldId) => navigateTo('world-editor', { worldId })}
+              onManagePets={() => navigateTo('pet-manager')}
               onPetAudio={() => navigateTo('pet-audio')}
               onLogout={handleLogout}
             />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'pet-manager' && (
+          <motion.div
+            key="pet-manager"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <PetManager onBack={() => navigateTo('dashboard')} />
           </motion.div>
         )}
 
