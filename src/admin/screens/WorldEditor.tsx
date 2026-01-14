@@ -11,6 +11,8 @@ import {
   Clock,
   Loader2,
   Lightbulb,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface World {
@@ -61,7 +63,6 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
   const [theme, setTheme] = useState('');
   const [unlockCost, setUnlockCost] = useState(0);
   const [isStarter, setIsStarter] = useState(false);
-  const [isPublished, setIsPublished] = useState(false);
 
   // Story creation state
   const [storyIdea, setStoryIdea] = useState('');
@@ -83,7 +84,6 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       setTheme(data.world.theme || '');
       setUnlockCost(data.world.unlock_cost || 0);
       setIsStarter(data.world.is_starter || false);
-      setIsPublished(data.world.is_published || false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load world');
     } finally {
@@ -109,7 +109,6 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
           theme: theme || null,
           unlockCost,
           isStarter,
-          isPublished,
         }),
       });
 
@@ -134,6 +133,22 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       onBack();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete world');
+    }
+  };
+
+  const handlePublish = async (publish: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublished: publish }),
+      });
+
+      if (!res.ok) throw new Error('Failed to update publish status');
+      const data = await res.json();
+      setWorld(data.world);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update publish status');
     }
   };
 
@@ -234,32 +249,29 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
           </button>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsPublished(!isPublished)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                isPublished
-                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                  : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              {isPublished ? (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  Published
-                </>
-              ) : (
-                <>
-                  <Clock className="w-4 h-4" />
-                  Draft
-                </>
-              )}
-            </button>
-            <button
               onClick={handleDelete}
               className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
             >
               <Trash2 className="w-4 h-4" />
               Delete
             </button>
+            {world.is_published ? (
+              <button
+                onClick={() => handlePublish(false)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                <EyeOff className="w-4 h-4" />
+                Unpublish
+              </button>
+            ) : (
+              <button
+                onClick={() => handlePublish(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 text-white rounded-lg transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Publish
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={saving}
@@ -278,6 +290,24 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
             {error}
           </div>
         )}
+
+        {/* Status Badge */}
+        <div className="flex items-center gap-3 mb-6">
+          {world.is_published ? (
+            <span className="flex items-center gap-2 px-3 py-1.5 bg-green-500/20 text-green-400 rounded-full">
+              <CheckCircle className="w-4 h-4" />
+              Published
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 px-3 py-1.5 bg-slate-600/50 text-slate-400 rounded-full">
+              <Clock className="w-4 h-4" />
+              Draft
+            </span>
+          )}
+          <span className="text-slate-500 text-sm">
+            {stories.length} {stories.length === 1 ? 'story' : 'stories'}
+          </span>
+        </div>
 
         {/* World Details */}
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
