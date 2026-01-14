@@ -17,6 +17,7 @@ export interface Child {
   lastBrushDate: string | null;
   createdAt: string;
   characterId: string; // Selected character ('boy' or 'girl')
+  nameAudioUrl: string | null; // Pre-generated TTS of child's name for audio splicing
 }
 
 export interface Pet {
@@ -29,6 +30,7 @@ export interface Pet {
   unlockCost: number;
   isStarter: boolean;
   avatarUrl: string | null; // Illustrated pet avatar for story consistency
+  nameAudioUrl: string | null; // Pre-generated TTS of pet's name for audio splicing
 }
 
 export interface ToothBrush {
@@ -91,6 +93,12 @@ export interface StoryChapter {
   readAt: string | null;
 }
 
+// Splice point for inserting name audio into base narration
+export interface AudioSplicePoint {
+  placeholder: 'CHILD' | 'PET';
+  timestampMs: number; // Milliseconds into the base audio where name should be inserted
+}
+
 export interface StorySegment {
   id: string;
   text: string;
@@ -99,6 +107,8 @@ export interface StorySegment {
   brushingPrompt: string | null;
   imageUrl: string | null;
   imagePrompt: string | null; // Prompt used to generate the image
+  baseAudioUrl: string | null; // Pre-recorded narration (without personalized names)
+  splicePoints: AudioSplicePoint[]; // Where to insert child/pet names
 }
 
 export type BrushingZone =

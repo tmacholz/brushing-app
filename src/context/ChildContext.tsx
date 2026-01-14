@@ -102,6 +102,7 @@ const createDefaultChild = (
     lastBrushDate: null,
     createdAt: new Date().toISOString(),
     characterId,
+    nameAudioUrl: null, // Generated on profile creation via TTS
   };
 };
 

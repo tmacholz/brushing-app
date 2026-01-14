@@ -11,6 +11,7 @@ export const pets: Pet[] = [
     unlockCost: 0,
     isStarter: true,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/sparkle.png',
+    nameAudioUrl: null, // Will be pre-generated via admin
   },
   {
     id: 'bubbles',
@@ -22,6 +23,7 @@ export const pets: Pet[] = [
     unlockCost: 0,
     isStarter: true,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/bubbles.png',
+    nameAudioUrl: null,
   },
   {
     id: 'cosmo',
@@ -33,6 +35,7 @@ export const pets: Pet[] = [
     unlockCost: 75,
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/cosmo.png',
+    nameAudioUrl: null,
   },
   {
     id: 'fern',
@@ -44,6 +47,7 @@ export const pets: Pet[] = [
     unlockCost: 100,
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/fern.png',
+    nameAudioUrl: null,
   },
   {
     id: 'captain-whiskers',
@@ -55,6 +59,7 @@ export const pets: Pet[] = [
     unlockCost: 150,
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/captain-whiskers.png',
+    nameAudioUrl: null,
   },
 ];
 

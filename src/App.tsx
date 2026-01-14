@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, Check } from 'lucide-react';
 import { characters } from './data/characters';
@@ -14,6 +14,7 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
 import { pets } from './data/pets';
 import { worlds } from './data/worlds';
+import { generateChildNameAudio } from './services/nameAudioGeneration';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
 const getPetEmoji = (petId: string): string => {
@@ -157,7 +158,7 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 }
 
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
-  const { createChild } = useChild();
+  const { createChild, child, updateChild } = useChild();
   const { playSound } = useAudio();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
@@ -165,6 +166,19 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const [selectedPetId, setSelectedPetId] = useState(pets.find(p => p.isStarter)?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
+  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+
+  // Generate name audio after child is created
+  useEffect(() => {
+    if (child && !child.nameAudioUrl && isCreatingProfile) {
+      // Generate audio in background
+      generateChildNameAudio(child.id, child.name).then((result) => {
+        if (result) {
+          updateChild({ nameAudioUrl: result.audioUrl });
+        }
+      });
+    }
+  }, [child, isCreatingProfile, updateChild]);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,6 +205,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 
   const handleComplete = () => {
     playSound('success');
+    setIsCreatingProfile(true);
     createChild(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
     onComplete();
   };
