@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, Mic } from 'lucide-react';
+import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2 } from 'lucide-react';
 
 interface World {
   id: string;
@@ -16,11 +16,10 @@ interface World {
 interface AdminDashboardProps {
   onSelectWorld: (worldId: string) => void;
   onPetAudio: () => void;
-  onStarterAudio: () => void;
   onLogout: () => void;
 }
 
-export function AdminDashboard({ onSelectWorld, onPetAudio, onStarterAudio, onLogout }: AdminDashboardProps) {
+export function AdminDashboard({ onSelectWorld, onPetAudio, onLogout }: AdminDashboardProps) {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,13 +118,6 @@ export function AdminDashboard({ onSelectWorld, onPetAudio, onStarterAudio, onLo
             >
               <Volume2 className="w-5 h-5" />
               <span>Pet Name Audio</span>
-            </button>
-            <button
-              onClick={onStarterAudio}
-              className="flex items-center gap-2 px-4 py-3 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-xl transition-colors"
-            >
-              <Mic className="w-5 h-5" />
-              <span>Starter Story Audio</span>
             </button>
           </div>
         </div>
