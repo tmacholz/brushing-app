@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Check, Plus, Trash2, X, Lock } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
-import { pets } from '../data/pets';
+import { usePets } from '../context/PetsContext';
 import { worlds } from '../data/worlds';
 import { characters } from '../data/characters';
 import type { Child, Pet, StoryWorld } from '../types';
@@ -292,10 +292,11 @@ interface AddProfileFlowProps {
 
 function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
   const { playSound } = useAudio();
+  const { pets, getStarterPets } = usePets();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
   const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
-  const [selectedPetId, setSelectedPetId] = useState(pets.find(p => p.isStarter)?.id ?? '');
+  const [selectedPetId, setSelectedPetId] = useState(getStarterPets()[0]?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
 

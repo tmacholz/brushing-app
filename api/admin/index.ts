@@ -12,6 +12,14 @@ const worlds = [
   { name: 'pirate-cove', displayName: 'Pirate Cove', description: 'Treasure maps and sea adventures', theme: 'pirates', unlockCost: 150, isStarter: false },
 ];
 
+const staticPets = [
+  { name: 'sparkle', displayName: 'Sparkle', description: 'A cheerful star who fell from the sky', storyPersonality: 'brave and optimistic', imageUrl: '/pets/sparkle.png', avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/sparkle.png', unlockCost: 0, isStarter: true },
+  { name: 'bubbles', displayName: 'Bubbles', description: 'A giggly fish who learned to float in air', storyPersonality: 'silly and curious', imageUrl: '/pets/bubbles.png', avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/bubbles.png', unlockCost: 0, isStarter: true },
+  { name: 'cosmo', displayName: 'Cosmo', description: 'A mini robot from the future', storyPersonality: 'smart and helpful', imageUrl: '/pets/cosmo.png', avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/cosmo.png', unlockCost: 75, isStarter: false },
+  { name: 'fern', displayName: 'Fern', description: 'A tiny forest dragon', storyPersonality: 'shy but fierce', imageUrl: '/pets/fern.png', avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/fern.png', unlockCost: 100, isStarter: false },
+  { name: 'captain-whiskers', displayName: 'Captain Whiskers', description: 'A cat who dreams of sailing', storyPersonality: 'dramatic and bold', imageUrl: '/pets/captain-whiskers.png', avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/captain-whiskers.png', unlockCost: 150, isStarter: false },
+];
+
 // Complete "Glowing Flowers" story
 const glowingFlowersStory = {
   title: 'The Mystery of the Glowing Flowers',
@@ -113,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === 'migrate') {
     const sql = getDb();
     try {
-      const results = { worlds: 0, stories: 0, chapters: 0, segments: 0 };
+      const results = { worlds: 0, stories: 0, chapters: 0, segments: 0, pets: 0 };
 
       // Migrate worlds
       for (const world of worlds) {
@@ -126,6 +134,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           results.worlds++;
         } catch (err) {
           console.log(`World ${world.name} error:`, err);
+        }
+      }
+
+      // Migrate pets
+      for (const pet of staticPets) {
+        try {
+          await sql`
+            INSERT INTO pets (name, display_name, description, story_personality, image_url, avatar_url, unlock_cost, is_starter, is_published)
+            VALUES (${pet.name}, ${pet.displayName}, ${pet.description}, ${pet.storyPersonality}, ${pet.imageUrl}, ${pet.avatarUrl}, ${pet.unlockCost}, ${pet.isStarter}, true)
+            ON CONFLICT (name) DO NOTHING
+          `;
+          results.pets++;
+        } catch (err) {
+          console.log(`Pet ${pet.name} error:`, err);
         }
       }
 

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { Check, Lock, ArrowLeft } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
-import { pets } from '../data/pets';
+import { usePets } from '../context/PetsContext';
 import type { Pet } from '../types';
 
 interface PetSelectScreenProps {
@@ -112,6 +112,7 @@ function PetCard({ pet, isUnlocked, isActive, onSelect }: PetCardProps) {
 export function PetSelectScreen({ onBack }: PetSelectScreenProps) {
   const { child, updateChild } = useChild();
   const { playSound } = useAudio();
+  const { pets } = usePets();
 
   if (!child) return null;
 
@@ -130,10 +131,10 @@ export function PetSelectScreen({ onBack }: PetSelectScreenProps) {
   };
 
   const unlockedPets = pets.filter((pet) =>
-    child.unlockedPets.includes(pet.id)
+    child.unlockedPets.includes(pet.id) || child.unlockedPets.includes(pet.name)
   );
   const lockedPets = pets.filter(
-    (pet) => !child.unlockedPets.includes(pet.id)
+    (pet) => !child.unlockedPets.includes(pet.id) && !child.unlockedPets.includes(pet.name)
   );
 
   return (

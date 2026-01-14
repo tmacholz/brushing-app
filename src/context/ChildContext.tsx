@@ -1,7 +1,7 @@
 import { createContext, useContext, useCallback, useMemo, type ReactNode } from 'react';
 import type { Child, StoryArc } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { getStarterPets, getPetById } from '../data/pets';
+import { usePets } from './PetsContext';
 import { getStarterBrushes, getBrushById } from '../data/brushes';
 import { getStarterWorlds, getWorldById } from '../data/worlds';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
@@ -76,10 +76,10 @@ const createDefaultChild = (
   name: string,
   age: number,
   characterId: string,
+  starterPetIds: string[],
   petId?: string,
   worldId?: string
 ): Child => {
-  const starterPets = getStarterPets();
   const starterBrushes = getStarterBrushes();
   const starterWorlds = getStarterWorlds();
 
@@ -87,14 +87,14 @@ const createDefaultChild = (
     id: generateUniqueId(),
     name,
     age,
-    activePetId: petId ?? starterPets[0]?.id ?? '',
+    activePetId: petId ?? starterPetIds[0] ?? '',
     activeBrushId: starterBrushes[0]?.id ?? '',
     activeWorldId: worldId ?? starterWorlds[0]?.id ?? '',
     points: 0,
     totalBrushSessions: 0,
     currentStreak: 0,
     longestStreak: 0,
-    unlockedPets: starterPets.map((p) => p.id),
+    unlockedPets: starterPetIds,
     unlockedBrushes: starterBrushes.map((b) => b.id),
     unlockedWorlds: starterWorlds.map((w) => w.id),
     currentStoryArc: null,
@@ -132,6 +132,7 @@ const getInitialData = (): AppData => {
 };
 
 export function ChildProvider({ children }: { children: ReactNode }) {
+  const { getStarterPets, getPetById } = usePets();
   const [appData, setAppData, removeAppData] = useLocalStorage<AppData>(
     STORAGE_KEY,
     getInitialData(),
@@ -151,25 +152,27 @@ export function ChildProvider({ children }: { children: ReactNode }) {
   // Create first child (used during onboarding)
   const createChild = useCallback(
     (name: string, age: number, characterId: string, petId?: string, worldId?: string) => {
-      const newChild = createDefaultChild(name, age, characterId, petId, worldId);
+      const starterPetIds = getStarterPets().map((p) => p.id);
+      const newChild = createDefaultChild(name, age, characterId, starterPetIds, petId, worldId);
       setAppData((prev) => ({
         children: [...prev.children, newChild],
         activeChildId: newChild.id,
       }));
     },
-    [setAppData]
+    [setAppData, getStarterPets]
   );
 
   // Add additional child
   const addChild = useCallback(
     (name: string, age: number, characterId: string, petId?: string, worldId?: string) => {
-      const newChild = createDefaultChild(name, age, characterId, petId, worldId);
+      const starterPetIds = getStarterPets().map((p) => p.id);
+      const newChild = createDefaultChild(name, age, characterId, starterPetIds, petId, worldId);
       setAppData((prev) => ({
         children: [...prev.children, newChild],
         activeChildId: newChild.id,
       }));
     },
-    [setAppData]
+    [setAppData, getStarterPets]
   );
 
   // Switch active child
@@ -387,7 +390,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
       const pet = getPetById(petId);
       return pet ? unlockItem(petId, pet.unlockCost, 'unlockedPets') : false;
     },
-    [unlockItem]
+    [unlockItem, getPetById]
   );
 
   const unlockBrush = useCallback(
