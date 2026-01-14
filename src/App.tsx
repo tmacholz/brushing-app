@@ -9,6 +9,7 @@ import { BrushingScreen } from './screens/BrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
 import { ProfileSelectScreen } from './screens/ProfileSelectScreen';
 import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
+import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
 import { pets } from './data/pets';
@@ -470,6 +471,7 @@ function AppContent() {
   const { child, isNewUser } = useChild();
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
   const [showOnboarding, setShowOnboarding] = useState(isNewUser);
+  const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
 
   if (showOnboarding || !child) {
     return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
@@ -556,7 +558,28 @@ function AppContent() {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
           >
-            <StoryWorldSelectScreen onBack={() => setCurrentScreen('home')} />
+            <StoryWorldSelectScreen
+              onBack={() => setCurrentScreen('home')}
+              onSelectWorld={(worldId) => {
+                setSelectedWorldId(worldId);
+                setCurrentScreen('story-select');
+              }}
+            />
+          </motion.div>
+        )}
+
+        {currentScreen === 'story-select' && selectedWorldId && (
+          <motion.div
+            key="story-select"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <StorySelectScreen
+              worldId={selectedWorldId}
+              onBack={() => setCurrentScreen('story-world-select')}
+              onStartStory={() => setCurrentScreen('brushing')}
+            />
           </motion.div>
         )}
 

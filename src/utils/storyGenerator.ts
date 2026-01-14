@@ -1,5 +1,5 @@
-import type { StoryArc, StoryChapter, StorySegment } from '../types';
-import { starterStories } from '../data/starterStories';
+import type { StoryArc, StoryChapter, StorySegment, StoryTemplate } from '../types';
+import { getStoryById, getStoriesForWorld } from '../data/starterStories';
 import { getPetById } from '../data/pets';
 
 const CHILD_PLACEHOLDER = '[CHILD]';
@@ -46,7 +46,7 @@ const personalizeChapter = (
 });
 
 export const personalizeStory = (
-  storyTemplate: Omit<StoryArc, 'childName' | 'petId' | 'createdAt'>,
+  storyTemplate: StoryTemplate,
   childName: string,
   petId: string
 ): StoryArc => {
@@ -54,26 +54,46 @@ export const personalizeStory = (
   const petName = pet?.displayName ?? 'Friend';
 
   return {
-    ...storyTemplate,
+    id: generateUniqueId(),
+    storyTemplateId: storyTemplate.id,
+    worldId: storyTemplate.worldId,
     childName,
     petId,
     createdAt: new Date().toISOString(),
     title: replaceTokens(storyTemplate.title, childName, petName),
+    totalChapters: storyTemplate.totalChapters,
+    currentChapterIndex: 0,
+    isComplete: false,
     chapters: storyTemplate.chapters.map((chapter) =>
       personalizeChapter(chapter, childName, petName)
     ),
   };
 };
 
+// Create a story arc from a specific story template
+export const createStoryArc = (
+  storyId: string,
+  childName: string,
+  petId: string
+): StoryArc | null => {
+  const template = getStoryById(storyId);
+  if (!template) return null;
+
+  return personalizeStory(template, childName, petId);
+};
+
+// Legacy function for backwards compatibility - creates first story from world
+// TODO: Remove after migration to story selection
 export const createStoryArcForWorld = (
   worldId: string,
   childName: string,
   petId: string
 ): StoryArc | null => {
-  const template = starterStories.find((story) => story.worldId === worldId);
-  if (!template) return null;
+  const stories = getStoriesForWorld(worldId);
+  if (stories.length === 0) return null;
 
-  return personalizeStory(template, childName, petId);
+  // Default to first story in the world
+  return personalizeStory(stories[0], childName, petId);
 };
 
 export const generateUniqueId = (): string => {

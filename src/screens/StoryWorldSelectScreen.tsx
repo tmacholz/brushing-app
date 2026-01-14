@@ -1,14 +1,14 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Lock, Check, AlertTriangle } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Lock } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { worlds } from '../data/worlds';
-import { createStoryArcForWorld } from '../utils/storyGenerator';
+import { getStoriesForWorld } from '../data/starterStories';
 import type { StoryWorld } from '../types';
 
 interface StoryWorldSelectScreenProps {
   onBack: () => void;
+  onSelectWorld: (worldId: string) => void;
 }
 
 const getWorldEmoji = (worldId: string): string => {
@@ -28,208 +28,163 @@ const getWorldEmoji = (worldId: string): string => {
   }
 };
 
-const getWorldGradient = (worldId: string): string => {
+const getWorldColors = (worldId: string): { gradient: string; glow: string; bg: string } => {
   switch (worldId) {
     case 'magical-forest':
-      return 'from-emerald-400 to-emerald-600';
+      return {
+        gradient: 'from-emerald-400 to-emerald-600',
+        glow: 'shadow-emerald-400/50',
+        bg: 'bg-emerald-500',
+      };
     case 'space-station':
-      return 'from-indigo-500 to-purple-700';
+      return {
+        gradient: 'from-indigo-400 to-purple-600',
+        glow: 'shadow-purple-400/50',
+        bg: 'bg-indigo-500',
+      };
     case 'underwater-kingdom':
-      return 'from-cyan-400 to-blue-600';
+      return {
+        gradient: 'from-cyan-400 to-blue-600',
+        glow: 'shadow-cyan-400/50',
+        bg: 'bg-cyan-500',
+      };
     case 'dinosaur-valley':
-      return 'from-amber-400 to-orange-600';
+      return {
+        gradient: 'from-amber-400 to-orange-600',
+        glow: 'shadow-orange-400/50',
+        bg: 'bg-amber-500',
+      };
     case 'pirate-cove':
-      return 'from-yellow-500 to-amber-700';
+      return {
+        gradient: 'from-yellow-400 to-red-500',
+        glow: 'shadow-yellow-400/50',
+        bg: 'bg-yellow-500',
+      };
     default:
-      return 'from-gray-400 to-gray-600';
+      return {
+        gradient: 'from-gray-400 to-gray-600',
+        glow: 'shadow-gray-400/50',
+        bg: 'bg-gray-500',
+      };
   }
 };
 
-interface WorldCardProps {
+interface WorldPlanetProps {
   world: StoryWorld;
   isUnlocked: boolean;
-  isActive: boolean;
-  hasStoryInProgress: boolean;
+  hasActiveStory: boolean;
+  storiesCompleted: number;
+  totalStories: number;
+  index: number;
   onSelect: () => void;
 }
 
-function WorldCard({ world, isUnlocked, isActive, hasStoryInProgress, onSelect }: WorldCardProps) {
+function WorldPlanet({
+  world,
+  isUnlocked,
+  hasActiveStory,
+  storiesCompleted,
+  totalStories,
+  index,
+  onSelect,
+}: WorldPlanetProps) {
+  const colors = getWorldColors(world.id);
+
+  // Staggered floating animation
+  const floatDelay = index * 0.5;
+
   return (
     <motion.button
-      whileHover={isUnlocked ? { scale: 1.02 } : undefined}
-      whileTap={isUnlocked ? { scale: 0.98 } : undefined}
+      initial={{ opacity: 0, scale: 0.5 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: index * 0.1, type: 'spring', damping: 15 }}
+      whileHover={isUnlocked ? { scale: 1.1 } : undefined}
+      whileTap={isUnlocked ? { scale: 0.95 } : undefined}
       onClick={isUnlocked ? onSelect : undefined}
-      className={`relative w-full rounded-2xl overflow-hidden shadow-lg text-left transition-all ${
-        isActive
-          ? 'ring-4 ring-accent ring-offset-2'
-          : isUnlocked
-          ? 'cursor-pointer'
-          : 'opacity-60 cursor-not-allowed'
-      }`}
+      className={`flex flex-col items-center ${!isUnlocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
-      {/* Background gradient */}
-      <div className={`bg-gradient-to-br ${getWorldGradient(world.id)} p-5`}>
-        {/* Active indicator */}
-        {isActive && (
+      {/* Planet orb */}
+      <motion.div
+        animate={{
+          y: isUnlocked ? [0, -8, 0] : 0,
+        }}
+        transition={{
+          duration: 3,
+          repeat: Infinity,
+          delay: floatDelay,
+          ease: 'easeInOut',
+        }}
+        className="relative"
+      >
+        {/* Glow effect */}
+        <div
+          className={`absolute inset-0 rounded-full blur-xl ${colors.bg} opacity-40 scale-110`}
+        />
+
+        {/* Planet */}
+        <div
+          className={`relative w-28 h-28 rounded-full bg-gradient-to-br ${colors.gradient} shadow-xl ${colors.glow} shadow-2xl flex items-center justify-center overflow-hidden`}
+        >
+          {/* Shine effect */}
+          <div className="absolute top-2 left-4 w-6 h-6 bg-white/30 rounded-full blur-sm" />
+
+          {/* Emoji */}
+          <span className="text-4xl relative z-10">{getWorldEmoji(world.id)}</span>
+
+          {/* Lock overlay */}
+          {!isUnlocked && (
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+              <Lock className="w-8 h-8 text-white" />
+            </div>
+          )}
+        </div>
+
+        {/* Active story indicator */}
+        {hasActiveStory && (
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="absolute top-3 right-3 bg-accent text-white rounded-full p-1.5"
+            className="absolute -top-1 -right-1 w-6 h-6 bg-accent rounded-full flex items-center justify-center shadow-lg"
           >
-            <Check className="w-4 h-4" />
+            <span className="text-white text-xs font-bold">!</span>
           </motion.div>
         )}
 
-        {/* Lock indicator */}
-        {!isUnlocked && (
-          <div className="absolute top-3 right-3 bg-black/30 text-white rounded-full p-1.5">
-            <Lock className="w-4 h-4" />
+        {/* Completion indicator */}
+        {isUnlocked && storiesCompleted > 0 && (
+          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-white rounded-full px-2 py-0.5 shadow-md">
+            <span className="text-xs font-bold text-text">
+              {storiesCompleted}/{totalStories}
+            </span>
           </div>
         )}
+      </motion.div>
 
-        {/* Story in progress indicator */}
-        {isActive && hasStoryInProgress && (
-          <div className="absolute top-3 left-3 bg-white/20 text-white text-xs font-medium px-2 py-1 rounded-full">
-            Story in progress
-          </div>
-        )}
+      {/* World name */}
+      <p className={`mt-3 font-bold text-center ${isUnlocked ? 'text-text' : 'text-text/50'}`}>
+        {world.displayName}
+      </p>
 
-        <div className="flex items-center gap-4">
-          {/* World emoji */}
-          <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center text-4xl">
-            {getWorldEmoji(world.id)}
-          </div>
-
-          {/* World info */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-white text-xl">{world.displayName}</h3>
-            <p className="text-white/80 text-sm">{world.description}</p>
-            {!isUnlocked && (
-              <p className="text-white font-medium text-sm mt-1">
-                🔒 {world.unlockCost} points to unlock
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Unlock cost */}
+      {!isUnlocked && (
+        <p className="text-xs text-text/50 flex items-center gap-1">
+          <Lock className="w-3 h-3" />
+          {world.unlockCost} pts
+        </p>
+      )}
     </motion.button>
   );
 }
 
-interface ConfirmModalProps {
-  isOpen: boolean;
-  worldName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
-
-function ConfirmModal({ isOpen, worldName, onConfirm, onCancel }: ConfirmModalProps) {
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onCancel}
-            className="fixed inset-0 bg-black/50 z-40"
-          />
-
-          {/* Modal */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed inset-x-4 top-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 z-50 max-w-sm mx-auto shadow-xl"
-          >
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-amber-600" />
-              </div>
-              <h2 className="text-xl font-bold text-text">Start New Adventure?</h2>
-            </div>
-
-            <p className="text-text/70 mb-6">
-              You have a story in progress! Starting a new adventure in{' '}
-              <strong>{worldName}</strong> will abandon your current story.
-            </p>
-
-            <div className="flex gap-3">
-              <button
-                onClick={onCancel}
-                className="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 font-medium text-text"
-              >
-                Keep Current
-              </button>
-              <button
-                onClick={onConfirm}
-                className="flex-1 py-3 px-4 rounded-xl bg-primary text-white font-medium"
-              >
-                Start New
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-}
-
-export function StoryWorldSelectScreen({ onBack }: StoryWorldSelectScreenProps) {
-  const { child, updateChild, setCurrentStoryArc } = useChild();
+export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSelectScreenProps) {
+  const { child } = useChild();
   const { playSound } = useAudio();
-  const [confirmWorld, setConfirmWorld] = useState<StoryWorld | null>(null);
 
   if (!child) return null;
 
-  const hasStoryInProgress = child.currentStoryArc !== null;
-
   const handleSelectWorld = (world: StoryWorld) => {
     playSound('tap');
-
-    // If same world and has story, just go back
-    if (world.id === child.activeWorldId && hasStoryInProgress) {
-      onBack();
-      return;
-    }
-
-    // If has story in progress, show confirmation
-    if (hasStoryInProgress) {
-      setConfirmWorld(world);
-      return;
-    }
-
-    // Otherwise, select the world and create a new story
-    startNewStoryInWorld(world);
-  };
-
-  const startNewStoryInWorld = (world: StoryWorld) => {
-    playSound('success');
-
-    // Update active world
-    updateChild({ activeWorldId: world.id });
-
-    // Create new story arc for this world
-    const newStoryArc = createStoryArcForWorld(
-      world.id,
-      child.name,
-      child.activePetId
-    );
-
-    if (newStoryArc) {
-      setCurrentStoryArc(newStoryArc);
-    }
-
-    setConfirmWorld(null);
-    onBack();
-  };
-
-  const handleConfirm = () => {
-    if (confirmWorld) {
-      startNewStoryInWorld(confirmWorld);
-    }
+    onSelectWorld(world.id);
   };
 
   const handleBack = () => {
@@ -237,6 +192,7 @@ export function StoryWorldSelectScreen({ onBack }: StoryWorldSelectScreenProps) 
     onBack();
   };
 
+  // Separate unlocked and locked worlds
   const unlockedWorlds = worlds.filter((world) =>
     child.unlockedWorlds.includes(world.id)
   );
@@ -244,112 +200,131 @@ export function StoryWorldSelectScreen({ onBack }: StoryWorldSelectScreenProps) 
     (world) => !child.unlockedWorlds.includes(world.id)
   );
 
+  // Calculate story completion for each world
+  const getWorldProgress = (worldId: string) => {
+    const stories = getStoriesForWorld(worldId);
+    const completed = stories.filter((story) =>
+      child.completedStoryArcs.includes(story.id)
+    ).length;
+    return { completed, total: stories.length };
+  };
+
+  // Check if world has active story
+  const hasActiveStoryInWorld = (worldId: string) => {
+    return child.currentStoryArc?.worldId === worldId;
+  };
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-indigo-900 via-purple-900 to-slate-900">
+      {/* Stars background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {[...Array(50)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-white rounded-full"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+            }}
+            animate={{
+              opacity: [0.3, 1, 0.3],
+              scale: [1, 1.2, 1],
+            }}
+            transition={{
+              duration: 2 + Math.random() * 2,
+              repeat: Infinity,
+              delay: Math.random() * 2,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Header */}
-      <div className="sticky top-0 bg-background/80 backdrop-blur-sm z-10 px-4 py-4 border-b border-gray-200">
+      <div className="relative z-10 sticky top-0 bg-indigo-900/80 backdrop-blur-sm px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-4">
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={handleBack}
-            className="p-2 -ml-2 rounded-xl hover:bg-gray-100"
+            className="p-2 -ml-2 rounded-xl hover:bg-white/10"
           >
-            <ArrowLeft className="w-6 h-6 text-text" />
+            <ArrowLeft className="w-6 h-6 text-white" />
           </motion.button>
           <div>
-            <h1 className="text-2xl font-bold text-text">Story Worlds</h1>
-            <p className="text-sm text-text/60">Choose your next adventure</p>
+            <h1 className="text-2xl font-bold text-white">Explore Worlds</h1>
+            <p className="text-sm text-white/60">Choose a world to discover stories</p>
           </div>
         </div>
       </div>
 
-      <div className="p-4 pb-24">
+      <div className="relative z-10 p-6 pb-24">
         {/* Current story info */}
-        {hasStoryInProgress && child.currentStoryArc && (
+        {child.currentStoryArc && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-primary/10 rounded-xl p-4 mb-6"
+            className="bg-white/10 backdrop-blur-sm rounded-xl p-4 mb-8 border border-white/20"
           >
-            <p className="text-primary font-medium text-sm mb-1">
-              Current Adventure
+            <p className="text-accent font-medium text-sm mb-1">
+              Continue Your Adventure
             </p>
-            <p className="text-text font-bold">{child.currentStoryArc.title}</p>
-            <p className="text-text/60 text-sm">
+            <p className="text-white font-bold">{child.currentStoryArc.title}</p>
+            <p className="text-white/60 text-sm">
               Chapter {child.currentStoryArc.currentChapterIndex + 1} of{' '}
               {child.currentStoryArc.totalChapters}
             </p>
           </motion.div>
         )}
 
-        {/* Unlocked worlds */}
-        <div className="mb-8">
-          <h2 className="text-lg font-bold text-text mb-3 flex items-center gap-2">
-            <span>Available Worlds</span>
-            <span className="text-sm font-normal text-text/60">
-              ({unlockedWorlds.length})
-            </span>
+        {/* Unlocked worlds grid */}
+        <div className="mb-10">
+          <h2 className="text-lg font-bold text-white mb-6 text-center">
+            Available Worlds
           </h2>
-          <div className="space-y-4">
-            {unlockedWorlds.map((world, index) => (
-              <motion.div
-                key={world.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <WorldCard
+          <div className="grid grid-cols-2 gap-8 justify-items-center max-w-sm mx-auto">
+            {unlockedWorlds.map((world, index) => {
+              const progress = getWorldProgress(world.id);
+              return (
+                <WorldPlanet
+                  key={world.id}
                   world={world}
                   isUnlocked={true}
-                  isActive={child.activeWorldId === world.id}
-                  hasStoryInProgress={
-                    child.activeWorldId === world.id && hasStoryInProgress
-                  }
+                  hasActiveStory={hasActiveStoryInWorld(world.id)}
+                  storiesCompleted={progress.completed}
+                  totalStories={progress.total}
+                  index={index}
                   onSelect={() => handleSelectWorld(world)}
                 />
-              </motion.div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
         {/* Locked worlds */}
         {lockedWorlds.length > 0 && (
           <div>
-            <h2 className="text-lg font-bold text-text mb-3 flex items-center gap-2">
-              <span>Locked Worlds</span>
-              <span className="text-sm font-normal text-text/60">
-                ({lockedWorlds.length})
-              </span>
+            <h2 className="text-lg font-bold text-white/60 mb-6 text-center">
+              Locked Worlds
             </h2>
-            <div className="space-y-4">
-              {lockedWorlds.map((world, index) => (
-                <motion.div
-                  key={world.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: (unlockedWorlds.length + index) * 0.1 }}
-                >
-                  <WorldCard
+            <div className="grid grid-cols-3 gap-6 justify-items-center max-w-md mx-auto">
+              {lockedWorlds.map((world, index) => {
+                const progress = getWorldProgress(world.id);
+                return (
+                  <WorldPlanet
+                    key={world.id}
                     world={world}
                     isUnlocked={false}
-                    isActive={false}
-                    hasStoryInProgress={false}
+                    hasActiveStory={false}
+                    storiesCompleted={progress.completed}
+                    totalStories={progress.total}
+                    index={unlockedWorlds.length + index}
                     onSelect={() => {}}
                   />
-                </motion.div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </div>
-
-      {/* Confirmation modal */}
-      <ConfirmModal
-        isOpen={confirmWorld !== null}
-        worldName={confirmWorld?.displayName ?? ''}
-        onConfirm={handleConfirm}
-        onCancel={() => setConfirmWorld(null)}
-      />
     </div>
   );
 }

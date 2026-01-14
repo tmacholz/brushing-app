@@ -53,8 +53,21 @@ export interface StoryWorld {
   isStarter: boolean;
 }
 
+// Story template - static data for story definitions
+export interface StoryTemplate {
+  id: string;
+  worldId: string;
+  title: string;
+  description: string;
+  coverImageUrl: string;
+  totalChapters: number;
+  chapters: StoryChapter[];
+}
+
+// Active story instance - created when user starts a story
 export interface StoryArc {
   id: string;
+  storyTemplateId: string; // Reference to the template this was created from
   worldId: string;
   petId: string;
   childName: string;
@@ -113,6 +126,7 @@ export type ScreenName =
   | 'profile-select'
   | 'shop'
   | 'story-world-select'
+  | 'story-select'
   | 'story-history'
   | 'settings'
   | 'parent-dashboard';
