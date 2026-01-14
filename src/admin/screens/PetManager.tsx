@@ -11,6 +11,7 @@ import {
   Trash2,
   Star,
   Lock,
+  ImagePlus,
 } from 'lucide-react';
 
 interface Pet {
@@ -550,8 +551,41 @@ function EditPetModal({
   const [unlockCost, setUnlockCost] = useState(pet.unlock_cost.toString());
   const [isStarter, setIsStarter] = useState(pet.is_starter);
   const [isPublished, setIsPublished] = useState(pet.is_published);
+  const [avatarUrl, setAvatarUrl] = useState(pet.avatar_url);
   const [saving, setSaving] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGenerateImage = async () => {
+    setGeneratingImage(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/generate-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'pet',
+          petId: pet.id,
+          petName: displayName,
+          petDescription: description,
+          petPersonality: storyPersonality,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate image');
+      }
+
+      const data = await res.json();
+      setAvatarUrl(data.avatarUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate image');
+    } finally {
+      setGeneratingImage(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -569,6 +603,7 @@ function EditPetModal({
           unlockCost: parseInt(unlockCost) || 0,
           isStarter,
           isPublished,
+          avatarUrl,
         }),
       });
 
@@ -592,6 +627,44 @@ function EditPetModal({
         <h2 className="text-xl font-bold mb-4">Edit Pet</h2>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Avatar Preview & Generation */}
+          <div className="flex items-center gap-4 p-3 bg-slate-700/30 rounded-lg">
+            <div className="w-20 h-20 rounded-lg overflow-hidden bg-slate-700/50 flex items-center justify-center flex-shrink-0">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={displayName}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-3xl">🐾</span>
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-sm text-slate-400 mb-2">
+                {avatarUrl ? 'Current avatar' : 'No avatar image'}
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateImage}
+                disabled={generatingImage || !displayName || !description}
+                className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 rounded-lg transition-colors text-sm disabled:opacity-50"
+              >
+                {generatingImage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="w-4 h-4" />
+                    Generate Image
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm text-slate-400 mb-1">Display Name</label>
             <input
