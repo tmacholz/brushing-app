@@ -89,7 +89,7 @@ async function createChildInAPI(childData: {
 
 async function updateChildInAPI(childId: string, updates: Partial<Child>): Promise<Child | null> {
   try {
-    const res = await fetch(`/api/children/${childId}`, {
+    const res = await fetch(`/api/children?id=${childId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -108,7 +108,7 @@ async function updateChildInAPI(childId: string, updates: Partial<Child>): Promi
 
 async function deleteChildInAPI(childId: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/children/${childId}`, {
+    const res = await fetch(`/api/children?id=${childId}`, {
       method: 'DELETE',
     });
     return res.ok;
