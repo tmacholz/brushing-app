@@ -4,6 +4,7 @@ import { Lock, Check } from 'lucide-react';
 import { characters } from './data/characters';
 import { ChildProvider, useChild } from './context/ChildContext';
 import { AudioProvider, useAudio } from './context/AudioContext';
+import { ContentProvider, useContent } from './context/ContentContext';
 import { HomeScreen } from './screens/HomeScreen';
 import { BrushingScreen } from './screens/BrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
@@ -13,7 +14,6 @@ import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
 import { pets } from './data/pets';
-import { worlds } from './data/worlds';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
 const getPetEmoji = (petId: string): string => {
@@ -159,6 +159,7 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { createChild } = useChild();
   const { playSound } = useAudio();
+  const { worlds } = useContent();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
   const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
@@ -605,9 +606,11 @@ function AppContent() {
 function App() {
   return (
     <AudioProvider>
-      <ChildProvider>
-        <AppContent />
-      </ChildProvider>
+      <ContentProvider>
+        <ChildProvider>
+          <AppContent />
+        </ChildProvider>
+      </ContentProvider>
     </AudioProvider>
   );
 }

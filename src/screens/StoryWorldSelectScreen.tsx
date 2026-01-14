@@ -2,8 +2,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
-import { worlds } from '../data/worlds';
-import { getStoriesForWorld } from '../data/starterStories';
+import { useContent } from '../context/ContentContext';
 import type { StoryWorld } from '../types';
 
 interface StoryWorldSelectScreenProps {
@@ -179,6 +178,7 @@ function WorldPlanet({
 export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSelectScreenProps) {
   const { child } = useChild();
   const { playSound } = useAudio();
+  const { worlds, getStoriesForWorld } = useContent();
 
   if (!child) return null;
 
