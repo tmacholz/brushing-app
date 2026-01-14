@@ -106,12 +106,37 @@ CREATE TABLE IF NOT EXISTS pet_suggestions (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Children (user profiles)
+CREATE TABLE IF NOT EXISTS children (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(50) NOT NULL,
+  age INTEGER NOT NULL CHECK (age >= 4 AND age <= 10),
+  character_id VARCHAR(20) NOT NULL DEFAULT 'boy',
+  active_pet_id VARCHAR(50) NOT NULL,
+  active_brush_id VARCHAR(50) NOT NULL,
+  active_world_id VARCHAR(50) NOT NULL,
+  points INTEGER DEFAULT 0,
+  total_brush_sessions INTEGER DEFAULT 0,
+  current_streak INTEGER DEFAULT 0,
+  longest_streak INTEGER DEFAULT 0,
+  unlocked_pets TEXT[] DEFAULT ARRAY['sparkle', 'bubbles'],
+  unlocked_brushes TEXT[] DEFAULT ARRAY['star-swirl'],
+  unlocked_worlds TEXT[] DEFAULT ARRAY['magical-forest', 'space-station'],
+  current_story_arc JSONB DEFAULT NULL,
+  completed_story_arcs TEXT[] DEFAULT ARRAY[]::TEXT[],
+  last_brush_date TIMESTAMP DEFAULT NULL,
+  name_audio_url TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_stories_world_id ON stories(world_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_story_id ON chapters(story_id);
 CREATE INDEX IF NOT EXISTS idx_segments_chapter_id ON segments(chapter_id);
 CREATE INDEX IF NOT EXISTS idx_story_pitches_world_id ON story_pitches(world_id);
 CREATE INDEX IF NOT EXISTS idx_pet_suggestions_is_approved ON pet_suggestions(is_approved);
+CREATE INDEX IF NOT EXISTS idx_children_name ON children(name);
 
 -- Update trigger for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -137,5 +162,11 @@ CREATE TRIGGER update_stories_updated_at
 DROP TRIGGER IF EXISTS update_pets_updated_at ON pets;
 CREATE TRIGGER update_pets_updated_at
     BEFORE UPDATE ON pets
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_children_updated_at ON children;
+CREATE TRIGGER update_children_updated_at
+    BEFORE UPDATE ON children
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();

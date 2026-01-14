@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Check, Plus, Trash2, X, Lock } from 'lucide-react';
+import { ArrowLeft, Check, Plus, Trash2, X, Lock, Loader2 } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
@@ -286,7 +286,7 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 
 // Full-screen add profile flow
 interface AddProfileFlowProps {
-  onComplete: (name: string, age: number, characterId: string, petId: string, worldId: string) => void;
+  onComplete: (name: string, age: number, characterId: string, petId: string, worldId: string) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -299,6 +299,7 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
   const [selectedPetId, setSelectedPetId] = useState(getStarterPets()[0]?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -323,9 +324,11 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
     setStep('world');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
     playSound('success');
-    onComplete(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
+    await onComplete(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
   };
 
   const handleSelectPet = (petId: string) => {
@@ -618,10 +621,17 @@ function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
 
               <button
                 onClick={handleComplete}
-                disabled={!selectedWorldId}
-                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg disabled:opacity-50"
+                disabled={!selectedWorldId || isCreating}
+                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Add {name}!
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creating Profile...
+                  </>
+                ) : (
+                  `Add ${name}!`
+                )}
               </button>
             </motion.div>
           )}
@@ -644,15 +654,17 @@ export function ProfileSelectScreen({ onBack }: ProfileSelectScreenProps) {
     onBack();
   };
 
-  const handleAddProfile = (name: string, age: number, characterId: string, petId: string, worldId: string) => {
-    addChild(name, age, characterId, petId, worldId);
-    setShowAddFlow(false);
-    onBack();
+  const handleAddProfile = async (name: string, age: number, characterId: string, petId: string, worldId: string) => {
+    const newChild = await addChild(name, age, characterId, petId, worldId);
+    if (newChild) {
+      setShowAddFlow(false);
+      onBack();
+    }
   };
 
-  const handleDeleteProfile = (profileId: string) => {
+  const handleDeleteProfile = async (profileId: string) => {
     playSound('tap');
-    deleteChild(profileId);
+    await deleteChild(profileId);
   };
 
   const handleBack = () => {

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Lock, Check } from 'lucide-react';
+import { Lock, Check, Loader2 } from 'lucide-react';
 import { characters } from './data/characters';
 import { ChildProvider, useChild } from './context/ChildContext';
 import { AudioProvider, useAudio } from './context/AudioContext';
@@ -14,7 +14,6 @@ import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
 import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
-import { generateChildNameAudio } from './services/nameAudioGeneration';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
 const getPetEmoji = (petId: string): string => {
@@ -158,9 +157,9 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 }
 
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
-  const { createChild, child, updateChild } = useChild();
+  const { createChild } = useChild();
   const { playSound } = useAudio();
-const { pets, getStarterPets } = usePets();
+  const { pets, getStarterPets } = usePets();
   const { worlds } = useContent();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
@@ -168,19 +167,7 @@ const { pets, getStarterPets } = usePets();
   const [selectedPetId, setSelectedPetId] = useState(getStarterPets()[0]?.id ?? '');
   const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
-  const [isCreatingProfile, setIsCreatingProfile] = useState(false);
-
-  // Generate name audio after child is created
-  useEffect(() => {
-    if (child && !child.nameAudioUrl && isCreatingProfile) {
-      // Generate audio in background
-      generateChildNameAudio(child.id, child.name).then((result) => {
-        if (result) {
-          updateChild({ nameAudioUrl: result.audioUrl });
-        }
-      });
-    }
-  }, [child, isCreatingProfile, updateChild]);
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,11 +192,19 @@ const { pets, getStarterPets } = usePets();
     setStep('world');
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    if (isCreating) return;
+    setIsCreating(true);
     playSound('success');
-    setIsCreatingProfile(true);
-    createChild(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
-    onComplete();
+
+    const newChild = await createChild(name.trim(), age, selectedCharacterId, selectedPetId, selectedWorldId);
+
+    if (newChild) {
+      onComplete();
+    } else {
+      // Handle error - could show a message
+      setIsCreating(false);
+    }
   };
 
   const handleSelectPet = (petId: string) => {
@@ -468,10 +463,17 @@ const { pets, getStarterPets } = usePets();
 
               <button
                 onClick={handleComplete}
-                disabled={!selectedWorldId}
-                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg disabled:opacity-50"
+                disabled={!selectedWorldId || isCreating}
+                className="w-full bg-white text-primary text-xl font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Let's Go!
+                {isCreating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Creating Profile...
+                  </>
+                ) : (
+                  "Let's Go!"
+                )}
               </button>
             </motion.div>
           )}
@@ -485,12 +487,31 @@ const { pets, getStarterPets } = usePets();
 const SCREENS_WITH_NAV: ScreenName[] = ['home', 'pet-select', 'shop', 'story-world-select', 'settings'];
 
 function AppContent() {
-  const { child, isNewUser } = useChild();
+  const { child, isNewUser, isLoading } = useChild();
   const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
-  const [showOnboarding, setShowOnboarding] = useState(isNewUser);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
 
-  if (showOnboarding || !child) {
+  // Show loading screen while fetching children
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: 'spring', damping: 10 }}
+          className="text-6xl mb-6"
+        >
+          🦷✨
+        </motion.div>
+        <Loader2 className="w-8 h-8 animate-spin text-white mb-4" />
+        <p className="text-white/80">Loading...</p>
+      </div>
+    );
+  }
+
+  // Show onboarding for new users
+  if (showOnboarding || isNewUser || !child) {
     return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
   }
 
