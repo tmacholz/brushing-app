@@ -65,7 +65,9 @@ function StoryCard({ story, isCompleted, isInProgress, index, onSelect }: StoryC
       whileHover={{ scale: 1.03 }}
       whileTap={{ scale: 0.97 }}
       onClick={onSelect}
-      className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden shadow-lg"
+      className={`relative w-full aspect-[3/4] rounded-2xl overflow-hidden shadow-lg ${
+        isInProgress ? 'ring-4 ring-accent ring-offset-2 ring-offset-transparent' : ''
+      }`}
     >
       {/* Cover image or placeholder */}
       {story.coverImageUrl ? (
@@ -84,7 +86,7 @@ function StoryCard({ story, isCompleted, isInProgress, index, onSelect }: StoryC
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
       {/* Completion badge */}
-      {isCompleted && (
+      {isCompleted && !isInProgress && (
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -94,28 +96,31 @@ function StoryCard({ story, isCompleted, isInProgress, index, onSelect }: StoryC
         </motion.div>
       )}
 
-      {/* In progress badge */}
-      {isInProgress && (
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          className="absolute top-3 left-3 bg-white text-primary text-xs font-bold px-2 py-1 rounded-full shadow-lg"
-        >
-          In Progress
-        </motion.div>
-      )}
-
       {/* Story info */}
       <div className="absolute bottom-0 left-0 right-0 p-4">
         <h3 className="font-bold text-white text-lg leading-tight mb-1">
           {story.title}
         </h3>
-        <p className="text-white/70 text-sm line-clamp-2">
-          {story.description}
-        </p>
-        <p className="text-white/50 text-xs mt-2">
-          {story.totalChapters} chapters
-        </p>
+        {!isInProgress && (
+          <>
+            <p className="text-white/70 text-sm line-clamp-2">
+              {story.description}
+            </p>
+            <p className="text-white/50 text-xs mt-2">
+              {story.totalChapters} chapters
+            </p>
+          </>
+        )}
+        {/* Continue button for in-progress story */}
+        {isInProgress && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="mt-2 bg-accent text-white font-bold py-2 px-4 rounded-xl text-center shadow-lg"
+          >
+            Continue
+          </motion.div>
+        )}
       </div>
     </motion.button>
   );
