@@ -113,9 +113,9 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
       });
 
       if (!saveRes.ok) {
-        const saveError = await saveRes.text();
+        const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
         console.error('Failed to save audio URL to database:', saveError);
-        throw new Error(`Failed to save audio URL: ${saveError}`);
+        throw new Error(`Failed to save audio URL: ${saveError.details || saveError.error}`);
       }
 
       const saveData = await saveRes.json();

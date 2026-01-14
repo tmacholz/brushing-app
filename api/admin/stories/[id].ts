@@ -28,7 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ segment });
       } catch (error) {
         console.error('Error updating segment:', error);
-        return res.status(500).json({ error: 'Failed to update segment' });
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to update segment', details: message });
       }
     }
 
