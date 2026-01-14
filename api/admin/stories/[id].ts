@@ -15,13 +15,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // PUT - Update segment
     if (req.method === 'PUT') {
       const { baseAudioUrl, splicePoints } = req.body;
+      console.log('Updating segment:', segmentId, { baseAudioUrl, splicePoints });
       try {
         const [segment] = await sql`
           UPDATE segments SET
             base_audio_url = COALESCE(${baseAudioUrl}, base_audio_url),
-            splice_points = COALESCE(${JSON.stringify(splicePoints)}, splice_points)
+            splice_points = COALESCE(${splicePoints ? JSON.stringify(splicePoints) : null}, splice_points)
           WHERE id = ${segmentId} RETURNING *
         `;
+        console.log('Segment updated:', segment?.id, 'base_audio_url:', segment?.base_audio_url);
         if (!segment) return res.status(404).json({ error: 'Segment not found' });
         return res.status(200).json({ segment });
       } catch (error) {

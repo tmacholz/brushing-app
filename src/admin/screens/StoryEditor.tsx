@@ -103,13 +103,23 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
       }
 
       const data = await res.json();
+      console.log('Audio generated, saving to database:', { segmentId: segment.id, audioUrl: data.audioUrl });
 
       // Save to database
-      await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ baseAudioUrl: data.audioUrl }),
       });
+
+      if (!saveRes.ok) {
+        const saveError = await saveRes.text();
+        console.error('Failed to save audio URL to database:', saveError);
+        throw new Error(`Failed to save audio URL: ${saveError}`);
+      }
+
+      const saveData = await saveRes.json();
+      console.log('Database save response:', saveData);
 
       onUpdate(segment.id, { base_audio_url: data.audioUrl });
     } catch (error) {
@@ -166,14 +176,24 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
 
   const saveSplicePoints = async (splicePoints: SplicePoint[]) => {
     try {
-      await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+      console.log('Saving splice points:', { segmentId: segment.id, splicePoints });
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ splicePoints }),
       });
+      if (!res.ok) {
+        const error = await res.text();
+        console.error('Failed to save splice points:', error);
+        alert('Failed to save splice points. Check console for details.');
+        return;
+      }
+      const data = await res.json();
+      console.log('Splice points save response:', data);
       onUpdate(segment.id, { splice_points: splicePoints });
     } catch (error) {
       console.error('Failed to save splice points:', error);
+      alert('Failed to save splice points. Check console for details.');
     }
   };
 
