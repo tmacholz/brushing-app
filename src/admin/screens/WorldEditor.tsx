@@ -59,6 +59,9 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
   const [theme, setTheme] = useState('');
+  const [unlockCost, setUnlockCost] = useState(0);
+  const [isStarter, setIsStarter] = useState(false);
+  const [isPublished, setIsPublished] = useState(false);
 
   // Story creation state
   const [storyIdea, setStoryIdea] = useState('');
@@ -78,6 +81,9 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       setDisplayName(data.world.display_name);
       setDescription(data.world.description);
       setTheme(data.world.theme || '');
+      setUnlockCost(data.world.unlock_cost || 0);
+      setIsStarter(data.world.is_starter || false);
+      setIsPublished(data.world.is_published || false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load world');
     } finally {
@@ -101,6 +107,9 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
           displayName,
           description,
           theme: theme || null,
+          unlockCost,
+          isStarter,
+          isPublished,
         }),
       });
 
@@ -225,6 +234,26 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
           </button>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setIsPublished(!isPublished)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                isPublished
+                  ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                  : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+              }`}
+            >
+              {isPublished ? (
+                <>
+                  <CheckCircle className="w-4 h-4" />
+                  Published
+                </>
+              ) : (
+                <>
+                  <Clock className="w-4 h-4" />
+                  Draft
+                </>
+              )}
+            </button>
+            <button
               onClick={handleDelete}
               className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
             >
@@ -289,6 +318,35 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
                 <option value="dinosaurs">Dinosaurs</option>
                 <option value="pirates">Pirates</option>
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Unlock Cost (points)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={unlockCost}
+                  onChange={(e) => setUnlockCost(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Set to 0 for free worlds</p>
+              </div>
+
+              <div className="flex items-end pb-6">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isStarter}
+                    onChange={(e) => setIsStarter(e.target.checked)}
+                    className="w-5 h-5 rounded border-slate-600 bg-slate-700/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                  />
+                  <div>
+                    <span className="text-white font-medium">Starter World</span>
+                    <p className="text-xs text-slate-500">Available to new users</p>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         </section>
