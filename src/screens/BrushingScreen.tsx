@@ -79,6 +79,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       );
       if (storyArc) {
         setCurrentStoryArc(storyArc);
+      } else {
+        // No stories available for this world - skip loading and show error
+        console.warn('[BrushingScreen] No stories available for world:', child.activeWorldId);
+        setIsPreparingImages(false);
       }
     }
   }, [child, setCurrentStoryArc, getPetById]);
@@ -342,6 +346,31 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
               Creating scene {imageProgress.completed + 1} of {imageProgress.total}
             </p>
           )}
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Render error if no story is available
+  if (!currentChapter && !isPreparingImages) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <p className="text-6xl mb-6">📚</p>
+          <h1 className="text-2xl font-bold text-white mb-4">No Stories Yet!</h1>
+          <p className="text-white/80 text-lg mb-8">
+            Stories for this world are coming soon.
+          </p>
+          <button
+            onClick={onExit}
+            className="bg-white text-primary font-bold py-3 px-8 rounded-full text-lg shadow-lg"
+          >
+            Go Back
+          </button>
         </motion.div>
       </div>
     );
