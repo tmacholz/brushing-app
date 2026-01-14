@@ -178,3 +178,46 @@ Respond with ONLY JSON:
 
   return chapters;
 }
+
+export interface GeneratedPet {
+  name: string;
+  displayName: string;
+  description: string;
+  storyPersonality: string;
+  unlockCost: number;
+  isStarter: boolean;
+}
+
+export async function generatePetSuggestions(
+  existingPets: { name: string; displayName: string; description: string; storyPersonality: string }[],
+  count: number = 3
+): Promise<GeneratedPet[]> {
+  const existingPetsList = existingPets.length > 0
+    ? `\nExisting pets (make sure new pets are DISTINCT and DIFFERENT from these):\n${existingPets.map(p => `- ${p.displayName}: ${p.description} (personality: ${p.storyPersonality})`).join('\n')}`
+    : '';
+
+  const prompt = `Generate ${count} unique, creative pet companion ideas for a children's toothbrushing story app (ages 4-8).
+
+Each pet should be:
+- A magical, fantastical, or whimsical creature that would appeal to children
+- Have a distinct personality that would be fun in adventure stories
+- Be visually interesting and memorable
+- Different from typical pets (dogs, cats, etc. are too common - be creative!)
+${existingPetsList}
+
+For each pet, provide:
+- name: A kebab-case unique identifier (e.g., "sparkle-dragon", "cloud-bunny")
+- displayName: A friendly name kids would say (e.g., "Sparkle", "Cloudy")
+- description: A short, magical 1-sentence description
+- storyPersonality: 2-3 words describing how they act in stories (e.g., "brave and curious", "silly but wise")
+- unlockCost: Points needed to unlock (0 for starter pets, 50-150 for unlockable ones)
+- isStarter: true if this should be a free starter pet, false otherwise
+
+Make ${count > 2 ? 'one pet a starter (unlockCost: 0, isStarter: true) and the rest' : 'them'} unlockable with varying costs.
+
+Respond with ONLY a JSON array:
+[{"name": "kebab-case-name", "displayName": "Display Name", "description": "Magical description", "storyPersonality": "personality traits", "unlockCost": 0, "isStarter": true}, ...]`;
+
+  const text = await callGemini(prompt);
+  return extractJson<GeneratedPet[]>(text);
+}

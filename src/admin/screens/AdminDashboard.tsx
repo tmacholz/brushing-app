@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2 } from 'lucide-react';
+import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, PawPrint } from 'lucide-react';
 
 interface World {
   id: string;
@@ -15,10 +15,11 @@ interface World {
 
 interface AdminDashboardProps {
   onSelectWorld: (worldId: string) => void;
+  onManagePets: () => void;
   onLogout: () => void;
 }
 
-export function AdminDashboard({ onSelectWorld, onLogout }: AdminDashboardProps) {
+export function AdminDashboard({ onSelectWorld, onManagePets, onLogout }: AdminDashboardProps) {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,13 +97,22 @@ export function AdminDashboard({ onSelectWorld, onLogout }: AdminDashboardProps)
               <p className="text-sm text-slate-400">Content Management</p>
             </div>
           </div>
-          <button
-            onClick={onLogout}
-            className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onManagePets}
+              className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+            >
+              <PawPrint className="w-4 h-4" />
+              Pets
+            </button>
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

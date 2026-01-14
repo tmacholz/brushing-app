@@ -4,8 +4,9 @@ import { Lock } from 'lucide-react';
 import { AdminDashboard } from './screens/AdminDashboard';
 import { WorldEditor } from './screens/WorldEditor';
 import { StoryEditor } from './screens/StoryEditor';
+import { PetManager } from './screens/PetManager';
 
-type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor';
+type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-manager';
 
 interface AdminState {
   screen: AdminScreen;
@@ -129,8 +130,20 @@ export function AdminApp() {
           >
             <AdminDashboard
               onSelectWorld={(worldId) => navigateTo('world-editor', { worldId })}
+              onManagePets={() => navigateTo('pet-manager')}
               onLogout={handleLogout}
             />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'pet-manager' && (
+          <motion.div
+            key="pet-manager"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <PetManager onBack={() => navigateTo('dashboard')} />
           </motion.div>
         )}
 
