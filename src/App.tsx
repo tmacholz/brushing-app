@@ -5,6 +5,7 @@ import { characters } from './data/characters';
 import { ChildProvider, useChild } from './context/ChildContext';
 import { AudioProvider, useAudio } from './context/AudioContext';
 import { PetsProvider, usePets } from './context/PetsContext';
+import { ContentProvider, useContent } from './context/ContentContext';
 import { HomeScreen } from './screens/HomeScreen';
 import { BrushingScreen } from './screens/BrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
@@ -13,7 +14,6 @@ import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
 import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { BottomNav } from './components/ui/BottomNav';
-import { worlds } from './data/worlds';
 import { generateChildNameAudio } from './services/nameAudioGeneration';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
@@ -160,7 +160,8 @@ function WorldCard({ world, isSelected, onSelect }: WorldCardProps) {
 function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   const { createChild, child, updateChild } = useChild();
   const { playSound } = useAudio();
-  const { pets, getStarterPets } = usePets();
+const { pets, getStarterPets } = usePets();
+  const { worlds } = useContent();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
   const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
@@ -621,11 +622,13 @@ function AppContent() {
 function App() {
   return (
     <AudioProvider>
-      <PetsProvider>
-        <ChildProvider>
-          <AppContent />
-        </ChildProvider>
-      </PetsProvider>
+      <ContentProvider>
+        <PetsProvider>
+          <ChildProvider>
+            <AppContent />
+          </ChildProvider>
+        </PetsProvider>
+      </ContentProvider>
     </AudioProvider>
   );
 }

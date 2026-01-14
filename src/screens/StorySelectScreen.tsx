@@ -4,8 +4,7 @@ import { ArrowLeft, Check, AlertTriangle, BookOpen } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
-import { worlds } from '../data/worlds';
-import { getStoriesForWorld } from '../data/starterStories';
+import { useContent } from '../context/ContentContext';
 import { createStoryArc } from '../utils/storyGenerator';
 import type { StoryTemplate } from '../types';
 
@@ -191,7 +190,8 @@ function ConfirmModal({ isOpen, storyTitle, onConfirm, onCancel }: ConfirmModalP
 export function StorySelectScreen({ worldId, onBack, onStartStory }: StorySelectScreenProps) {
   const { child, updateChild, setCurrentStoryArc } = useChild();
   const { playSound } = useAudio();
-  const { getPetById } = usePets();
+const { getPetById } = usePets();
+  const { worlds, getStoriesForWorld } = useContent();
   const [confirmStory, setConfirmStory] = useState<StoryTemplate | null>(null);
 
   if (!child) return null;

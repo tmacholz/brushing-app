@@ -11,6 +11,8 @@ import {
   Clock,
   Loader2,
   Lightbulb,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface World {
@@ -59,6 +61,8 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
   const [displayName, setDisplayName] = useState('');
   const [description, setDescription] = useState('');
   const [theme, setTheme] = useState('');
+  const [unlockCost, setUnlockCost] = useState(0);
+  const [isStarter, setIsStarter] = useState(false);
 
   // Story creation state
   const [storyIdea, setStoryIdea] = useState('');
@@ -78,6 +82,8 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       setDisplayName(data.world.display_name);
       setDescription(data.world.description);
       setTheme(data.world.theme || '');
+      setUnlockCost(data.world.unlock_cost || 0);
+      setIsStarter(data.world.is_starter || false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load world');
     } finally {
@@ -101,6 +107,8 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
           displayName,
           description,
           theme: theme || null,
+          unlockCost,
+          isStarter,
         }),
       });
 
@@ -125,6 +133,22 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       onBack();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete world');
+    }
+  };
+
+  const handlePublish = async (publish: boolean) => {
+    try {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPublished: publish }),
+      });
+
+      if (!res.ok) throw new Error('Failed to update publish status');
+      const data = await res.json();
+      setWorld(data.world);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update publish status');
     }
   };
 
@@ -231,6 +255,23 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
               <Trash2 className="w-4 h-4" />
               Delete
             </button>
+            {world.is_published ? (
+              <button
+                onClick={() => handlePublish(false)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+              >
+                <EyeOff className="w-4 h-4" />
+                Unpublish
+              </button>
+            ) : (
+              <button
+                onClick={() => handlePublish(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-400 text-white rounded-lg transition-colors"
+              >
+                <Eye className="w-4 h-4" />
+                Publish
+              </button>
+            )}
             <button
               onClick={handleSave}
               disabled={saving}
@@ -249,6 +290,24 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
             {error}
           </div>
         )}
+
+        {/* Status Badge */}
+        <div className="flex items-center gap-3 mb-6">
+          {world.is_published ? (
+            <span className="flex items-center gap-2 px-3 py-1.5 bg-green-500/20 text-green-400 rounded-full">
+              <CheckCircle className="w-4 h-4" />
+              Published
+            </span>
+          ) : (
+            <span className="flex items-center gap-2 px-3 py-1.5 bg-slate-600/50 text-slate-400 rounded-full">
+              <Clock className="w-4 h-4" />
+              Draft
+            </span>
+          )}
+          <span className="text-slate-500 text-sm">
+            {stories.length} {stories.length === 1 ? 'story' : 'stories'}
+          </span>
+        </div>
 
         {/* World Details */}
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
@@ -289,6 +348,35 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
                 <option value="dinosaurs">Dinosaurs</option>
                 <option value="pirates">Pirates</option>
               </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Unlock Cost (points)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={unlockCost}
+                  onChange={(e) => setUnlockCost(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                />
+                <p className="text-xs text-slate-500 mt-1">Set to 0 for free worlds</p>
+              </div>
+
+              <div className="flex items-end pb-6">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isStarter}
+                    onChange={(e) => setIsStarter(e.target.checked)}
+                    className="w-5 h-5 rounded border-slate-600 bg-slate-700/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-0"
+                  />
+                  <div>
+                    <span className="text-white font-medium">Starter World</span>
+                    <p className="text-xs text-slate-500">Available to new users</p>
+                  </div>
+                </label>
+              </div>
             </div>
           </div>
         </section>

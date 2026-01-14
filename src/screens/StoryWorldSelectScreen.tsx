@@ -2,8 +2,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Lock } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
-import { worlds } from '../data/worlds';
-import { getStoriesForWorld } from '../data/starterStories';
+import { useContent } from '../context/ContentContext';
 import type { StoryWorld } from '../types';
 
 interface StoryWorldSelectScreenProps {
@@ -179,6 +178,7 @@ function WorldPlanet({
 export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSelectScreenProps) {
   const { child } = useChild();
   const { playSound } = useAudio();
+  const { worlds, getStoriesForWorld } = useContent();
 
   if (!child) return null;
 
@@ -192,13 +192,17 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
     onBack();
   };
 
+  // Check if world is unlocked (either explicitly unlocked, is a starter, or has 0 cost)
+  const isWorldUnlocked = (world: StoryWorld) => {
+    return child.unlockedWorlds.includes(world.id) ||
+           child.unlockedWorlds.includes(world.name) ||
+           world.isStarter ||
+           world.unlockCost === 0;
+  };
+
   // Separate unlocked and locked worlds
-  const unlockedWorlds = worlds.filter((world) =>
-    child.unlockedWorlds.includes(world.id)
-  );
-  const lockedWorlds = worlds.filter(
-    (world) => !child.unlockedWorlds.includes(world.id)
-  );
+  const unlockedWorlds = worlds.filter(isWorldUnlocked);
+  const lockedWorlds = worlds.filter((world) => !isWorldUnlocked(world));
 
   // Calculate story completion for each world
   const getWorldProgress = (worldId: string) => {
