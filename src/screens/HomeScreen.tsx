@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Flame, Star, Sparkles, ChevronDown } from 'lucide-react';
+import { Flame, Star, Sparkles, ChevronDown, Check } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { getPetById } from '../data/pets';
@@ -67,37 +67,70 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     }
   };
 
+  // Chapter progression data
+  const currentChapter = child.currentStoryArc?.currentChapterIndex ?? 0;
+  const totalChapters = child.currentStoryArc?.totalChapters ?? 5;
+
   return (
     <div className="min-h-screen bg-background p-6 pb-24 flex flex-col">
       {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
+        className="text-center mb-4"
       >
         <motion.button
           onClick={() => handleNavigate('profile-select')}
           whileTap={{ scale: 0.98 }}
           className="inline-flex items-center gap-1 focus:outline-none"
         >
-          <h1 className="text-3xl font-bold text-text">
+          <h1 className="text-2xl font-bold text-text">
             {getGreeting()}, {child.name}!
           </h1>
           {hasMultipleChildren && (
             <ChevronDown className="w-5 h-5 text-text/60 mt-1" />
           )}
         </motion.button>
-        <p className="text-text/60 mt-1">
-          {hasMultipleChildren ? 'Tap name to switch brusher' : 'Ready for an adventure?'}
-        </p>
       </motion.div>
 
-      {/* Pet Display */}
+      {/* Stats Row - moved below greeting */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="flex gap-3 mb-6"
+      >
+        {/* Streak Card */}
+        <div className="flex-1 bg-white rounded-xl shadow-sm p-3 flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center`}>
+            <Flame className={`w-5 h-5 ${getStreakColor()}`} />
+          </div>
+          <div>
+            <p className={`text-2xl font-bold ${getStreakColor()}`}>
+              {child.currentStreak}
+            </p>
+            <p className="text-xs text-text/50">day streak</p>
+          </div>
+        </div>
+
+        {/* Points Card */}
+        <div className="flex-1 bg-white rounded-xl shadow-sm p-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center">
+            <Star className="w-5 h-5 text-accent" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-accent">{child.points}</p>
+            <p className="text-xs text-text/50">points</p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Pet Display - smaller */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.1, type: 'spring', damping: 12 }}
-        className="flex-1 flex flex-col items-center justify-center"
+        transition={{ delay: 0.15, type: 'spring', damping: 12 }}
+        className="flex flex-col items-center mb-6"
       >
         <motion.button
           onClick={() => handleNavigate('pet-select')}
@@ -107,7 +140,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         >
           <motion.div
             animate={{
-              y: [0, -10, 0],
+              y: [0, -6, 0],
             }}
             transition={{
               duration: 3,
@@ -116,80 +149,118 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             }}
             className="relative"
           >
-            {/* Pet circle */}
-            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center shadow-lg overflow-hidden">
+            {/* Pet circle - smaller */}
+            <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center shadow-lg overflow-hidden">
               {pet?.avatarUrl ? (
                 <img src={pet.avatarUrl} alt={pet.displayName} className="w-full h-full object-cover" />
               ) : (
-                <span className="text-8xl">{getPetEmoji(child.activePetId)}</span>
+                <span className="text-6xl">{getPetEmoji(child.activePetId)}</span>
               )}
             </div>
 
             {/* Sparkle effects */}
             <motion.div
-              className="absolute -top-2 -right-2"
+              className="absolute -top-1 -right-1"
               animate={{ rotate: 360 }}
               transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
             >
-              <Sparkles className="w-8 h-8 text-accent" />
+              <Sparkles className="w-6 h-6 text-accent" />
             </motion.div>
           </motion.div>
 
           {pet && (
-            <p className="mt-4 text-xl font-medium text-text">
+            <p className="mt-2 text-lg font-medium text-text">
               {pet.displayName}
             </p>
           )}
-          <p className="text-xs text-text/40 mt-1">Tap to change pet</p>
         </motion.button>
-
-        {hasStoryInProgress && child.currentStoryArc && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="mt-4 bg-primary/10 rounded-xl px-4 py-2"
-          >
-            <p className="text-primary text-sm font-medium">
-              Continue: {child.currentStoryArc.title}
-            </p>
-            <p className="text-primary/60 text-xs">
-              Chapter {child.currentStoryArc.currentChapterIndex + 1} of{' '}
-              {child.currentStoryArc.totalChapters}
-            </p>
-          </motion.div>
-        )}
       </motion.div>
 
-      {/* Stats Row */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="flex gap-4 mb-8"
-      >
-        {/* Streak Card */}
-        <div className="flex-1 bg-white rounded-2xl shadow-md p-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Flame className={`w-5 h-5 ${getStreakColor()}`} />
-            <span className="text-sm text-text/60">Streak</span>
-          </div>
-          <p className={`text-3xl font-bold ${getStreakColor()}`}>
-            {child.currentStreak}
+      {/* Chapter Progression */}
+      {hasStoryInProgress && child.currentStoryArc && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white rounded-2xl shadow-md p-4 mb-6"
+        >
+          <p className="text-sm font-medium text-text/70 mb-1">
+            {child.currentStoryArc.title}
           </p>
-          <p className="text-xs text-text/40">days</p>
-        </div>
+          <p className="text-xs text-text/50 mb-4">
+            Chapter {currentChapter + 1} of {totalChapters}
+          </p>
 
-        {/* Points Card */}
-        <div className="flex-1 bg-white rounded-2xl shadow-md p-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-1">
-            <Star className="w-5 h-5 text-accent" />
-            <span className="text-sm text-text/60">Points</span>
+          {/* Chapter circles */}
+          <div className="flex items-center justify-between">
+            {Array.from({ length: totalChapters }).map((_, index) => {
+              const isCompleted = index < currentChapter;
+              const isCurrent = index === currentChapter;
+
+              return (
+                <div key={index} className="flex items-center flex-1">
+                  {/* Circle */}
+                  <div className="relative flex flex-col items-center">
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.3 + index * 0.05 }}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        isCompleted
+                          ? 'bg-accent text-white'
+                          : isCurrent
+                          ? 'bg-primary text-white'
+                          : 'bg-gray-200 text-gray-400'
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <span className="text-xs font-bold">{index + 1}</span>
+                      )}
+                    </motion.div>
+                    {isCurrent && (
+                      <motion.div
+                        animate={{ scale: [1, 1.3, 1] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="absolute inset-0 rounded-full bg-primary/30"
+                      />
+                    )}
+                  </div>
+
+                  {/* Connector line */}
+                  {index < totalChapters - 1 && (
+                    <div
+                      className={`flex-1 h-1 mx-1 rounded ${
+                        index < currentChapter ? 'bg-accent' : 'bg-gray-200'
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
-          <p className="text-3xl font-bold text-accent">{child.points}</p>
-          <p className="text-xs text-text/40">earned</p>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
+
+      {/* No story prompt */}
+      {!hasStoryInProgress && (
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          onClick={() => handleNavigate('story-world-select')}
+          className="bg-primary/10 rounded-2xl p-4 mb-6 text-left"
+        >
+          <p className="text-primary font-medium">Start a Story Adventure!</p>
+          <p className="text-primary/60 text-sm">
+            Choose a world and unlock chapters by brushing
+          </p>
+        </motion.button>
+      )}
+
+      {/* Spacer to push button down */}
+      <div className="flex-1" />
 
       {/* Start Brushing Button */}
       <motion.button
@@ -201,7 +272,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         onClick={handleStartBrushing}
         className="w-full bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg"
       >
-        START BRUSHING
+        {hasStoryInProgress ? 'CONTINUE STORY' : 'START BRUSHING'}
       </motion.button>
 
       {/* Bottom hint */}
