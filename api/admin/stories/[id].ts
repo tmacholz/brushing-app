@@ -52,10 +52,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET - Get full story with chapters and segments
   if (req.method === 'GET') {
     try {
+      console.log('[API] GET story:', id);
       const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
-      if (!story) return res.status(404).json({ error: 'Story not found' });
+      console.log('[API] Story found:', story?.id, story?.title);
+
+      if (!story) {
+        console.log('[API] Story not found for ID:', id);
+        return res.status(404).json({ error: 'Story not found' });
+      }
 
       const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+      console.log('[API] Chapters found:', chapters.length);
+
       const chaptersWithSegments = await Promise.all(
         chapters.map(async (chapter) => {
           const segments = await sql`SELECT * FROM segments WHERE chapter_id = ${chapter.id} ORDER BY segment_order`;
@@ -65,8 +73,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({ story: { ...story, chapters: chaptersWithSegments } });
     } catch (error) {
-      console.error('Error fetching story:', error);
-      return res.status(500).json({ error: 'Failed to fetch story' });
+      console.error('[API] Error fetching story:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return res.status(500).json({ error: 'Failed to fetch story', details: message });
     }
   }
 

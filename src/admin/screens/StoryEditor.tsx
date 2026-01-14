@@ -210,13 +210,28 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   const fetchStory = useCallback(async () => {
     try {
+      console.log('[StoryEditor] Fetching story:', storyId);
       const res = await fetch(`/api/admin/stories/${storyId}`);
-      if (!res.ok) throw new Error('Failed to fetch story');
+      console.log('[StoryEditor] Response status:', res.status);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('[StoryEditor] API error:', errorData);
+        throw new Error(errorData.error || `Failed to fetch story (${res.status})`);
+      }
+
       const data = await res.json();
+      console.log('[StoryEditor] Received story:', data.story?.id, data.story?.title);
+
+      if (!data.story) {
+        throw new Error('No story in response');
+      }
+
       setStory(data.story);
       setTitle(data.story.title);
       setDescription(data.story.description);
     } catch (err) {
+      console.error('[StoryEditor] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load story');
     } finally {
       setLoading(false);
@@ -327,8 +342,15 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   if (!story) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
-        <p className="text-slate-400">Story not found</p>
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4">
+        <p className="text-slate-400">{error || 'Story not found'}</p>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-4 py-2 text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Go Back
+        </button>
       </div>
     );
   }
