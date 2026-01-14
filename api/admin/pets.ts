@@ -20,8 +20,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
         return res.status(200).json({ petAudio });
       } catch (error) {
-        console.error('Error fetching pet audio:', error);
-        return res.status(500).json({ error: 'Failed to fetch pet audio' });
+        // Table might not exist yet - return empty data instead of failing
+        console.error('Error fetching pet audio (table may not exist):', error);
+        return res.status(200).json({ petAudio: {} });
       }
     }
 
