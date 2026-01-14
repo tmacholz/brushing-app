@@ -88,6 +88,7 @@ function WorldPlanet({
   onSelect,
 }: WorldPlanetProps) {
   const colors = getWorldColors(world.id);
+  const hasImage = world.backgroundImageUrl && !world.backgroundImageUrl.startsWith('/worlds/');
 
   // Staggered floating animation
   const floatDelay = index * 0.5;
@@ -122,13 +123,27 @@ function WorldPlanet({
 
         {/* Planet */}
         <div
-          className={`relative w-36 h-36 rounded-full bg-gradient-to-br ${colors.gradient} shadow-xl ${colors.glow} shadow-2xl flex items-center justify-center overflow-hidden`}
+          className={`relative w-36 h-36 rounded-full ${!hasImage ? `bg-gradient-to-br ${colors.gradient}` : ''} shadow-xl ${colors.glow} shadow-2xl flex items-center justify-center overflow-hidden`}
         >
-          {/* Shine effect */}
-          <div className="absolute top-2 left-4 w-6 h-6 bg-white/30 rounded-full blur-sm" />
-
-          {/* Emoji */}
-          <span className="text-5xl relative z-10">{getWorldEmoji(world.id)}</span>
+          {hasImage ? (
+            <>
+              {/* AI Generated World Image */}
+              <img
+                src={world.backgroundImageUrl}
+                alt={world.displayName}
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+              {/* Subtle shine overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
+            </>
+          ) : (
+            <>
+              {/* Shine effect */}
+              <div className="absolute top-2 left-4 w-6 h-6 bg-white/30 rounded-full blur-sm" />
+              {/* Fallback Emoji */}
+              <span className="text-5xl relative z-10">{getWorldEmoji(world.id)}</span>
+            </>
+          )}
 
           {/* Lock overlay */}
           {!isUnlocked && (

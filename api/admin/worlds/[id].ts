@@ -2,6 +2,38 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../../lib/db.js';
 import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../../../lib/ai.js';
 
+// Helper to generate world image
+async function generateWorldImage(worldId: string, worldName: string, worldDescription: string, theme?: string): Promise<string | null> {
+  try {
+    const baseUrl = process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+    const response = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'worldImage',
+        worldId,
+        worldName,
+        worldDescription,
+        theme,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Failed to generate world image:', await response.text());
+      return null;
+    }
+
+    const data = await response.json();
+    return data.imageUrl;
+  } catch (error) {
+    console.error('Error generating world image:', error);
+    return null;
+  }
+}
+
 // Handles all world-specific operations and story creation
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
@@ -61,13 +93,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // POST - Story operations (pitches, outline, generate)
+  // POST - Story operations (pitches, outline, generate) and world image regeneration
   if (req.method === 'POST') {
     const { action, idea, pitchId, count = 3 } = req.body;
 
     try {
       const [world] = await sql`SELECT * FROM worlds WHERE id = ${id}`;
       if (!world) return res.status(404).json({ error: 'World not found' });
+
+      // Regenerate world image
+      if (action === 'regenerateImage') {
+        const imageUrl = await generateWorldImage(world.id, world.display_name, world.description, world.theme || undefined);
+        if (!imageUrl) {
+          return res.status(500).json({ error: 'Failed to generate world image' });
+        }
+
+        const [updatedWorld] = await sql`
+          UPDATE worlds SET background_image_url = ${imageUrl}, updated_at = NOW()
+          WHERE id = ${id} RETURNING *
+        `;
+
+        return res.status(200).json({ world: updatedWorld, imageUrl });
+      }
 
       // Generate story pitches
       if (action === 'pitches') {

@@ -11,6 +11,7 @@ interface World {
   is_published: boolean;
   story_count: number;
   created_at: string;
+  background_image_url: string | null;
 }
 
 interface AdminDashboardProps {
@@ -47,23 +48,13 @@ export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onLogo
   const handleGenerateWorld = async () => {
     setGenerating(true);
     try {
-      // Generate world with AI
+      // Generate and save world with AI (now does both in one call)
       const res = await fetch('/api/admin/worlds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'generate' }),
       });
       if (!res.ok) throw new Error('Failed to generate world');
-      const data = await res.json();
-
-      // Save the generated world
-      const saveRes = await fetch('/api/admin/worlds', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data.world),
-      });
-
-      if (!saveRes.ok) throw new Error('Failed to save world');
 
       await fetchWorlds();
     } catch (err) {
@@ -184,8 +175,16 @@ export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onLogo
                 className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-5 text-left hover:border-cyan-500/50 transition-colors"
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-slate-700/50 rounded-lg flex items-center justify-center text-2xl">
-                    {getThemeEmoji(world.theme)}
+                  <div className="w-12 h-12 rounded-lg flex items-center justify-center text-2xl overflow-hidden bg-slate-700/50">
+                    {world.background_image_url ? (
+                      <img
+                        src={world.background_image_url}
+                        alt={world.display_name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      getThemeEmoji(world.theme)
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">

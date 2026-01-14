@@ -13,6 +13,7 @@ import {
   Lightbulb,
   Eye,
   EyeOff,
+  ImageIcon,
 } from 'lucide-react';
 
 interface World {
@@ -24,6 +25,7 @@ interface World {
   unlock_cost: number;
   is_starter: boolean;
   is_published: boolean;
+  background_image_url: string | null;
 }
 
 interface Story {
@@ -71,6 +73,9 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
   const [pitches, setPitches] = useState<StoryPitch[]>([]);
   const [selectedPitch, setSelectedPitch] = useState<StoryPitch | null>(null);
   const [generatingStory, setGeneratingStory] = useState(false);
+
+  // Image generation state
+  const [regeneratingImage, setRegeneratingImage] = useState(false);
 
   const fetchWorld = useCallback(async () => {
     try {
@@ -149,6 +154,27 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       setWorld(data.world);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update publish status');
+    }
+  };
+
+  const handleRegenerateImage = async () => {
+    setRegeneratingImage(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'regenerateImage' }),
+      });
+
+      if (!res.ok) throw new Error('Failed to regenerate world image');
+      const data = await res.json();
+      setWorld(data.world);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to regenerate world image');
+    } finally {
+      setRegeneratingImage(false);
     }
   };
 
@@ -308,6 +334,44 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
             {stories.length} {stories.length === 1 ? 'story' : 'stories'}
           </span>
         </div>
+
+        {/* World Image */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">World Image</h2>
+            <button
+              onClick={handleRegenerateImage}
+              disabled={regeneratingImage}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {regeneratingImage ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {regeneratingImage ? 'Generating...' : 'Regenerate Image'}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center">
+            {world.background_image_url ? (
+              <div className="relative">
+                <img
+                  src={world.background_image_url}
+                  alt={world.display_name}
+                  className="w-48 h-48 rounded-full object-cover shadow-lg shadow-purple-500/20"
+                />
+                <div className="absolute inset-0 rounded-full ring-2 ring-purple-500/30" />
+              </div>
+            ) : (
+              <div className="w-48 h-48 rounded-full bg-slate-700/50 flex flex-col items-center justify-center text-slate-500">
+                <ImageIcon className="w-12 h-12 mb-2" />
+                <span className="text-sm">No image yet</span>
+                <span className="text-xs">Click regenerate to create one</span>
+              </div>
+            )}
+          </div>
+        </section>
 
         {/* World Details */}
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
