@@ -262,6 +262,15 @@ interface NameAudioRequest {
   id: string;
 }
 
+// Background music generation
+interface BackgroundMusicRequest {
+  type: 'backgroundMusic';
+  storyId: string;
+  storyTitle: string;
+  storyDescription: string;
+  worldTheme?: string;
+}
+
 async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   const { name, nameType, id } = req;
 
@@ -332,6 +341,67 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   }
 }
 
+async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelResponse) {
+  const { storyId, storyTitle, storyDescription, worldTheme } = req;
+
+  console.log('handleBackgroundMusic called with:', { storyId, storyTitle, worldTheme });
+
+  if (!storyId || !storyTitle) {
+    return res.status(400).json({ error: 'Missing required fields: storyId, storyTitle' });
+  }
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN not configured' });
+  }
+
+  try {
+    // Generate prompt for instrumental music
+    const musicPrompt = `Gentle, whimsical instrumental music for a children's story.
+Theme: ${worldTheme || 'magical adventure'}
+Story: ${storyTitle} - ${storyDescription || ''}
+Style: Soft, enchanting, suitable for ages 4-8. No vocals or lyrics.
+Mood: Wonder, gentle excitement, cozy and safe feeling.
+Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
+
+    console.log('Calling ElevenLabs Music API...');
+    const response = await fetch('https://api.elevenlabs.io/v1/music/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': ELEVENLABS_API_KEY,
+      },
+      body: JSON.stringify({
+        prompt: musicPrompt,
+        duration_seconds: 120, // 2 minutes
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('ElevenLabs Music API error:', response.status, error);
+      return res.status(500).json({ error: `ElevenLabs Music API error: ${error}` });
+    }
+
+    console.log('ElevenLabs Music API success, uploading to blob...');
+    const audioBuffer = await response.arrayBuffer();
+    const blob = await put(`story-music/${storyId}.mp3`, Buffer.from(audioBuffer), {
+      access: 'public',
+      contentType: 'audio/mpeg',
+      allowOverwrite: true,
+    });
+
+    console.log('Music blob upload success:', blob.url);
+    return res.status(200).json({ musicUrl: blob.url, storyId });
+  } catch (error) {
+    console.error('handleBackgroundMusic error:', error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate background music' });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -354,8 +424,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handlePetAvatar({ ...req.body, type: 'petAvatar' }, res);
       case 'nameAudio':
         return handleNameAudio(req.body, res);
+      case 'backgroundMusic':
+        return handleBackgroundMusic(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, or nameAudio' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, or backgroundMusic' });
     }
   } catch (error) {
     console.error('Generation error:', error);

@@ -23,12 +23,16 @@ CREATE TABLE IF NOT EXISTS stories (
   title VARCHAR(200) NOT NULL,
   description TEXT NOT NULL,
   cover_image_url TEXT,
+  background_music_url TEXT,
   total_chapters INTEGER DEFAULT 5,
   status VARCHAR(20) DEFAULT 'draft',
   is_published BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Migration: Add background_music_url if table already exists
+-- ALTER TABLE stories ADD COLUMN IF NOT EXISTS background_music_url TEXT;
 
 -- Chapters table
 CREATE TABLE IF NOT EXISTS chapters (

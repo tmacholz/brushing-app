@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
 import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../../../lib/ai.js';
 
@@ -129,6 +130,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         await sql`UPDATE stories SET status = 'draft' WHERE id = ${story.id}`;
         await sql`UPDATE story_pitches SET is_used = true WHERE id = ${pitchId}`;
+
+        // Generate background music asynchronously (fire and forget - don't block response)
+        const generateMusicAsync = async () => {
+          try {
+            const musicPrompt = `Gentle, whimsical instrumental music for a children's story.
+Theme: ${world.theme || 'magical adventure'}
+Story: ${pitch.title} - ${pitch.description}
+Style: Soft, enchanting, suitable for ages 4-8. No vocals or lyrics.
+Mood: Wonder, gentle excitement, cozy and safe feeling.
+Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
+
+            console.log('[Music] Generating background music for story:', story.id);
+            const musicRes = await fetch('https://api.elevenlabs.io/v1/music/generate', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
+              },
+              body: JSON.stringify({
+                prompt: musicPrompt,
+                duration_seconds: 120,
+              }),
+            });
+
+            if (musicRes.ok) {
+              const audioBuffer = await musicRes.arrayBuffer();
+              const blob = await put(`story-music/${story.id}.mp3`, Buffer.from(audioBuffer), {
+                access: 'public',
+                contentType: 'audio/mpeg',
+                allowOverwrite: true,
+              });
+              await sql`UPDATE stories SET background_music_url = ${blob.url} WHERE id = ${story.id}`;
+              console.log('[Music] Background music saved:', blob.url);
+            } else {
+              console.error('[Music] Failed to generate music:', await musicRes.text());
+            }
+          } catch (err) {
+            console.error('[Music] Error generating background music:', err);
+          }
+        };
+
+        // Fire and forget - don't await
+        generateMusicAsync();
 
         // Fetch complete story
         const [fullStory] = await sql`SELECT * FROM stories WHERE id = ${story.id}`;

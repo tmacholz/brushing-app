@@ -15,6 +15,8 @@ import {
   Play,
   Pause,
   Mic,
+  Music,
+  Wand2,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -52,6 +54,7 @@ interface Story {
   status: string;
   is_published: boolean;
   total_chapters: number;
+  background_music_url: string | null;
   chapters: Chapter[];
 }
 
@@ -208,6 +211,11 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
 
+  // Music generation state
+  const [generatingMusic, setGeneratingMusic] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const musicAudioRef = useRef<HTMLAudioElement>(null);
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -291,6 +299,64 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete story');
     }
+  };
+
+  const handleGenerateMusic = async () => {
+    if (!story) return;
+    setGeneratingMusic(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'backgroundMusic',
+          storyId: story.id,
+          storyTitle: story.title,
+          storyDescription: story.description,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate music');
+      }
+
+      const data = await res.json();
+
+      // Save music URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backgroundMusicUrl: data.musicUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save music URL');
+
+      setStory({ ...story, background_music_url: data.musicUrl });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate music');
+    } finally {
+      setGeneratingMusic(false);
+    }
+  };
+
+  const toggleMusicPreview = () => {
+    if (!musicAudioRef.current || !story?.background_music_url) return;
+
+    if (musicPlaying) {
+      musicAudioRef.current.pause();
+      setMusicPlaying(false);
+    } else {
+      musicAudioRef.current.src = story.background_music_url;
+      musicAudioRef.current.play();
+      setMusicPlaying(true);
+    }
+  };
+
+  const handleMusicEnded = () => {
+    setMusicPlaying(false);
   };
 
   const toggleChapter = (chapterId: string) => {
@@ -459,6 +525,58 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
               />
             </div>
           </div>
+        </section>
+
+        {/* Background Music Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Music className="w-5 h-5 text-purple-400" />
+            Background Music
+          </h2>
+
+          <audio ref={musicAudioRef} onEnded={handleMusicEnded} />
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={handleGenerateMusic}
+              disabled={generatingMusic}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {generatingMusic ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Wand2 className="w-4 h-4" />
+              )}
+              {story.background_music_url ? 'Regenerate Music' : 'Generate Music'}
+            </button>
+
+            {story.background_music_url && (
+              <button
+                onClick={toggleMusicPreview}
+                className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+              >
+                {musicPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+                Preview
+              </button>
+            )}
+
+            {story.background_music_url && (
+              <span className="ml-auto text-sm text-green-400 flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4" />
+                Music ready
+              </span>
+            )}
+          </div>
+
+          {generatingMusic && (
+            <p className="mt-3 text-sm text-slate-400">
+              Generating background music... This may take up to a minute.
+            </p>
+          )}
         </section>
 
         {/* Chapters */}
