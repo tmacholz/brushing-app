@@ -240,7 +240,7 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
       </div>
 
       {/* Header */}
-      <div className="relative z-10 sticky top-0 bg-indigo-900/80 backdrop-blur-sm px-4 py-4 border-b border-white/10">
+      <div className="relative z-20 sticky top-0 bg-indigo-900/80 backdrop-blur-sm px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-4">
           <motion.button
             whileTap={{ scale: 0.9 }}
@@ -256,7 +256,7 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
         </div>
       </div>
 
-      <div className="relative z-10 p-6 pb-24">
+      <div className="relative z-10 p-6 pb-32 pt-4">
         {/* Current story info */}
         {child.currentStoryArc && (
           <motion.div
@@ -305,7 +305,7 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
             <h2 className="text-lg font-bold text-white/60 mb-6 text-center">
               Locked Worlds
             </h2>
-            <div className="grid grid-cols-3 gap-6 justify-items-center max-w-md mx-auto">
+            <div className="grid grid-cols-2 gap-8 justify-items-center max-w-sm mx-auto">
               {lockedWorlds.map((world, index) => {
                 const progress = getWorldProgress(world.id);
                 return (
