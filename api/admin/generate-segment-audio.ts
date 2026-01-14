@@ -82,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const blob = await put(storagePath, Buffer.from(audioBuffer), {
       access: 'public',
       contentType: 'audio/mpeg',
+      allowOverwrite: true,
     });
 
     return res.status(200).json({

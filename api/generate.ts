@@ -71,6 +71,7 @@ async function generateAndUpload(
       const blob = await put(storageKey, imageBuffer, {
         access: 'public',
         contentType: mimeType || 'image/png',
+        allowOverwrite: true,
       });
       return { url: blob.url, isDataUrl: false };
     } catch (blobError) {
