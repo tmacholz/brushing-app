@@ -136,14 +136,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     });
   }, [child?.currentStoryArc, updateStoryImages, child, pet]);
 
-  const handleBrushingComplete = () => {
+  const handleBrushingComplete = async () => {
     if (!child) return;
 
     // Play completion sound
     playSound('complete');
 
     // Update streak and calculate points
-    const { newStreak } = updateStreak();
+    const { newStreak } = await updateStreak();
     const isStoryArcComplete =
       child.currentStoryArc &&
       chapterIndex === child.currentStoryArc.totalChapters - 1;
@@ -155,11 +155,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       false
     );
 
-    addPoints(points.total);
+    await addPoints(points.total);
     setPointsEarned(points.total);
 
     // Mark chapter as complete
-    completeChapter(chapterIndex);
+    await completeChapter(chapterIndex);
 
     onComplete(points.total);
   };
