@@ -200,7 +200,7 @@ function WorldPlanet({
       {!isUnlocked && (
         <p className={`text-xs flex items-center gap-1 ${canAfford ? 'text-accent' : 'text-white/50'}`}>
           {canAfford ? <Sparkles className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-          {canAfford ? `Tap to unlock` : `${world.unlockCost} pts`}
+          {world.unlockCost} pts
         </p>
       )}
     </motion.button>
