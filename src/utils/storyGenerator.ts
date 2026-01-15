@@ -70,3 +70,38 @@ export const personalizeStory = (
 export const generateUniqueId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
+
+/**
+ * Re-personalize a story arc's chapters from the original template.
+ * Used to fix story arcs that were created with incorrect names.
+ */
+export const rePersonalizeStoryArc = (
+  storyArc: StoryArc,
+  storyTemplate: StoryTemplate,
+  childName: string,
+  petName: string
+): StoryArc => {
+  // Re-personalize chapters from the template, preserving read state and generated images
+  const rePersonalizedChapters = storyTemplate.chapters.map((templateChapter, idx) => {
+    const existingChapter = storyArc.chapters[idx];
+    const personalizedChapter = personalizeChapter(templateChapter, childName, petName);
+
+    // Preserve existing chapter state (read status, images, etc.)
+    return {
+      ...personalizedChapter,
+      isRead: existingChapter?.isRead ?? false,
+      readAt: existingChapter?.readAt ?? null,
+      // Preserve any generated images in segments
+      segments: personalizedChapter.segments.map((segment, segIdx) => ({
+        ...segment,
+        imageUrl: existingChapter?.segments[segIdx]?.imageUrl ?? segment.imageUrl,
+      })),
+    };
+  });
+
+  return {
+    ...storyArc,
+    title: replaceTokens(storyTemplate.title, childName, petName),
+    chapters: rePersonalizedChapters,
+  };
+};

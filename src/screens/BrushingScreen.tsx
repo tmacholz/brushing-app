@@ -10,7 +10,7 @@ import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { personalizeStory } from '../utils/storyGenerator';
+import { personalizeStory, rePersonalizeStoryArc } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 import { getPetAudioUrl } from '../services/petAudio';
@@ -335,6 +335,41 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       });
     }
   }, [child?.currentStoryArc, getStoryById, setCurrentStoryArc]);
+
+  // Backfill: Re-personalize story if pet name doesn't match the stored petId
+  const storyNeedsRePersonalization = useRef(false);
+  useEffect(() => {
+    if (!child?.currentStoryArc || !pet) return;
+    if (storyNeedsRePersonalization.current) return; // Already handled
+
+    const storyTemplate = getStoryById(child.currentStoryArc.storyTemplateId);
+    if (!storyTemplate) return;
+
+    // Check if the story text contains the correct pet name
+    // We check the first segment's text as a quick test
+    const firstSegment = child.currentStoryArc.chapters[0]?.segments[0];
+    if (!firstSegment) return;
+
+    const correctPetName = pet.displayName;
+    const storyContainsCorrectPetName = firstSegment.text.includes(correctPetName);
+
+    if (!storyContainsCorrectPetName) {
+      console.log('[BrushingScreen] Re-personalizing story with correct pet name:', correctPetName);
+      storyNeedsRePersonalization.current = true;
+
+      const rePersonalizedArc = rePersonalizeStoryArc(
+        child.currentStoryArc,
+        storyTemplate,
+        child.name,
+        correctPetName
+      );
+
+      // Preserve the background music URL
+      rePersonalizedArc.backgroundMusicUrl = child.currentStoryArc.backgroundMusicUrl ?? storyTemplate.backgroundMusicUrl ?? null;
+
+      setCurrentStoryArc(rePersonalizedArc);
+    }
+  }, [child?.currentStoryArc, child?.name, pet, getStoryById, setCurrentStoryArc]);
 
   // Background music playback
   useEffect(() => {
