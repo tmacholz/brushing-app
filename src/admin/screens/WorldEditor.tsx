@@ -14,6 +14,9 @@ import {
   Eye,
   EyeOff,
   ImageIcon,
+  Music,
+  Play,
+  Pause,
 } from 'lucide-react';
 
 interface World {
@@ -26,6 +29,7 @@ interface World {
   is_starter: boolean;
   is_published: boolean;
   background_image_url: string | null;
+  background_music_url: string | null;
 }
 
 interface Story {
@@ -76,6 +80,11 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
 
   // Image generation state
   const [regeneratingImage, setRegeneratingImage] = useState(false);
+
+  // Music generation state
+  const [generatingMusic, setGeneratingMusic] = useState(false);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
 
   const fetchWorld = useCallback(async () => {
     try {
@@ -175,6 +184,61 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       setError(err instanceof Error ? err.message : 'Failed to regenerate world image');
     } finally {
       setRegeneratingImage(false);
+    }
+  };
+
+  const handleGenerateMusic = async () => {
+    if (!world) return;
+    setGeneratingMusic(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'backgroundMusic',
+          worldId: world.id,
+          worldName: world.display_name,
+          worldDescription: world.description,
+          worldTheme: world.theme,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to generate music');
+      const data = await res.json();
+
+      // Save music URL to world
+      const saveRes = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backgroundMusicUrl: data.musicUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save music URL');
+      const saveData = await saveRes.json();
+      setWorld(saveData.world);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate music');
+    } finally {
+      setGeneratingMusic(false);
+    }
+  };
+
+  const toggleMusicPlayback = () => {
+    if (!world?.background_music_url) return;
+
+    if (musicPlaying && musicAudio) {
+      musicAudio.pause();
+      setMusicPlaying(false);
+    } else {
+      const audio = musicAudio || new Audio(world.background_music_url);
+      if (!musicAudio) {
+        audio.addEventListener('ended', () => setMusicPlaying(false));
+        setMusicAudio(audio);
+      }
+      audio.play();
+      setMusicPlaying(true);
     }
   };
 
@@ -371,6 +435,62 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
               </div>
             )}
           </div>
+        </section>
+
+        {/* World Music */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Music className="w-5 h-5 text-purple-400" />
+              Background Music
+            </h2>
+            <button
+              onClick={handleGenerateMusic}
+              disabled={generatingMusic}
+              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {generatingMusic ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {generatingMusic ? 'Generating...' : world.background_music_url ? 'Regenerate' : 'Generate Music'}
+            </button>
+          </div>
+
+          <p className="text-sm text-slate-400 mb-4">
+            Background music plays during all stories in this world. Shared across stories to reduce costs.
+          </p>
+
+          {world.background_music_url ? (
+            <div className="flex items-center gap-4">
+              <button
+                onClick={toggleMusicPlayback}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-colors"
+              >
+                {musicPlaying ? (
+                  <>
+                    <Pause className="w-5 h-5 text-purple-400" />
+                    <span>Pause</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-5 h-5 text-purple-400" />
+                    <span>Preview</span>
+                  </>
+                )}
+              </button>
+              <span className="flex items-center gap-2 text-green-400 text-sm">
+                <CheckCircle className="w-4 h-4" />
+                Music ready
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-500 text-sm">
+              <Music className="w-4 h-4" />
+              <span>No music yet. Click "Generate Music" to create background music for this world.</span>
+            </div>
+          )}
         </section>
 
         {/* World Details */}

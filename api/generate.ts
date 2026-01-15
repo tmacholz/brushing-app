@@ -351,13 +351,17 @@ interface NameAudioRequest {
   id: string;
 }
 
-// Background music generation
+// Background music generation (can be for world or story)
 interface BackgroundMusicRequest {
   type: 'backgroundMusic';
-  storyId: string;
-  storyTitle: string;
-  storyDescription: string;
+  worldId?: string;
+  worldName?: string;
+  worldDescription?: string;
   worldTheme?: string;
+  // Legacy story-level fields (deprecated)
+  storyId?: string;
+  storyTitle?: string;
+  storyDescription?: string;
 }
 
 async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
@@ -431,12 +435,18 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
 }
 
 async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelResponse) {
-  const { storyId, storyTitle, storyDescription, worldTheme } = req;
+  const { worldId, worldName, worldDescription, worldTheme, storyId, storyTitle, storyDescription } = req;
 
-  console.log('handleBackgroundMusic called with:', { storyId, storyTitle, worldTheme });
+  // Support both world-level and story-level (legacy) music generation
+  const isWorldLevel = !!worldId;
+  const id = worldId || storyId;
+  const name = worldName || storyTitle;
+  const description = worldDescription || storyDescription;
 
-  if (!storyId || !storyTitle) {
-    return res.status(400).json({ error: 'Missing required fields: storyId, storyTitle' });
+  console.log('handleBackgroundMusic called with:', { worldId, worldName, storyId, storyTitle, worldTheme });
+
+  if (!id || !name) {
+    return res.status(400).json({ error: 'Missing required fields: worldId/storyId, worldName/storyTitle' });
   }
 
   if (!ELEVENLABS_API_KEY) {
@@ -449,9 +459,16 @@ async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelRes
 
   try {
     // Generate prompt for instrumental music
-    const musicPrompt = `Gentle, whimsical instrumental music for a children's story.
+    const musicPrompt = isWorldLevel
+      ? `Gentle, whimsical instrumental background music for a children's story world.
+World: ${name} - ${description || ''}
 Theme: ${worldTheme || 'magical adventure'}
-Story: ${storyTitle} - ${storyDescription || ''}
+Style: Soft, enchanting, loopable background music suitable for ages 4-8. No vocals or lyrics.
+Mood: Wonder, gentle excitement, cozy and safe feeling. Should work as ambient background for multiple stories.
+Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`
+      : `Gentle, whimsical instrumental music for a children's story.
+Theme: ${worldTheme || 'magical adventure'}
+Story: ${name} - ${description || ''}
 Style: Soft, enchanting, suitable for ages 4-8. No vocals or lyrics.
 Mood: Wonder, gentle excitement, cozy and safe feeling.
 Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
@@ -477,14 +494,18 @@ Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
 
     console.log('ElevenLabs Music API success, uploading to blob...');
     const audioBuffer = await response.arrayBuffer();
-    const blob = await put(`story-music/${storyId}.mp3`, Buffer.from(audioBuffer), {
+    const storagePath = isWorldLevel ? `world-music/${id}.mp3` : `story-music/${id}.mp3`;
+    const blob = await put(storagePath, Buffer.from(audioBuffer), {
       access: 'public',
       contentType: 'audio/mpeg',
       allowOverwrite: true,
     });
 
     console.log('Music blob upload success:', blob.url);
-    return res.status(200).json({ musicUrl: blob.url, storyId });
+    return res.status(200).json({
+      musicUrl: blob.url,
+      ...(isWorldLevel ? { worldId: id } : { storyId: id }),
+    });
   } catch (error) {
     console.error('handleBackgroundMusic error:', error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate background music' });

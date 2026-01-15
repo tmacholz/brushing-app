@@ -31,7 +31,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
-  const { getStoriesForWorld, getStoryById } = useContent();
+  const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
@@ -379,18 +379,28 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [child?.currentStoryArc, child?.name, child?.activePetId, pet, getStoryById, setCurrentStoryArc]);
 
-  // Background music playback
+  // Get the world for the current story (for world-level music)
+  const currentWorld = child?.currentStoryArc?.worldId
+    ? getWorldById(child.currentStoryArc.worldId)
+    : null;
+
+  // Background music playback - prefer world music, fallback to story music
   useEffect(() => {
-    const musicUrl = child?.currentStoryArc?.backgroundMusicUrl;
-    console.log('[BrushingScreen] Background music URL:', musicUrl);
+    // Prefer world music (shared across all stories in the world)
+    // Fall back to story-level music for backwards compatibility
+    const musicUrl = currentWorld?.backgroundMusicUrl || child?.currentStoryArc?.backgroundMusicUrl;
+    console.log('[BrushingScreen] Background music URL:', musicUrl, '(world:', currentWorld?.backgroundMusicUrl, ', story:', child?.currentStoryArc?.backgroundMusicUrl, ')');
 
     if (!musicUrl) {
       console.log('[BrushingScreen] No background music URL found');
       return;
     }
 
-    // Create audio element if it doesn't exist
-    if (!backgroundMusicRef.current) {
+    // Create audio element if it doesn't exist or URL changed
+    if (!backgroundMusicRef.current || backgroundMusicRef.current.src !== musicUrl) {
+      if (backgroundMusicRef.current) {
+        backgroundMusicRef.current.pause();
+      }
       console.log('[BrushingScreen] Creating audio element for:', musicUrl);
       backgroundMusicRef.current = new Audio(musicUrl);
       backgroundMusicRef.current.loop = true;
@@ -403,7 +413,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         backgroundMusicRef.current = null;
       }
     };
-  }, [child?.currentStoryArc?.backgroundMusicUrl]);
+  }, [currentWorld?.backgroundMusicUrl, child?.currentStoryArc?.backgroundMusicUrl]);
 
   // Start/pause background music with brushing
   useEffect(() => {

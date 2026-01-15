@@ -9,12 +9,16 @@ CREATE TABLE IF NOT EXISTS worlds (
   description TEXT NOT NULL,
   theme VARCHAR(50),
   background_image_url TEXT,
+  background_music_url TEXT,
   unlock_cost INTEGER DEFAULT 0,
   is_starter BOOLEAN DEFAULT false,
   is_published BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Migration: Add background_music_url to worlds if table already exists
+-- ALTER TABLE worlds ADD COLUMN IF NOT EXISTS background_music_url TEXT;
 
 -- Story templates table
 CREATE TABLE IF NOT EXISTS stories (

@@ -19,6 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         description,
         theme,
         background_image_url,
+        background_music_url,
         unlock_cost,
         is_starter
       FROM worlds
@@ -119,6 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       description: w.description,
       theme: w.theme || 'magical-forest',
       backgroundImageUrl: w.background_image_url || `/worlds/${w.theme || 'magical-forest'}.png`,
+      backgroundMusicUrl: w.background_music_url || null,
       unlockCost: w.unlock_cost,
       isStarter: w.is_starter,
     }));

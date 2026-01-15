@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update world
   if (req.method === 'PUT') {
-    const { name, displayName, description, theme, unlockCost, isStarter, isPublished } = req.body;
+    const { name, displayName, description, theme, unlockCost, isStarter, isPublished, backgroundMusicUrl } = req.body;
 
     try {
       const [world] = await sql`
@@ -50,7 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           theme = COALESCE(${theme}, theme),
           unlock_cost = COALESCE(${unlockCost}, unlock_cost),
           is_starter = COALESCE(${isStarter}, is_starter),
-          is_published = COALESCE(${isPublished}, is_published)
+          is_published = COALESCE(${isPublished}, is_published),
+          background_music_url = COALESCE(${backgroundMusicUrl}, background_music_url)
         WHERE id = ${id} RETURNING *
       `;
       if (!world) return res.status(404).json({ error: 'World not found' });

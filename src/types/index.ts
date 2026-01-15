@@ -51,6 +51,7 @@ export interface StoryWorld {
   description: string;
   theme: 'magical-forest' | 'space' | 'underwater' | 'dinosaurs' | 'pirates';
   backgroundImageUrl: string;
+  backgroundMusicUrl: string | null;
   unlockCost: number;
   isStarter: boolean;
 }
