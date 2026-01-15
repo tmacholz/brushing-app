@@ -6,8 +6,10 @@ import { WorldEditor } from './screens/WorldEditor';
 import { StoryEditor } from './screens/StoryEditor';
 import { PetAudioManager } from './screens/PetAudioManager';
 import { PetManager } from './screens/PetManager';
+import { PoseEditor } from './screens/PoseEditor';
+import { SpriteManager } from './screens/SpriteManager';
 
-type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'pet-manager';
+type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'pet-manager' | 'pose-editor' | 'sprite-manager';
 
 interface AdminState {
   screen: AdminScreen;
@@ -133,6 +135,8 @@ export function AdminApp() {
               onSelectWorld={(worldId) => navigateTo('world-editor', { worldId })}
               onManagePets={() => navigateTo('pet-manager')}
               onPetAudio={() => navigateTo('pet-audio')}
+              onPoseEditor={() => navigateTo('pose-editor')}
+              onSpriteManager={() => navigateTo('sprite-manager')}
               onLogout={handleLogout}
             />
           </motion.div>
@@ -186,6 +190,28 @@ export function AdminApp() {
             exit={{ opacity: 0, x: -20 }}
           >
             <PetAudioManager onBack={() => navigateTo('dashboard')} />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'pose-editor' && (
+          <motion.div
+            key="pose-editor"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <PoseEditor onBack={() => navigateTo('dashboard')} />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'sprite-manager' && (
+          <motion.div
+            key="sprite-manager"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <SpriteManager onBack={() => navigateTo('dashboard')} />
           </motion.div>
         )}
       </AnimatePresence>

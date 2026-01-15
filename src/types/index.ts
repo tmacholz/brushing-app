@@ -101,6 +101,9 @@ export type NarrationSequenceItem =
   | { type: 'audio'; url: string }
   | { type: 'name'; placeholder: 'CHILD' | 'PET' };
 
+// Character position for overlay compositing
+export type CharacterPosition = 'left' | 'center' | 'right' | 'off-screen';
+
 export interface StorySegment {
   id: string;
   text: string;
@@ -111,6 +114,12 @@ export interface StorySegment {
   imagePrompt: string | null; // Prompt used to generate the image
   // Audio narration as a sequence of clips and name placeholders for gapless playback
   narrationSequence: NarrationSequenceItem[] | null;
+  // Character overlay system fields
+  childPose: string | null; // e.g., 'happy', 'excited', 'surprised', 'worried', 'walking'
+  petPose: string | null; // e.g., 'happy', 'excited', 'alert', 'worried', 'following'
+  childPosition: CharacterPosition;
+  petPosition: CharacterPosition;
+  backgroundPrompt: string | null; // Prompt for background-only image (no main characters)
 }
 
 export type BrushingZone =
@@ -142,3 +151,32 @@ export type ScreenName =
   | 'story-history'
   | 'settings'
   | 'parent-dashboard';
+
+// =====================================================
+// Character Overlay System Types
+// =====================================================
+
+export type CharacterType = 'child' | 'pet';
+
+export interface PoseDefinition {
+  id: string;
+  characterType: CharacterType;
+  poseKey: string;
+  displayName: string;
+  generationPrompt: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface CharacterSprite {
+  id: string;
+  ownerType: CharacterType;
+  ownerId: string;
+  poseKey: string;
+  spriteUrl: string;
+  generationStatus: 'pending' | 'generating' | 'complete' | 'failed';
+  generatedAt: string | null;
+}
+
+// Map of pose key to sprite URL for easy lookup
+export type SpriteMap = Record<string, string>;

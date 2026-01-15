@@ -364,6 +364,80 @@ interface BackgroundMusicRequest {
   storyDescription?: string;
 }
 
+// Character sprite generation (transparent PNG for overlay compositing)
+interface SpriteGenerationRequest {
+  type: 'sprite';
+  ownerType: 'child' | 'pet';
+  ownerId: string;
+  poseKey: string;
+  sourceAvatarUrl: string;
+  posePrompt: string;
+}
+
+// Style prefix for sprite generation (transparent background)
+const SPRITE_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
+TRANSPARENT BACKGROUND (critical - pure transparency, no background at all),
+full body character sprite suitable for compositing over scene backgrounds,
+clean sharp edges for easy overlay, Studio Ghibli inspired soft aesthetic,
+no ground shadow, character floating on transparent background,
+warm inviting colors, friendly approachable character design.`;
+
+async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelResponse) {
+  const { ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt } = req;
+
+  if (!ownerType || !ownerId || !poseKey || !sourceAvatarUrl || !posePrompt) {
+    return res.status(400).json({
+      error: 'Missing required fields: ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt',
+    });
+  }
+
+  // Fetch the source avatar image
+  const avatarData = await fetchImageAsBase64(sourceAvatarUrl);
+  if (!avatarData) {
+    return res.status(400).json({ error: 'Failed to fetch source avatar image' });
+  }
+
+  // Build the prompt for sprite generation
+  const prompt = `${SPRITE_STYLE}
+
+REFERENCE CHARACTER IMAGE PROVIDED:
+[Image 1] This is the character's established appearance. You MUST match their features EXACTLY.
+
+POSE TO CREATE:
+${posePrompt}
+
+CRITICAL REQUIREMENTS:
+- The character must match the reference image EXACTLY in terms of:
+  - Face shape, features, and expression style
+  - Hair color, style, and design
+  - Skin tone and overall coloring
+  - Clothing and accessories (if visible)
+  - Body proportions and size
+- Create a FULL BODY sprite showing the entire character from head to toe
+- The background MUST be completely transparent (PNG with alpha channel)
+- Clean, sharp edges suitable for compositing over other images
+- The pose should be: ${posePrompt}
+- Character should be centered in the frame
+- Maintain the whimsical children's book illustration style
+- No text, labels, or watermarks`;
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+    { inlineData: avatarData },
+    { text: prompt },
+  ];
+
+  const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}.png`;
+  const result = await generateAndUpload(parts, storageKey);
+
+  return res.status(200).json({
+    spriteUrl: result.url,
+    ownerType,
+    ownerId,
+    poseKey,
+    ...(result.isDataUrl && { warning: 'Using data URL fallback' }),
+  });
+}
+
 async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   const { name, nameType, id } = req;
 
@@ -539,8 +613,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'worldImage':
         if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handleWorldImage(req.body, res);
+      case 'sprite':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return handleSpriteGeneration(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, or worldImage' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, or sprite' });
     }
   } catch (error) {
     console.error('Generation error:', error);

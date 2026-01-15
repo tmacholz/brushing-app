@@ -5,15 +5,18 @@ import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { useAudioSplicing } from '../hooks/useAudioSplicing';
+import { useCharacterSprites } from '../hooks/useCharacterSprites';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
+import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { personalizeStory, rePersonalizeStoryArc } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 import { getPetAudioUrl } from '../services/petAudio';
+import type { CharacterPosition } from '../types';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -100,6 +103,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Use the story arc's pet, falling back to active pet for new stories
   const pet = storyPetId ? getPetById(storyPetId) : null;
+
+  // Character sprites for overlay compositing
+  const { childSprites, petSprites, spritesReady } = useCharacterSprites({
+    child,
+    pet,
+  });
 
   // Debug: log pet lookup details
   useEffect(() => {
@@ -693,13 +702,45 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     ? currentSegment.imageUrl
     : null;
 
+  // Determine if we should use character overlay compositing
+  // Use compositing if sprites are ready and segment has pose data
+  const useCompositing = spritesReady &&
+    phase === 'story' &&
+    currentSegment?.childPose &&
+    backgroundImage;
+
+  // Get sprite URLs for current segment poses
+  const currentChildSprite = currentSegment?.childPose
+    ? childSprites[currentSegment.childPose]
+    : undefined;
+  const currentPetSprite = currentSegment?.petPose
+    ? petSprites[currentSegment.petPose]
+    : undefined;
+
   return (
     <div
       className={`min-h-screen bg-gradient-to-b ${getBackgroundClass()} flex flex-col p-6 relative overflow-hidden`}
     >
-      {/* Full-screen background image for story phase */}
+      {/* Full-screen background - use compositing if sprites are ready */}
       <AnimatePresence mode="wait">
-        {backgroundImage && (
+        {useCompositing ? (
+          <motion.div
+            key={`composite-${backgroundImage}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
+            className="absolute inset-0 z-0"
+          >
+            <CompositeStoryImage
+              backgroundUrl={backgroundImage}
+              childSpriteUrl={currentChildSprite}
+              petSpriteUrl={currentPetSprite}
+              childPosition={(currentSegment?.childPosition as CharacterPosition) || 'center'}
+              petPosition={(currentSegment?.petPosition as CharacterPosition) || 'right'}
+            />
+          </motion.div>
+        ) : backgroundImage ? (
           <motion.div
             key={backgroundImage}
             initial={{ opacity: 0 }}
@@ -716,7 +757,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             {/* Gradient overlay for readability */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/40" />
           </motion.div>
-        )}
+        ) : null}
       </AnimatePresence>
       {/* Header with progress and narration toggle */}
       <div className="relative z-10 mb-8">

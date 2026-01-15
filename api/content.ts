@@ -70,7 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 brushing_prompt,
                 image_prompt,
                 image_url,
-                narration_sequence
+                narration_sequence,
+                child_pose,
+                pet_pose,
+                child_position,
+                pet_position
               FROM segments
               WHERE chapter_id = ${chapter.id}
               ORDER BY segment_order
@@ -94,6 +98,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 imagePrompt: seg.image_prompt,
                 imageUrl: seg.image_url,
                 narrationSequence: seg.narration_sequence,
+                childPose: seg.child_pose || null,
+                petPose: seg.pet_pose || null,
+                childPosition: seg.child_position || 'center',
+                petPosition: seg.pet_position || 'right',
               })),
             };
           })

@@ -107,6 +107,11 @@ function getRandomBrushingPrompt(zone: string): string {
   return prompts[Math.floor(Math.random() * prompts.length)];
 }
 
+// Valid poses for character overlay system
+const CHILD_POSES = ['happy', 'excited', 'surprised', 'worried', 'walking'] as const;
+const PET_POSES = ['happy', 'excited', 'alert', 'worried', 'following'] as const;
+const POSITIONS = ['left', 'center', 'right', 'off-screen'] as const;
+
 export interface GeneratedChapter {
   chapterNumber: number;
   title: string;
@@ -120,6 +125,11 @@ export interface GeneratedChapter {
     brushingZone: string | null;
     brushingPrompt: string | null;
     imagePrompt: string;
+    // Character overlay system fields
+    childPose: string | null;
+    petPose: string | null;
+    childPosition: string;
+    petPosition: string;
   }[];
 }
 
@@ -145,19 +155,37 @@ Chapter ${chapterOutline.chapter}: "${chapterOutline.title}" - ${chapterOutline.
 ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger}"` : ''}
 
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
-Use [CHILD] and [PET] as placeholders.
+Use [CHILD] and [PET] as placeholders in the story text.
 ${isFirstChapter ? 'Start with excitement!' : 'Begin with brief recap.'}
 ${isLastChapter ? 'End with happy conclusion.' : 'End with exciting cliffhanger!'}
 
+IMPORTANT - CHARACTER OVERLAY SYSTEM:
+For each segment, provide:
+- "imagePrompt": A BACKGROUND-ONLY scene description. Do NOT include [CHILD] or [PET] in the image prompt. Other NPCs (talking animals, magical creatures they meet) CAN appear. Focus on environment, setting, atmosphere, and lighting.
+- "childPose": The child's expression/pose. Options: "happy", "excited", "surprised", "worried", "walking", or null if child not in scene.
+- "petPose": The pet's expression/pose. Options: "happy", "excited", "alert", "worried", "following", or null if pet not in scene.
+- "childPosition": Where the child appears. Options: "left", "center", "right", or "off-screen".
+- "petPosition": Where the pet appears. Options: "left", "center", "right", or "off-screen".
+
+Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
+
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "Visual description for illustration"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'Exciting cliffhanger...'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'Exciting cliffhanger...'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{
       chapterNumber: number;
       title: string;
       recap: string | null;
-      segments: { segmentOrder: number; text: string; imagePrompt: string }[];
+      segments: {
+        segmentOrder: number;
+        text: string;
+        imagePrompt: string;
+        childPose?: string | null;
+        petPose?: string | null;
+        childPosition?: string;
+        petPosition?: string;
+      }[];
       cliffhanger: string;
       nextChapterTeaser: string;
     }>(text);
@@ -165,11 +193,30 @@ Respond with ONLY JSON:
     const enhancedSegments = chapterData.segments.map((segment, idx) => {
       const zone = BRUSHING_ZONES[idx % BRUSHING_ZONES.length];
       const hasBrushingPrompt = idx === 1 || idx === 3 || idx === 4;
+
+      // Validate and default pose/position values
+      const childPose = segment.childPose && CHILD_POSES.includes(segment.childPose as typeof CHILD_POSES[number])
+        ? segment.childPose
+        : 'happy';
+      const petPose = segment.petPose && PET_POSES.includes(segment.petPose as typeof PET_POSES[number])
+        ? segment.petPose
+        : 'happy';
+      const childPosition = segment.childPosition && POSITIONS.includes(segment.childPosition as typeof POSITIONS[number])
+        ? segment.childPosition
+        : 'center';
+      const petPosition = segment.petPosition && POSITIONS.includes(segment.petPosition as typeof POSITIONS[number])
+        ? segment.petPosition
+        : 'right';
+
       return {
         ...segment,
         durationSeconds: 15,
         brushingZone: hasBrushingPrompt ? zone : null,
         brushingPrompt: hasBrushingPrompt ? getRandomBrushingPrompt(zone) : null,
+        childPose,
+        petPose,
+        childPosition,
+        petPosition,
       };
     });
 

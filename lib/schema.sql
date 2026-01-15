@@ -63,7 +63,13 @@ CREATE TABLE IF NOT EXISTS segments (
   image_url TEXT,
   -- Audio narration as sequence of clips and name placeholders
   -- Array of {type: 'audio', url: string} | {type: 'name', placeholder: 'CHILD'|'PET'}
-  narration_sequence JSONB DEFAULT NULL
+  narration_sequence JSONB DEFAULT NULL,
+  -- Character overlay system fields
+  child_pose VARCHAR(50) DEFAULT 'happy',
+  pet_pose VARCHAR(50) DEFAULT 'happy',
+  child_position VARCHAR(20) DEFAULT 'center',
+  pet_position VARCHAR(20) DEFAULT 'right',
+  background_prompt TEXT
 );
 
 -- Pre-generated name audio for pets (static, generated once)
@@ -138,7 +144,46 @@ CREATE TABLE IF NOT EXISTS children (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- =====================================================
+-- Character Overlay System (Pose Sprites)
+-- =====================================================
+
+-- Pose definitions (admin-configurable templates for sprite generation)
+CREATE TABLE IF NOT EXISTS pose_definitions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_type VARCHAR(20) NOT NULL, -- 'child' or 'pet'
+  pose_key VARCHAR(50) NOT NULL,
+  display_name VARCHAR(100) NOT NULL,
+  generation_prompt TEXT NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(character_type, pose_key)
+);
+
+-- Generated character sprites (actual transparent PNG images)
+CREATE TABLE IF NOT EXISTS character_sprites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_type VARCHAR(20) NOT NULL, -- 'child' or 'pet'
+  owner_id UUID NOT NULL, -- References children.id or pets.id
+  pose_key VARCHAR(50) NOT NULL,
+  sprite_url TEXT NOT NULL,
+  generation_status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'generating', 'complete', 'failed'
+  generated_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(owner_type, owner_id, pose_key)
+);
+
+-- Migration: Add character overlay columns to segments if table already exists
+-- ALTER TABLE segments ADD COLUMN IF NOT EXISTS child_pose VARCHAR(50) DEFAULT 'happy';
+-- ALTER TABLE segments ADD COLUMN IF NOT EXISTS pet_pose VARCHAR(50) DEFAULT 'happy';
+-- ALTER TABLE segments ADD COLUMN IF NOT EXISTS child_position VARCHAR(20) DEFAULT 'center';
+-- ALTER TABLE segments ADD COLUMN IF NOT EXISTS pet_position VARCHAR(20) DEFAULT 'right';
+-- ALTER TABLE segments ADD COLUMN IF NOT EXISTS background_prompt TEXT;
+
 -- Indexes for performance
+CREATE INDEX IF NOT EXISTS idx_character_sprites_owner ON character_sprites(owner_type, owner_id);
+CREATE INDEX IF NOT EXISTS idx_pose_definitions_type ON pose_definitions(character_type, is_active);
 CREATE INDEX IF NOT EXISTS idx_stories_world_id ON stories(world_id);
 CREATE INDEX IF NOT EXISTS idx_chapters_story_id ON chapters(story_id);
 CREATE INDEX IF NOT EXISTS idx_segments_chapter_id ON segments(chapter_id);
@@ -178,3 +223,26 @@ CREATE TRIGGER update_children_updated_at
     BEFORE UPDATE ON children
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- Seed Data: Initial Pose Definitions (5 Core Poses)
+-- Run this after creating the tables to initialize poses
+-- =====================================================
+
+-- Child poses
+INSERT INTO pose_definitions (character_type, pose_key, display_name, generation_prompt, sort_order) VALUES
+('child', 'happy', 'Happy', 'Standing with warm friendly smile, relaxed content posture, arms at sides', 1),
+('child', 'excited', 'Excited', 'Jumping or bouncing with wide smile, raised eyebrows, arms up, energetic body language', 2),
+('child', 'surprised', 'Surprised', 'Eyes wide with wonder, mouth slightly open in amazement, hands raised slightly', 3),
+('child', 'worried', 'Worried', 'Concerned expression with slight frown, hands together nervously in front', 4),
+('child', 'walking', 'Walking', 'Mid-stride walking pose, side profile view, one foot forward, arms swinging', 5)
+ON CONFLICT (character_type, pose_key) DO NOTHING;
+
+-- Pet poses
+INSERT INTO pose_definitions (character_type, pose_key, display_name, generation_prompt, sort_order) VALUES
+('pet', 'happy', 'Happy', 'Joyful expression, bouncy or wagging posture, bright eyes', 1),
+('pet', 'excited', 'Excited', 'Extra bouncy with sparkles of excitement, very energetic, tail wagging or equivalent', 2),
+('pet', 'alert', 'Alert', 'Attentive posture, ears or appendages perked up, looking forward intently', 3),
+('pet', 'worried', 'Worried', 'Droopy posture, concerned expression, ears down or equivalent', 4),
+('pet', 'following', 'Following', 'Moving alongside pose, loyal companion gesture, looking up adoringly', 5)
+ON CONFLICT (character_type, pose_key) DO NOTHING;

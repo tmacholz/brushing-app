@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, PawPrint } from 'lucide-react';
+import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, PawPrint, User, Image } from 'lucide-react';
 
 interface World {
   id: string;
@@ -18,10 +18,12 @@ interface AdminDashboardProps {
   onSelectWorld: (worldId: string) => void;
   onManagePets: () => void;
   onPetAudio: () => void;
+  onPoseEditor: () => void;
+  onSpriteManager: () => void;
   onLogout: () => void;
 }
 
-export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onLogout }: AdminDashboardProps) {
+export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onPoseEditor, onSpriteManager, onLogout }: AdminDashboardProps) {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +121,20 @@ export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onLogo
             >
               <Volume2 className="w-5 h-5" />
               <span>Pet Name Audio</span>
+            </button>
+            <button
+              onClick={onPoseEditor}
+              className="flex items-center gap-2 px-4 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-xl transition-colors"
+            >
+              <User className="w-5 h-5" />
+              <span>Pose Definitions</span>
+            </button>
+            <button
+              onClick={onSpriteManager}
+              className="flex items-center gap-2 px-4 py-3 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-xl transition-colors"
+            >
+              <Image className="w-5 h-5" />
+              <span>Character Sprites</span>
             </button>
           </div>
         </div>
