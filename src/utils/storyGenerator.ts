@@ -58,6 +58,7 @@ export const personalizeStory = (
     petId,
     createdAt: new Date().toISOString(),
     title: replaceTokens(storyTemplate.title, childName, petName),
+    backgroundMusicUrl: storyTemplate.backgroundMusicUrl ?? null,
     totalChapters: storyTemplate.totalChapters,
     currentChapterIndex: 0,
     isComplete: false,

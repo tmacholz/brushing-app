@@ -62,6 +62,7 @@ export interface StoryTemplate {
   title: string;
   description: string;
   coverImageUrl: string;
+  backgroundMusicUrl?: string | null;
   totalChapters: number;
   chapters: StoryChapter[];
 }
@@ -74,6 +75,7 @@ export interface StoryArc {
   petId: string;
   childName: string;
   title: string;
+  backgroundMusicUrl?: string | null;
   totalChapters: number;
   chapters: StoryChapter[];
   currentChapterIndex: number;

@@ -34,6 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         s.title,
         s.description,
         s.cover_image_url,
+        s.background_music_url,
         s.total_chapters
       FROM stories s
       WHERE s.is_published = true
@@ -67,7 +68,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 brushing_zone,
                 brushing_prompt,
                 image_prompt,
-                image_url
+                image_url,
+                narration_sequence
               FROM segments
               WHERE chapter_id = ${chapter.id}
               ORDER BY segment_order
@@ -90,6 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 brushingPrompt: seg.brushing_prompt,
                 imagePrompt: seg.image_prompt,
                 imageUrl: seg.image_url,
+                narrationSequence: seg.narration_sequence,
               })),
             };
           })
@@ -101,6 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           title: story.title,
           description: story.description,
           coverImageUrl: story.cover_image_url || '',
+          backgroundMusicUrl: story.background_music_url || null,
           totalChapters: story.total_chapters,
           chapters: chaptersWithSegments,
         };

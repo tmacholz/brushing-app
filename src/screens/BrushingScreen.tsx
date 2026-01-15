@@ -8,8 +8,9 @@ import { useAudioSplicing } from '../hooks/useAudioSplicing';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
+import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
-import { createStoryArcForWorld } from '../utils/storyGenerator';
+import { personalizeStory } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
 import { getPetAudioUrl } from '../services/petAudio';
@@ -30,6 +31,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
+  const { getStoriesForWorld } = useContent();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
@@ -43,6 +45,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const lastSpokenTextRef = useRef<string | null>(null);
   const imageGenerationStarted = useRef(false);
   const lastSplicedSegmentRef = useRef<string | null>(null);
+  const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
 
   // Audio splicing hook for pre-recorded narration with name insertion
   const {
@@ -71,13 +74,16 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Create new story if needed
     if (!child.currentStoryArc) {
       const activePet = getPetById(child.activePetId);
-      const storyArc = createStoryArcForWorld(
-        child.activeWorldId,
-        child.name,
-        child.activePetId,
-        activePet?.displayName ?? 'Friend'
-      );
-      if (storyArc) {
+      const stories = getStoriesForWorld(child.activeWorldId);
+
+      if (stories.length > 0) {
+        // Use the first available story from the database/content
+        const storyArc = personalizeStory(
+          stories[0],
+          child.name,
+          child.activePetId,
+          activePet?.displayName ?? 'Friend'
+        );
         setCurrentStoryArc(storyArc);
       } else {
         // No stories available for this world - skip loading and show error
@@ -85,7 +91,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         setIsPreparingImages(false);
       }
     }
-  }, [child, setCurrentStoryArc, getPetById]);
+  }, [child, setCurrentStoryArc, getPetById, getStoriesForWorld]);
 
   // Derive chapter directly from context so it updates when images are added
   const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;
@@ -299,6 +305,37 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       stopSplicedAudio();
     };
   }, [stopSpeaking, stopSplicedAudio]);
+
+  // Background music playback
+  useEffect(() => {
+    const musicUrl = child?.currentStoryArc?.backgroundMusicUrl;
+    if (!musicUrl) return;
+
+    // Create audio element if it doesn't exist
+    if (!backgroundMusicRef.current) {
+      backgroundMusicRef.current = new Audio(musicUrl);
+      backgroundMusicRef.current.loop = true;
+      backgroundMusicRef.current.volume = 0.15; // Low volume so narration is clear
+    }
+
+    return () => {
+      if (backgroundMusicRef.current) {
+        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current = null;
+      }
+    };
+  }, [child?.currentStoryArc?.backgroundMusicUrl]);
+
+  // Start/pause background music with brushing
+  useEffect(() => {
+    if (!backgroundMusicRef.current) return;
+
+    if (isRunning && !showCountdown) {
+      backgroundMusicRef.current.play().catch(console.error);
+    } else {
+      backgroundMusicRef.current.pause();
+    }
+  }, [isRunning, showCountdown]);
 
   // Countdown before starting (wait for images to be ready first)
   useEffect(() => {
