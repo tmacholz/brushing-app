@@ -18,6 +18,10 @@ export interface Child {
   createdAt: string;
   characterId: string; // Selected character ('boy' or 'girl')
   nameAudioUrl: string | null; // Pre-generated TTS of child's name for audio splicing
+  // Collectibles
+  collectedStickers: string[]; // Array of collectible IDs
+  collectedAccessories: string[]; // Array of collectible IDs
+  equippedAccessories: EquippedAccessories; // Pet ID -> array of accessory IDs
 }
 
 export interface Pet {
@@ -141,4 +145,31 @@ export type ScreenName =
   | 'story-select'
   | 'story-history'
   | 'settings'
-  | 'parent-dashboard';
+  | 'parent-dashboard'
+  | 'collection';
+
+// Collectibles System
+export type CollectibleType = 'sticker' | 'accessory';
+export type CollectibleRarity = 'common' | 'uncommon' | 'rare';
+
+export interface Collectible {
+  id: string;
+  type: CollectibleType;
+  name: string;
+  displayName: string;
+  description: string;
+  imageUrl: string;
+  rarity: CollectibleRarity;
+  worldId: string | null;  // null = universal, otherwise world-specific
+  petId: string | null;    // for accessories - which pet can wear it
+  createdAt: string;
+}
+
+// Reward result from mystery chest
+export type ChestReward =
+  | { type: 'points'; amount: number }
+  | { type: 'sticker'; collectible: Collectible; isNew: boolean }
+  | { type: 'accessory'; collectible: Collectible; isNew: boolean };
+
+// Equipped accessories per pet
+export type EquippedAccessories = Record<string, string[]>;
