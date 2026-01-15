@@ -28,11 +28,16 @@ async function callGemini(prompt: string): Promise<string> {
     throw new Error(`Gemini API error: ${errorText}`);
   }
 
-  const data: GenerateResponse = await response.json();
+  const data = await response.json();
+  console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 1000));
+
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
   if (!text) {
-    throw new Error('No text in Gemini response');
+    // Log full response for debugging
+    console.error('[Gemini] No text found. Full response:', JSON.stringify(data, null, 2));
+    const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+    throw new Error(`No text in Gemini response. Reason: ${blockReason || 'unknown'}`);
   }
 
   return text;
