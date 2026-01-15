@@ -2,7 +2,6 @@ import { createContext, useContext, useCallback, useMemo, useState, useEffect, t
 import type { Child, StoryArc } from '../types';
 import { usePets } from './PetsContext';
 import { getBrushById } from '../data/brushes';
-import { getWorldById } from '../data/worlds';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
 
 const ACTIVE_CHILD_KEY = 'brushquest_active_child_id';
@@ -34,7 +33,7 @@ interface ChildContextType {
   updateStoryImages: (imageUrlMap: Map<string, string>) => void;
   unlockPet: (petId: string) => Promise<boolean>;
   unlockBrush: (brushId: string) => Promise<boolean>;
-  unlockWorld: (worldId: string) => Promise<boolean>;
+  unlockWorld: (worldId: string, unlockCost: number) => Promise<boolean>;
   updateCharacter: (characterId: string) => Promise<void>;
   resetChild: () => Promise<void>;
   resetAllData: () => Promise<void>;
@@ -446,9 +445,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
   );
 
   const unlockWorld = useCallback(
-    async (worldId: string) => {
-      const world = getWorldById(worldId);
-      return world ? unlockItem(worldId, world.unlockCost, 'unlockedWorlds') : false;
+    async (worldId: string, unlockCost: number) => {
+      return unlockItem(worldId, unlockCost, 'unlockedWorlds');
     },
     [unlockItem]
   );

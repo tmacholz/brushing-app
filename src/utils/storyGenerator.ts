@@ -1,5 +1,4 @@
 import type { StoryArc, StoryChapter, StorySegment, StoryTemplate } from '../types';
-import { getStoryById, getStoriesForWorld } from '../data/starterStories';
 
 const CHILD_PLACEHOLDER = '[CHILD]';
 const PET_PLACEHOLDER = '[PET]';
@@ -66,34 +65,6 @@ export const personalizeStory = (
       personalizeChapter(chapter, childName, petName)
     ),
   };
-};
-
-// Create a story arc from a specific story template
-export const createStoryArc = (
-  storyId: string,
-  childName: string,
-  petId: string,
-  petName: string = 'Friend'
-): StoryArc | null => {
-  const template = getStoryById(storyId);
-  if (!template) return null;
-
-  return personalizeStory(template, childName, petId, petName);
-};
-
-// Legacy function for backwards compatibility - creates first story from world
-// TODO: Remove after migration to story selection
-export const createStoryArcForWorld = (
-  worldId: string,
-  childName: string,
-  petId: string,
-  petName: string = 'Friend'
-): StoryArc | null => {
-  const stories = getStoriesForWorld(worldId);
-  if (stories.length === 0) return null;
-
-  // Default to first story in the world
-  return personalizeStory(stories[0], childName, petId, petName);
 };
 
 export const generateUniqueId = (): string => {

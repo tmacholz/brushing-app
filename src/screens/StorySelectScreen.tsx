@@ -5,7 +5,7 @@ import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
-import { createStoryArc } from '../utils/storyGenerator';
+import { personalizeStory } from '../utils/storyGenerator';
 import type { StoryTemplate } from '../types';
 
 interface StorySelectScreenProps {
@@ -226,17 +226,15 @@ const { getPetById } = usePets();
     // Update active world
     updateChild({ activeWorldId: worldId });
 
-    // Create new story arc
-    const newStoryArc = createStoryArc(
-      story.id,
+    // Create new story arc from the story template
+    const newStoryArc = personalizeStory(
+      story,
       child.name,
       child.activePetId,
       activePet?.displayName ?? 'Friend'
     );
 
-    if (newStoryArc) {
-      setCurrentStoryArc(newStoryArc);
-    }
+    setCurrentStoryArc(newStoryArc);
 
     setConfirmStory(null);
     onStartStory();

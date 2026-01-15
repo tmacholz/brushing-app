@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Plus, Trash2, X, Lock, Loader2 } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
-import { worlds } from '../data/worlds';
+import { useContent } from '../context/ContentContext';
 import { characters } from '../data/characters';
 import type { Child, Pet, StoryWorld } from '../types';
 
@@ -293,13 +293,22 @@ interface AddProfileFlowProps {
 function AddProfileFlow({ onComplete, onCancel }: AddProfileFlowProps) {
   const { playSound } = useAudio();
   const { pets, getStarterPets } = usePets();
+  const { worlds } = useContent();
   const [name, setName] = useState('');
   const [age, setAge] = useState(6);
   const [selectedCharacterId, setSelectedCharacterId] = useState('boy');
   const [selectedPetId, setSelectedPetId] = useState(getStarterPets()[0]?.id ?? '');
-  const [selectedWorldId, setSelectedWorldId] = useState(worlds.find(w => w.isStarter)?.id ?? '');
+  const [selectedWorldId, setSelectedWorldId] = useState('');
   const [step, setStep] = useState<'name' | 'character' | 'age' | 'pet' | 'world'>('name');
   const [isCreating, setIsCreating] = useState(false);
+
+  // Set default world when worlds load
+  if (!selectedWorldId && worlds.length > 0) {
+    const starterWorld = worlds.find(w => w.isStarter);
+    if (starterWorld) {
+      setSelectedWorldId(starterWorld.id);
+    }
+  }
 
   const handleNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
