@@ -107,7 +107,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Character sprites for overlay compositing
   const { childSprites, petSprites, spritesReady } = useCharacterSprites({
     child,
-    pet,
+    pet: pet ?? null,
   });
 
   // Debug: log pet lookup details

@@ -11,7 +11,6 @@ import {
   CheckCircle,
   XCircle,
   Image,
-  Wand2,
 } from 'lucide-react';
 
 interface PoseDefinition {
@@ -22,15 +21,6 @@ interface PoseDefinition {
   generationPrompt: string;
   sortOrder: number;
   isActive: boolean;
-}
-
-interface SpriteStatus {
-  poseKey: string;
-  displayName: string;
-  generationPrompt: string;
-  spriteUrl: string | null;
-  generationStatus: string;
-  generatedAt: string | null;
 }
 
 interface PoseEditorProps {
