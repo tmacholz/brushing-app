@@ -7,11 +7,95 @@ import {
   getCollectibles,
 } from '../../lib/collectibles.js';
 
+// Helper to format collectible for response
+function formatCollectible(c: Record<string, unknown>) {
+  return {
+    id: c.id,
+    type: c.type,
+    name: c.name,
+    displayName: c.display_name,
+    description: c.description,
+    imageUrl: c.image_url,
+    rarity: c.rarity,
+    worldId: c.world_id,
+    petId: c.pet_id,
+    isPublished: c.is_published,
+    createdAt: c.created_at,
+  };
+}
+
+// Unified collectibles API:
 // GET /api/admin/collectibles - List all collectibles
+// GET /api/admin/collectibles?id=xxx - Get single collectible
 // POST /api/admin/collectibles - Create or generate collectibles
+// PUT /api/admin/collectibles?id=xxx - Update collectible
+// DELETE /api/admin/collectibles?id=xxx - Delete collectible
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const sql = getDb();
+  const { id } = req.query;
 
+  // ===== SINGLE COLLECTIBLE OPERATIONS (when ?id=xxx is provided) =====
+  if (typeof id === 'string') {
+    // GET single collectible
+    if (req.method === 'GET') {
+      try {
+        const [collectible] = await sql`SELECT * FROM collectibles WHERE id = ${id}`;
+        if (!collectible) {
+          return res.status(404).json({ error: 'Collectible not found' });
+        }
+        return res.status(200).json({ collectible: formatCollectible(collectible) });
+      } catch (error) {
+        console.error('Error fetching collectible:', error);
+        return res.status(500).json({ error: 'Failed to fetch collectible' });
+      }
+    }
+
+    // PUT - Update collectible
+    if (req.method === 'PUT') {
+      const { displayName, description, rarity, worldId, petId, isPublished } = req.body;
+      try {
+        const [collectible] = await sql`
+          UPDATE collectibles
+          SET
+            display_name = COALESCE(${displayName}, display_name),
+            description = COALESCE(${description}, description),
+            rarity = COALESCE(${rarity}, rarity),
+            world_id = ${worldId ?? null},
+            pet_id = ${petId ?? null},
+            is_published = COALESCE(${isPublished}, is_published)
+          WHERE id = ${id}
+          RETURNING *
+        `;
+        if (!collectible) {
+          return res.status(404).json({ error: 'Collectible not found' });
+        }
+        return res.status(200).json({ collectible: formatCollectible(collectible) });
+      } catch (error) {
+        console.error('Error updating collectible:', error);
+        return res.status(500).json({ error: 'Failed to update collectible' });
+      }
+    }
+
+    // DELETE collectible
+    if (req.method === 'DELETE') {
+      try {
+        const [deleted] = await sql`DELETE FROM collectibles WHERE id = ${id} RETURNING id`;
+        if (!deleted) {
+          return res.status(404).json({ error: 'Collectible not found' });
+        }
+        return res.status(200).json({ success: true });
+      } catch (error) {
+        console.error('Error deleting collectible:', error);
+        return res.status(500).json({ error: 'Failed to delete collectible' });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // ===== COLLECTION OPERATIONS (no id provided) =====
+
+  // GET - List all collectibles
   if (req.method === 'GET') {
     try {
       const { type, worldId, rarity } = req.query;
@@ -22,28 +106,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         rarity: rarity as string | undefined,
       });
 
-      // Convert snake_case to camelCase for frontend
-      const formatted = collectibles.map(c => ({
-        id: c.id,
-        type: c.type,
-        name: c.name,
-        displayName: c.display_name,
-        description: c.description,
-        imageUrl: c.image_url,
-        rarity: c.rarity,
-        worldId: c.world_id,
-        petId: c.pet_id,
-        isPublished: c.is_published,
-        createdAt: c.created_at,
-      }));
-
-      return res.status(200).json({ collectibles: formatted });
+      return res.status(200).json({ collectibles: collectibles.map(formatCollectible) });
     } catch (error) {
       console.error('Error fetching collectibles:', error);
       return res.status(500).json({ error: 'Failed to fetch collectibles' });
     }
   }
 
+  // POST - Create or generate collectibles
   if (req.method === 'POST') {
     const { action, worldId, worldName, type, name, displayName, description, imageUrl, rarity, petId } = req.body;
 
@@ -59,7 +129,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           sticker = await generateUniversalSticker();
         }
 
-        // Save to database
         const saved = await saveSticker({
           name: sticker.name,
           displayName: sticker.displayName,
@@ -69,20 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           rarity: 'uncommon',
         });
 
-        return res.status(200).json({
-          collectible: {
-            id: saved.id,
-            type: saved.type,
-            name: saved.name,
-            displayName: saved.display_name,
-            description: saved.description,
-            imageUrl: saved.image_url,
-            rarity: saved.rarity,
-            worldId: saved.world_id,
-            isPublished: saved.is_published,
-            createdAt: saved.created_at,
-          },
-        });
+        return res.status(200).json({ collectible: formatCollectible(saved) });
       } catch (error) {
         console.error('Error generating sticker:', error);
         return res.status(500).json({ error: 'Failed to generate sticker' });
@@ -114,16 +170,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             rarity: 'uncommon',
           });
 
-          results.push({
-            id: saved.id,
-            type: saved.type,
-            name: saved.name,
-            displayName: saved.display_name,
-            description: saved.description,
-            imageUrl: saved.image_url,
-            rarity: saved.rarity,
-            worldId: saved.world_id,
-          });
+          results.push(formatCollectible(saved));
         }
 
         return res.status(200).json({ collectibles: results });
@@ -145,21 +192,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         RETURNING *
       `;
 
-      return res.status(201).json({
-        collectible: {
-          id: collectible.id,
-          type: collectible.type,
-          name: collectible.name,
-          displayName: collectible.display_name,
-          description: collectible.description,
-          imageUrl: collectible.image_url,
-          rarity: collectible.rarity,
-          worldId: collectible.world_id,
-          petId: collectible.pet_id,
-          isPublished: collectible.is_published,
-          createdAt: collectible.created_at,
-        },
-      });
+      return res.status(201).json({ collectible: formatCollectible(collectible) });
     } catch (error) {
       console.error('Error creating collectible:', error);
       return res.status(500).json({ error: 'Failed to create collectible' });
