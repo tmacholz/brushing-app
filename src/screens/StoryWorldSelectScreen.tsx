@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
-import { ArrowLeft, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeft, Lock, Sparkles, X } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { useContent } from '../context/ContentContext';
@@ -71,21 +72,25 @@ const getWorldColors = (worldId: string): { gradient: string; glow: string; bg: 
 interface WorldPlanetProps {
   world: StoryWorld;
   isUnlocked: boolean;
+  canAfford: boolean;
   hasActiveStory: boolean;
   storiesCompleted: number;
   totalStories: number;
   index: number;
   onSelect: () => void;
+  onUnlockAttempt: () => void;
 }
 
 function WorldPlanet({
   world,
   isUnlocked,
+  canAfford,
   hasActiveStory,
   storiesCompleted,
   totalStories,
   index,
   onSelect,
+  onUnlockAttempt,
 }: WorldPlanetProps) {
   const colors = getWorldColors(world.id);
   const hasImage = world.backgroundImageUrl && !world.backgroundImageUrl.startsWith('/worlds/');
@@ -93,15 +98,23 @@ function WorldPlanet({
   // Staggered floating animation
   const floatDelay = index * 0.5;
 
+  const handleClick = () => {
+    if (isUnlocked) {
+      onSelect();
+    } else if (canAfford) {
+      onUnlockAttempt();
+    }
+  };
+
   return (
     <motion.button
       initial={{ opacity: 0, scale: 0.5 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.1, type: 'spring', damping: 15 }}
-      whileHover={isUnlocked ? { scale: 1.1 } : undefined}
-      whileTap={isUnlocked ? { scale: 0.95 } : undefined}
-      onClick={isUnlocked ? onSelect : undefined}
-      className={`flex flex-col items-center ${!isUnlocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+      whileHover={(isUnlocked || canAfford) ? { scale: 1.1 } : undefined}
+      whileTap={(isUnlocked || canAfford) ? { scale: 0.95 } : undefined}
+      onClick={handleClick}
+      className={`flex flex-col items-center ${!isUnlocked && !canAfford ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
     >
       {/* Planet orb */}
       <motion.div
@@ -147,8 +160,12 @@ function WorldPlanet({
 
           {/* Lock overlay */}
           {!isUnlocked && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <Lock className="w-8 h-8 text-white" />
+            <div className={`absolute inset-0 ${canAfford ? 'bg-accent/60' : 'bg-black/40'} flex items-center justify-center`}>
+              {canAfford ? (
+                <Sparkles className="w-8 h-8 text-white" />
+              ) : (
+                <Lock className="w-8 h-8 text-white" />
+              )}
             </div>
           )}
         </div>
@@ -181,9 +198,9 @@ function WorldPlanet({
 
       {/* Unlock cost */}
       {!isUnlocked && (
-        <p className="text-xs text-white/50 flex items-center gap-1">
-          <Lock className="w-3 h-3" />
-          {world.unlockCost} pts
+        <p className={`text-xs flex items-center gap-1 ${canAfford ? 'text-accent' : 'text-white/50'}`}>
+          {canAfford ? <Sparkles className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+          {canAfford ? `Tap to unlock` : `${world.unlockCost} pts`}
         </p>
       )}
     </motion.button>
@@ -191,9 +208,11 @@ function WorldPlanet({
 }
 
 export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSelectScreenProps) {
-  const { child } = useChild();
+  const { child, unlockWorld } = useChild();
   const { playSound } = useAudio();
   const { worlds, getStoriesForWorld } = useContent();
+  const [worldToUnlock, setWorldToUnlock] = useState<StoryWorld | null>(null);
+  const [isUnlocking, setIsUnlocking] = useState(false);
 
   if (!child) return null;
 
@@ -205,6 +224,31 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
   const handleBack = () => {
     playSound('tap');
     onBack();
+  };
+
+  const handleUnlockAttempt = (world: StoryWorld) => {
+    playSound('tap');
+    setWorldToUnlock(world);
+  };
+
+  const handleConfirmUnlock = async () => {
+    if (!worldToUnlock) return;
+
+    setIsUnlocking(true);
+    const success = await unlockWorld(worldToUnlock.id, worldToUnlock.unlockCost);
+    setIsUnlocking(false);
+
+    if (success) {
+      playSound('success');
+      setWorldToUnlock(null);
+    } else {
+      playSound('tap');
+    }
+  };
+
+  const handleCancelUnlock = () => {
+    playSound('tap');
+    setWorldToUnlock(null);
   };
 
   // Check if world is unlocked (either explicitly unlocked, is a starter, or has 0 cost)
@@ -268,9 +312,14 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
           >
             <ArrowLeft className="w-6 h-6 text-white" />
           </motion.button>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-white">Explore Worlds</h1>
             <p className="text-sm text-white/60">Choose a world to discover stories</p>
+          </div>
+          <div className="bg-white/10 rounded-full px-3 py-1.5 flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-accent" />
+            <span className="font-bold text-white">{child.points}</span>
+            <span className="text-white/70 text-sm">pts</span>
           </div>
         </div>
       </div>
@@ -307,11 +356,13 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
                   key={world.id}
                   world={world}
                   isUnlocked={true}
+                  canAfford={false}
                   hasActiveStory={hasActiveStoryInWorld(world.id)}
                   storiesCompleted={progress.completed}
                   totalStories={progress.total}
                   index={index}
                   onSelect={() => handleSelectWorld(world)}
+                  onUnlockAttempt={() => {}}
                 />
               );
             })}
@@ -332,11 +383,13 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
                     key={world.id}
                     world={world}
                     isUnlocked={false}
+                    canAfford={child.points >= world.unlockCost}
                     hasActiveStory={false}
                     storiesCompleted={progress.completed}
                     totalStories={progress.total}
                     index={unlockedWorlds.length + index}
                     onSelect={() => {}}
+                    onUnlockAttempt={() => handleUnlockAttempt(world)}
                   />
                 );
               })}
@@ -344,6 +397,97 @@ export function StoryWorldSelectScreen({ onBack, onSelectWorld }: StoryWorldSele
           </div>
         )}
       </div>
+
+      {/* Unlock Confirmation Modal */}
+      <AnimatePresence>
+        {worldToUnlock && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={handleCancelUnlock}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+            >
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Unlock World?</h2>
+                <button
+                  onClick={handleCancelUnlock}
+                  className="p-1 rounded-full hover:bg-gray-100"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${getWorldColors(worldToUnlock.id).gradient} flex items-center justify-center overflow-hidden`}>
+                  {worldToUnlock.backgroundImageUrl && !worldToUnlock.backgroundImageUrl.startsWith('/worlds/') ? (
+                    <img
+                      src={worldToUnlock.backgroundImageUrl}
+                      alt={worldToUnlock.displayName}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-3xl">{getWorldEmoji(worldToUnlock.id)}</span>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">{worldToUnlock.displayName}</h3>
+                  <p className="text-gray-600 text-sm">{worldToUnlock.description}</p>
+                </div>
+              </div>
+
+              <div className="bg-indigo-50 rounded-xl p-4 mb-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Cost</span>
+                  <span className="font-bold text-indigo-600">{worldToUnlock.unlockCost} pts</span>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-gray-600">Your points</span>
+                  <span className="font-bold text-gray-900">{child.points} pts</span>
+                </div>
+                <div className="border-t border-indigo-200 mt-2 pt-2 flex justify-between items-center">
+                  <span className="text-gray-600">After unlock</span>
+                  <span className="font-bold text-gray-900">{child.points - worldToUnlock.unlockCost} pts</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelUnlock}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmUnlock}
+                  disabled={isUnlocking}
+                  className="flex-1 px-4 py-3 rounded-xl bg-indigo-600 text-white font-medium hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isUnlocking ? (
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full"
+                    />
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Unlock
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
