@@ -60,8 +60,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     petNameAudioUrl,
   });
 
-  // Fetch pet audio URL based on the story arc's pet (not the current active pet)
-  const storyPetId = child?.currentStoryArc?.petId ?? child?.activePetId;
+  // Always use the current active pet for stories
+  const storyPetId = child?.activePetId;
   useEffect(() => {
     if (storyPetId) {
       getPetAudioUrl(storyPetId).then(setPetNameAudioUrl);
@@ -106,7 +106,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     console.log('[BrushingScreen] Pet lookup debug:', {
       storyArcPetId: child?.currentStoryArc?.petId,
       activePetId: child?.activePetId,
-      resolvedStoryPetId: storyPetId,
+      usingPetId: storyPetId,
       foundPet: pet?.id,
       petDisplayName: pet?.displayName,
     });
@@ -336,40 +336,48 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [child?.currentStoryArc, getStoryById, setCurrentStoryArc]);
 
-  // Backfill: Re-personalize story if pet name doesn't match the stored petId
-  const storyNeedsRePersonalization = useRef(false);
+  // Re-personalize story if active pet changed or pet name is wrong
+  const lastRePersonalizedPetId = useRef<string | null>(null);
   useEffect(() => {
-    if (!child?.currentStoryArc || !pet) return;
-    if (storyNeedsRePersonalization.current) return; // Already handled
+    if (!child?.currentStoryArc || !pet || !child.activePetId) return;
+
+    // Skip if we already re-personalized for this pet
+    if (lastRePersonalizedPetId.current === child.activePetId) return;
 
     const storyTemplate = getStoryById(child.currentStoryArc.storyTemplateId);
     if (!storyTemplate) return;
 
-    // Check if the story text contains the correct pet name
-    // We check the first segment's text as a quick test
+    // Check if the story needs re-personalization:
+    // 1. The story's petId doesn't match the active pet, OR
+    // 2. The story text doesn't contain the correct pet name
+    const petIdMismatch = child.currentStoryArc.petId !== child.activePetId;
     const firstSegment = child.currentStoryArc.chapters[0]?.segments[0];
-    if (!firstSegment) return;
+    const textMismatch = firstSegment && !firstSegment.text.includes(pet.displayName);
 
-    const correctPetName = pet.displayName;
-    const storyContainsCorrectPetName = firstSegment.text.includes(correctPetName);
+    if (petIdMismatch || textMismatch) {
+      console.log('[BrushingScreen] Re-personalizing story:', {
+        reason: petIdMismatch ? 'pet changed' : 'wrong pet name in text',
+        oldPetId: child.currentStoryArc.petId,
+        newPetId: child.activePetId,
+        petName: pet.displayName,
+      });
 
-    if (!storyContainsCorrectPetName) {
-      console.log('[BrushingScreen] Re-personalizing story with correct pet name:', correctPetName);
-      storyNeedsRePersonalization.current = true;
+      lastRePersonalizedPetId.current = child.activePetId;
 
       const rePersonalizedArc = rePersonalizeStoryArc(
         child.currentStoryArc,
         storyTemplate,
         child.name,
-        correctPetName
+        pet.displayName
       );
 
-      // Preserve the background music URL
+      // Update petId to the active pet and preserve background music
+      rePersonalizedArc.petId = child.activePetId;
       rePersonalizedArc.backgroundMusicUrl = child.currentStoryArc.backgroundMusicUrl ?? storyTemplate.backgroundMusicUrl ?? null;
 
       setCurrentStoryArc(rePersonalizedArc);
     }
-  }, [child?.currentStoryArc, child?.name, pet, getStoryById, setCurrentStoryArc]);
+  }, [child?.currentStoryArc, child?.name, child?.activePetId, pet, getStoryById, setCurrentStoryArc]);
 
   // Background music playback
   useEffect(() => {
