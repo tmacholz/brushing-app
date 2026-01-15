@@ -157,10 +157,14 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         const bufferMap = new Map<string, AudioBuffer>(loadedBuffers);
 
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
+        // Use a small overlap around name clips to reduce perceived gaps from audio silence padding
+        const NAME_OVERLAP_SECONDS = 0.08; // Overlap to tighten transitions around names
         let scheduleTime = ctx.currentTime;
         const sources: AudioBufferSourceNode[] = [];
 
-        for (const item of narrationSequence) {
+        for (let i = 0; i < narrationSequence.length; i++) {
+          const item = narrationSequence[i];
+          const prevItem = i > 0 ? narrationSequence[i - 1] : null;
           let buffer: AudioBuffer | undefined;
 
           if (item.type === 'audio') {
@@ -173,6 +177,13 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           }
 
           if (buffer) {
+            // Apply overlap: start this clip slightly earlier if it's a name or follows a name
+            const isName = item.type === 'name';
+            const followsName = prevItem?.type === 'name';
+            if ((isName || followsName) && scheduleTime > ctx.currentTime + NAME_OVERLAP_SECONDS) {
+              scheduleTime -= NAME_OVERLAP_SECONDS;
+            }
+
             const source = ctx.createBufferSource();
             source.buffer = buffer;
             source.connect(ctx.destination);
