@@ -648,6 +648,20 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     currentSegment?.childPose &&
     backgroundImage;
 
+  // Debug sprite loading
+  console.log('[Sprites] Debug:', {
+    spritesReady,
+    childSprites: Object.keys(childSprites),
+    petSprites: Object.keys(petSprites),
+    childCharacterId: child?.characterId,
+    petId: pet?.id,
+    currentChildPose: currentSegment?.childPose,
+    currentPetPose: currentSegment?.petPose,
+    useCompositing,
+    phase,
+    hasBackgroundImage: !!backgroundImage,
+  });
+
   // Get sprite URLs for current segment poses
   const currentChildSprite = currentSegment?.childPose
     ? childSprites[currentSegment.childPose]
