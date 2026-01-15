@@ -193,7 +193,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const sprites: CharacterSpriteRow[] = await sql`
           SELECT * FROM character_sprites
-          WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid
+          WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}
           ORDER BY pose_key
         `;
 
@@ -245,7 +245,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           await sql`
             INSERT INTO character_sprites (owner_type, owner_id, pose_key, sprite_url, generation_status)
-            VALUES (${ownerType}, ${ownerId}::uuid, ${poseKey}, '', 'generating')
+            VALUES (${ownerType}, ${ownerId}, ${poseKey}, '', 'generating')
             ON CONFLICT (owner_type, owner_id, pose_key)
             DO UPDATE SET generation_status = 'generating'
           `;
@@ -271,7 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await sql`
               UPDATE character_sprites
               SET generation_status = 'failed'
-              WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid AND pose_key = ${poseKey}
+              WHERE owner_type = ${ownerType} AND owner_id = ${ownerId} AND pose_key = ${poseKey}
             `;
 
             return res.status(500).json({ error: `Sprite generation failed: ${errorText}` });
@@ -285,7 +285,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               sprite_url = ${result.spriteUrl},
               generation_status = 'complete',
               generated_at = NOW()
-            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid AND pose_key = ${poseKey}
+            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId} AND pose_key = ${poseKey}
           `;
 
           return res.status(200).json({
@@ -327,7 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           for (const pose of poses) {
             await sql`
               INSERT INTO character_sprites (owner_type, owner_id, pose_key, sprite_url, generation_status)
-              VALUES (${ownerType}, ${ownerId}::uuid, ${pose.pose_key}, '', 'generating')
+              VALUES (${ownerType}, ${ownerId}, ${pose.pose_key}, '', 'generating')
               ON CONFLICT (owner_type, owner_id, pose_key)
               DO UPDATE SET generation_status = 'generating'
             `;
@@ -355,7 +355,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     sprite_url = ${result.spriteUrl},
                     generation_status = 'complete',
                     generated_at = NOW()
-                  WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid AND pose_key = ${pose.pose_key}
+                  WHERE owner_type = ${ownerType} AND owner_id = ${ownerId} AND pose_key = ${pose.pose_key}
                 `;
 
                 results.push({
@@ -367,7 +367,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 await sql`
                   UPDATE character_sprites
                   SET generation_status = 'failed'
-                  WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid AND pose_key = ${pose.pose_key}
+                  WHERE owner_type = ${ownerType} AND owner_id = ${ownerId} AND pose_key = ${pose.pose_key}
                 `;
 
                 results.push({
@@ -407,12 +407,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (poseKey) {
           await sql`
             DELETE FROM character_sprites
-            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid AND pose_key = ${poseKey}
+            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId} AND pose_key = ${poseKey}
           `;
         } else {
           await sql`
             DELETE FROM character_sprites
-            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}::uuid
+            WHERE owner_type = ${ownerType} AND owner_id = ${ownerId}
           `;
         }
 

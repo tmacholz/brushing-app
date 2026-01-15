@@ -162,10 +162,12 @@ CREATE TABLE IF NOT EXISTS pose_definitions (
 );
 
 -- Generated character sprites (actual transparent PNG images)
+-- For children: owner_id is the characterId ('boy', 'girl') - shared across all children of that type
+-- For pets: owner_id is the pet's UUID
 CREATE TABLE IF NOT EXISTS character_sprites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_type VARCHAR(20) NOT NULL, -- 'child' or 'pet'
-  owner_id UUID NOT NULL, -- References children.id or pets.id
+  owner_id VARCHAR(100) NOT NULL, -- For children: characterId ('boy', 'girl'); For pets: UUID
   pose_key VARCHAR(50) NOT NULL,
   sprite_url TEXT NOT NULL,
   generation_status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'generating', 'complete', 'failed'

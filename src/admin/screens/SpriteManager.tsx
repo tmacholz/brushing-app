@@ -14,12 +14,11 @@ import {
   Trash2,
 } from 'lucide-react';
 
-interface Child {
-  id: string;
-  name: string;
-  age: number;
-  character_id: string;
-}
+// Character types available for children
+const CHARACTER_TYPES = [
+  { id: 'boy', displayName: 'Boy', icon: '👦' },
+  { id: 'girl', displayName: 'Girl', icon: '👧' },
+] as const;
 
 interface Pet {
   id: string;
@@ -42,33 +41,23 @@ interface SpriteManagerProps {
 }
 
 export function SpriteManager({ onBack }: SpriteManagerProps) {
-  const [activeTab, setActiveTab] = useState<'children' | 'pets'>('children');
-  const [children, setChildren] = useState<Child[]>([]);
+  const [activeTab, setActiveTab] = useState<'characters' | 'pets'>('characters');
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Selected character for sprite management
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null);
+  // Selected character type or pet for sprite management
+  const [selectedCharacterType, setSelectedCharacterType] = useState<string | null>(null);
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [sprites, setSprites] = useState<SpriteStatus[]>([]);
   const [loadingSprites, setLoadingSprites] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generatingPose, setGeneratingPose] = useState<string | null>(null);
 
-  // Fetch children and pets
+  // Fetch pets
   const fetchData = useCallback(async () => {
     try {
-      const [childrenRes, petsRes] = await Promise.all([
-        fetch('/api/children'),
-        fetch('/api/admin/pets'),
-      ]);
-
-      if (childrenRes.ok) {
-        const childrenData = await childrenRes.json();
-        setChildren(childrenData.children || []);
-      }
-
+      const petsRes = await fetch('/api/admin/pets');
       if (petsRes.ok) {
         const petsData = await petsRes.json();
         setPets(petsData.pets || []);
@@ -84,12 +73,12 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     fetchData();
   }, [fetchData]);
 
-  // Fetch sprites for selected character
+  // Fetch sprites for selected character type or pet
   const fetchSprites = useCallback(async (ownerType: 'child' | 'pet', ownerId: string) => {
     setLoadingSprites(true);
     try {
       const res = await fetch(
-        `/api/admin/characters?entity=sprites?ownerType=${ownerType}&ownerId=${ownerId}`
+        `/api/admin/characters?entity=sprites&ownerType=${ownerType}&ownerId=${ownerId}`
       );
       if (!res.ok) throw new Error('Failed to fetch sprites');
       const data = await res.json();
@@ -102,33 +91,35 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
   }, []);
 
   useEffect(() => {
-    if (selectedChild) {
-      fetchSprites('child', selectedChild.id);
+    if (selectedCharacterType) {
+      fetchSprites('child', selectedCharacterType);
     } else if (selectedPet) {
       fetchSprites('pet', selectedPet.id);
     } else {
       setSprites([]);
     }
-  }, [selectedChild, selectedPet, fetchSprites]);
+  }, [selectedCharacterType, selectedPet, fetchSprites]);
+
+  // Get the source avatar URL for sprite generation
+  const getSourceAvatarUrl = (): string | null => {
+    if (selectedCharacterType) {
+      // Character templates stored in public folder or Vercel Blob
+      // For now, use a placeholder - you'll need to upload these images
+      return `/characters/${selectedCharacterType}-avatar.png`;
+    } else if (selectedPet?.avatar_url) {
+      return selectedPet.avatar_url;
+    }
+    return null;
+  };
 
   // Generate single sprite
   const handleGenerateSprite = async (poseKey: string) => {
-    const ownerType = selectedChild ? 'child' : 'pet';
-    const ownerId = selectedChild?.id || selectedPet?.id;
-
-    // For children, we need to get the avatar URL from the character
-    // For pets, use the avatar_url
-    let sourceAvatarUrl: string | undefined;
-    if (selectedChild) {
-      // Children use character avatars - this would need to be fetched from somewhere
-      // For now, we'll use a placeholder or the child's stored avatar
-      sourceAvatarUrl = `/characters/${selectedChild.character_id}/avatar.png`;
-    } else if (selectedPet?.avatar_url) {
-      sourceAvatarUrl = selectedPet.avatar_url;
-    }
+    const ownerType = selectedCharacterType ? 'child' : 'pet';
+    const ownerId = selectedCharacterType || selectedPet?.id;
+    const sourceAvatarUrl = getSourceAvatarUrl();
 
     if (!ownerId || !sourceAvatarUrl) {
-      setError('Cannot generate sprite: missing avatar URL');
+      setError('Cannot generate sprite: missing source avatar. Please upload character avatar first.');
       return;
     }
 
@@ -151,7 +142,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
         throw new Error(data.error || 'Failed to generate sprite');
       }
 
-      // Refresh sprites list
       await fetchSprites(ownerType, ownerId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate sprite');
@@ -162,18 +152,12 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
 
   // Generate all sprites
   const handleGenerateAll = async () => {
-    const ownerType = selectedChild ? 'child' : 'pet';
-    const ownerId = selectedChild?.id || selectedPet?.id;
-
-    let sourceAvatarUrl: string | undefined;
-    if (selectedChild) {
-      sourceAvatarUrl = `/characters/${selectedChild.character_id}/avatar.png`;
-    } else if (selectedPet?.avatar_url) {
-      sourceAvatarUrl = selectedPet.avatar_url;
-    }
+    const ownerType = selectedCharacterType ? 'child' : 'pet';
+    const ownerId = selectedCharacterType || selectedPet?.id;
+    const sourceAvatarUrl = getSourceAvatarUrl();
 
     if (!ownerId || !sourceAvatarUrl) {
-      setError('Cannot generate sprites: missing avatar URL');
+      setError('Cannot generate sprites: missing source avatar. Please upload character avatar first.');
       return;
     }
 
@@ -195,7 +179,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
         throw new Error(data.error || 'Failed to generate sprites');
       }
 
-      // Refresh sprites list
       await fetchSprites(ownerType, ownerId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate sprites');
@@ -204,17 +187,17 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     }
   };
 
-  // Delete all sprites for character
+  // Delete all sprites
   const handleDeleteAll = async () => {
     if (!confirm('Are you sure you want to delete all sprites for this character?')) return;
 
-    const ownerType = selectedChild ? 'child' : 'pet';
-    const ownerId = selectedChild?.id || selectedPet?.id;
+    const ownerType = selectedCharacterType ? 'child' : 'pet';
+    const ownerId = selectedCharacterType || selectedPet?.id;
     if (!ownerId) return;
 
     try {
       const res = await fetch(
-        `/api/admin/characters?entity=sprites?ownerType=${ownerType}&ownerId=${ownerId}`,
+        `/api/admin/characters?entity=sprites&ownerType=${ownerType}&ownerId=${ownerId}`,
         { method: 'DELETE' }
       );
 
@@ -247,7 +230,9 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     );
   }
 
-  const selectedName = selectedChild?.name || selectedPet?.display_name;
+  const selectedName = selectedCharacterType
+    ? CHARACTER_TYPES.find(c => c.id === selectedCharacterType)?.displayName
+    : selectedPet?.display_name;
 
   return (
     <div className="min-h-screen bg-slate-900 p-6">
@@ -256,8 +241,8 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
         <div className="flex items-center gap-4 mb-8">
           <button
             onClick={() => {
-              if (selectedChild || selectedPet) {
-                setSelectedChild(null);
+              if (selectedCharacterType || selectedPet) {
+                setSelectedCharacterType(null);
                 setSelectedPet(null);
               } else {
                 onBack();
@@ -274,7 +259,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
             <p className="text-slate-400 text-sm">
               {selectedName
                 ? 'Generate and manage character sprites'
-                : 'Select a character to manage their sprites'}
+                : 'Select a character type or pet to manage their sprites'}
             </p>
           </div>
         </div>
@@ -295,21 +280,21 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
           </motion.div>
         )}
 
-        {/* Character Selection or Sprite Management */}
-        {!selectedChild && !selectedPet ? (
+        {/* Character/Pet Selection or Sprite Management */}
+        {!selectedCharacterType && !selectedPet ? (
           <>
             {/* Tabs */}
             <div className="flex gap-2 mb-6">
               <button
-                onClick={() => setActiveTab('children')}
+                onClick={() => setActiveTab('characters')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'children'
+                  activeTab === 'characters'
                     ? 'bg-cyan-500 text-white'
                     : 'bg-slate-800 text-slate-400 hover:text-white'
                 }`}
               >
                 <User className="w-4 h-4" />
-                Children ({children.length})
+                Character Types ({CHARACTER_TYPES.length})
               </button>
               <button
                 onClick={() => setActiveTab('pets')}
@@ -324,24 +309,24 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
               </button>
             </div>
 
-            {/* Character List */}
+            {/* Selection Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {activeTab === 'children' &&
-                children.map((child) => (
+              {activeTab === 'characters' &&
+                CHARACTER_TYPES.map((character) => (
                   <motion.button
-                    key={child.id}
+                    key={character.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    onClick={() => setSelectedChild(child)}
-                    className="bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/50 rounded-xl p-4 text-left transition-colors"
+                    onClick={() => setSelectedCharacterType(character.id)}
+                    className="bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/50 rounded-xl p-6 text-left transition-colors"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-cyan-400" />
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center text-3xl">
+                        {character.icon}
                       </div>
                       <div>
-                        <h3 className="font-medium text-white">{child.name}</h3>
-                        <p className="text-sm text-slate-400">Age {child.age}</p>
+                        <h3 className="font-medium text-white text-lg">{character.displayName}</h3>
+                        <p className="text-sm text-slate-400">Character sprites</p>
                       </div>
                     </div>
                   </motion.button>
@@ -376,13 +361,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                   </motion.button>
                 ))}
 
-              {activeTab === 'children' && children.length === 0 && (
-                <div className="col-span-full text-center py-12 text-slate-500">
-                  <User className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No children profiles found</p>
-                </div>
-              )}
-
               {activeTab === 'pets' && pets.length === 0 && (
                 <div className="col-span-full text-center py-12 text-slate-500">
                   <Cat className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -390,12 +368,28 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 </div>
               )}
             </div>
+
+            {/* Info box about character sprites */}
+            {activeTab === 'characters' && (
+              <div className="mt-6 p-4 bg-slate-800/30 border border-slate-700/50 rounded-xl">
+                <p className="text-sm text-slate-400">
+                  <strong className="text-slate-300">Note:</strong> Character sprites are shared across all children
+                  who select that character type. Generate sprites once per character type, and they'll be used
+                  for all children with that selection.
+                </p>
+              </div>
+            )}
           </>
         ) : (
           <>
             {/* Sprite Management */}
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
+                {selectedCharacterType && (
+                  <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center text-3xl border-2 border-cyan-500">
+                    {CHARACTER_TYPES.find(c => c.id === selectedCharacterType)?.icon}
+                  </div>
+                )}
                 {selectedPet?.avatar_url && (
                   <img
                     src={selectedPet.avatar_url}
@@ -403,9 +397,9 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                     className="w-16 h-16 rounded-full object-cover border-2 border-purple-500"
                   />
                 )}
-                {selectedChild && (
-                  <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center border-2 border-cyan-500">
-                    <User className="w-8 h-8 text-cyan-400" />
+                {selectedPet && !selectedPet.avatar_url && (
+                  <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center border-2 border-purple-500">
+                    <Cat className="w-8 h-8 text-purple-400" />
                   </div>
                 )}
               </div>
@@ -420,7 +414,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 </button>
                 <button
                   onClick={handleGenerateAll}
-                  disabled={generatingAll || !selectedPet?.avatar_url && !selectedChild}
+                  disabled={generatingAll}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   {generatingAll ? (

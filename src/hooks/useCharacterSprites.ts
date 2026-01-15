@@ -17,7 +17,10 @@ interface UseCharacterSpritesReturn {
 
 /**
  * Hook for loading and managing character sprites for overlay compositing.
- * Fetches sprite URLs for both child and pet characters.
+ * Fetches sprite URLs for both child character type and pet.
+ *
+ * Note: Child sprites are shared across all children with the same characterId (boy/girl).
+ * Pet sprites are per-pet based on their unique avatar.
  */
 export function useCharacterSprites({ child, pet }: UseCharacterSpritesOptions): UseCharacterSpritesReturn {
   const [childSprites, setChildSprites] = useState<SpriteMap>({});
@@ -57,9 +60,11 @@ export function useCharacterSprites({ child, pet }: UseCharacterSpritesOptions):
     }, {} as SpriteMap);
   };
 
-  // Load all sprites for current child and pet
+  // Load all sprites for current child's character type and pet
   const refreshSprites = useCallback(async () => {
-    if (!child?.id || !pet?.id) {
+    // Use child.characterId for child sprites (shared across all children of same type)
+    // Use pet.id for pet sprites (unique per pet)
+    if (!child?.characterId || !pet?.id) {
       return;
     }
 
@@ -67,9 +72,9 @@ export function useCharacterSprites({ child, pet }: UseCharacterSpritesOptions):
     setError(null);
 
     try {
-      // Fetch child and pet sprites in parallel
+      // Fetch child (by characterId) and pet sprites in parallel
       const [childSpritesList, petSpritesList] = await Promise.all([
-        fetchSprites('child', child.id),
+        fetchSprites('child', child.characterId),
         fetchSprites('pet', pet.id),
       ]);
 
@@ -80,18 +85,18 @@ export function useCharacterSprites({ child, pet }: UseCharacterSpritesOptions):
     } finally {
       setIsLoading(false);
     }
-  }, [child?.id, pet?.id, fetchSprites]);
+  }, [child?.characterId, pet?.id, fetchSprites]);
 
-  // Load sprites when child or pet changes
+  // Load sprites when child's character type or pet changes
   useEffect(() => {
-    if (child?.id && pet?.id) {
+    if (child?.characterId && pet?.id) {
       refreshSprites();
     } else {
       // Clear sprites if no child or pet
       setChildSprites({});
       setPetSprites({});
     }
-  }, [child?.id, pet?.id, refreshSprites]);
+  }, [child?.characterId, pet?.id, refreshSprites]);
 
   return {
     childSprites,
