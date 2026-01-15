@@ -60,12 +60,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     petNameAudioUrl,
   });
 
-  // Fetch pet audio URL on mount
+  // Fetch pet audio URL based on the story arc's pet (not the current active pet)
+  const storyPetId = child?.currentStoryArc?.petId ?? child?.activePetId;
   useEffect(() => {
-    if (child?.activePetId) {
-      getPetAudioUrl(child.activePetId).then(setPetNameAudioUrl);
+    if (storyPetId) {
+      getPetAudioUrl(storyPetId).then(setPetNameAudioUrl);
     }
-  }, [child?.activePetId]);
+  }, [storyPetId]);
 
   // Get or create story arc
   useEffect(() => {
@@ -97,7 +98,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;
   const currentChapter = child?.currentStoryArc?.chapters[chapterIndex] ?? null;
 
-  const pet = child ? getPetById(child.activePetId) : null;
+  // Use the story arc's pet, falling back to active pet for new stories
+  const pet = storyPetId ? getPetById(storyPetId) : null;
 
   // Generate images for the current chapter
   useEffect(() => {
