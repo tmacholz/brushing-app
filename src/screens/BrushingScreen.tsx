@@ -31,7 +31,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
-  const { getStoriesForWorld } = useContent();
+  const { getStoriesForWorld, getStoryById } = useContent();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
@@ -306,11 +306,27 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     };
   }, [stopSpeaking, stopSplicedAudio]);
 
+  // Backfill background music URL for existing story arcs that don't have it
+  useEffect(() => {
+    if (!child?.currentStoryArc) return;
+    if (child.currentStoryArc.backgroundMusicUrl) return; // Already has music URL
+
+    // Look up the story template to get the music URL
+    const storyTemplate = getStoryById(child.currentStoryArc.storyTemplateId);
+    if (storyTemplate?.backgroundMusicUrl) {
+      console.log('[BrushingScreen] Backfilling background music URL from template:', storyTemplate.backgroundMusicUrl);
+      // Update the story arc with the music URL
+      setCurrentStoryArc({
+        ...child.currentStoryArc,
+        backgroundMusicUrl: storyTemplate.backgroundMusicUrl,
+      });
+    }
+  }, [child?.currentStoryArc, getStoryById, setCurrentStoryArc]);
+
   // Background music playback
   useEffect(() => {
     const musicUrl = child?.currentStoryArc?.backgroundMusicUrl;
     console.log('[BrushingScreen] Background music URL:', musicUrl);
-    console.log('[BrushingScreen] Story arc:', child?.currentStoryArc?.title, child?.currentStoryArc);
 
     if (!musicUrl) {
       console.log('[BrushingScreen] No background music URL found');
