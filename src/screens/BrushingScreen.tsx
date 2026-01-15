@@ -101,6 +101,17 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Use the story arc's pet, falling back to active pet for new stories
   const pet = storyPetId ? getPetById(storyPetId) : null;
 
+  // Debug: log pet lookup details
+  useEffect(() => {
+    console.log('[BrushingScreen] Pet lookup debug:', {
+      storyArcPetId: child?.currentStoryArc?.petId,
+      activePetId: child?.activePetId,
+      resolvedStoryPetId: storyPetId,
+      foundPet: pet?.id,
+      petDisplayName: pet?.displayName,
+    });
+  }, [child?.currentStoryArc?.petId, child?.activePetId, storyPetId, pet]);
+
   // Generate images for the current chapter
   useEffect(() => {
     console.log('[BrushingScreen] Image generation effect running', {
