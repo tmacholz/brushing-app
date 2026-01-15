@@ -1,33 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../../lib/db.js';
 import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../../../lib/ai.js';
+import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
-// Helper to generate world image
+// Helper to generate world image (calls the shared function directly)
 async function generateWorldImage(worldId: string, worldName: string, worldDescription: string, theme?: string): Promise<string | null> {
   try {
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
-    const response = await fetch(`${baseUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'worldImage',
-        worldId,
-        worldName,
-        worldDescription,
-        theme,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('Failed to generate world image:', await response.text());
-      return null;
-    }
-
-    const data = await response.json();
-    return data.imageUrl;
+    return await generateWorldImageDirect(worldId, worldName, worldDescription, theme);
   } catch (error) {
     console.error('Error generating world image:', error);
     return null;
