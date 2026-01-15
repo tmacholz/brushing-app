@@ -15,9 +15,6 @@ interface UseCharacterSpritesReturn {
   refreshSprites: () => Promise<void>;
 }
 
-// API base URL for fetching sprites
-const API_BASE = '/api';
-
 /**
  * Hook for loading and managing character sprites for overlay compositing.
  * Fetches sprite URLs for both child and pet characters.
@@ -34,7 +31,7 @@ export function useCharacterSprites({ child, pet }: UseCharacterSpritesOptions):
   // Fetch sprites for a specific character
   const fetchSprites = useCallback(async (ownerType: 'child' | 'pet', ownerId: string): Promise<CharacterSprite[]> => {
     try {
-      const response = await fetch(`${API_BASE}/sprites?ownerType=${ownerType}&ownerId=${ownerId}`);
+      const response = await fetch(`/api/admin/characters?entity=sprites&ownerType=${ownerType}&ownerId=${ownerId}`);
       if (!response.ok) {
         // If sprites don't exist yet, return empty array (not an error)
         if (response.status === 404) {

@@ -45,7 +45,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
 
   const fetchPoses = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/poses');
+      const res = await fetch('/api/admin/characters?entity=poses');
       if (!res.ok) throw new Error('Failed to fetch poses');
       const data = await res.json();
       setPoses(data.poses);
@@ -66,7 +66,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
 
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/poses', {
+      const res = await fetch('/api/admin/characters?entity=poses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -96,7 +96,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
   const handleUpdatePose = async (pose: PoseDefinition) => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/poses', {
+      const res = await fetch('/api/admin/characters?entity=poses', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,7 +122,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
     if (!confirm('Are you sure you want to delete this pose?')) return;
 
     try {
-      const res = await fetch(`/api/admin/poses?id=${poseId}`, {
+      const res = await fetch(`/api/admin/characters?entity=poses?id=${poseId}`, {
         method: 'DELETE',
       });
 

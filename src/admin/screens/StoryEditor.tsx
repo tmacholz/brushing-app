@@ -82,10 +82,11 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
   const handleGenerateAudio = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/admin/generate-segment-audio', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          type: 'segmentAudio',
           segmentId: segment.id,
           text: segment.text,
           storyId,

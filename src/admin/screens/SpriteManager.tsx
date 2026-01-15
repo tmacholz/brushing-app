@@ -89,7 +89,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     setLoadingSprites(true);
     try {
       const res = await fetch(
-        `/api/admin/sprites?ownerType=${ownerType}&ownerId=${ownerId}`
+        `/api/admin/characters?entity=sprites?ownerType=${ownerType}&ownerId=${ownerId}`
       );
       if (!res.ok) throw new Error('Failed to fetch sprites');
       const data = await res.json();
@@ -134,7 +134,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
 
     setGeneratingPose(poseKey);
     try {
-      const res = await fetch('/api/admin/sprites', {
+      const res = await fetch('/api/admin/characters?entity=sprites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -179,7 +179,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
 
     setGeneratingAll(true);
     try {
-      const res = await fetch('/api/admin/sprites', {
+      const res = await fetch('/api/admin/characters?entity=sprites', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -214,7 +214,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
 
     try {
       const res = await fetch(
-        `/api/admin/sprites?ownerType=${ownerType}&ownerId=${ownerId}`,
+        `/api/admin/characters?entity=sprites?ownerType=${ownerType}&ownerId=${ownerId}`,
         { method: 'DELETE' }
       );
 
