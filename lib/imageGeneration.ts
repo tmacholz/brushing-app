@@ -144,6 +144,8 @@ REQUIREMENTS:
     { text: prompt },
   ];
 
-  const result = await generateAndUpload(parts, `world-images/${worldId}.png`);
+  // Use timestamp in storage key to ensure unique URL on regeneration (avoids browser caching)
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `world-images/${worldId}-${timestamp}.png`);
   return result.url;
 }
