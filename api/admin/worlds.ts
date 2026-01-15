@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../lib/db.js';
 import { generateWorld } from '../../lib/ai.js';
+import { generateWorldImageDirect } from '../../lib/imageGeneration.js';
+
+// Helper to generate world image (calls the shared function directly)
+async function generateWorldImage(worldId: string, worldName: string, worldDescription: string, theme?: string): Promise<string | null> {
+  try {
+    return await generateWorldImageDirect(worldId, worldName, worldDescription, theme);
+  } catch (error) {
+    console.error('Error generating world image:', error);
+    return null;
+  }
+}
 
 // GET /api/admin/worlds - List all worlds
 // POST /api/admin/worlds - Create world or generate with AI
@@ -29,7 +40,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Generate world with AI
     if (action === 'generate') {
       try {
-        const world = await generateWorld();
+        const worldData = await generateWorld();
+
+        // Insert the world first
+        const [world] = await sql`
+          INSERT INTO worlds (name, display_name, description, theme, unlock_cost, is_starter)
+          VALUES (${worldData.name}, ${worldData.displayName}, ${worldData.description}, ${worldData.theme || null}, ${0}, ${false})
+          RETURNING *
+        `;
+
+        // Auto-generate world image in the background
+        generateWorldImage(world.id, worldData.displayName, worldData.description, worldData.theme).then(async (imageUrl) => {
+          if (imageUrl) {
+            await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
+          }
+        });
+
         return res.status(200).json({ world });
       } catch (error) {
         console.error('Error generating world:', error);
@@ -48,6 +74,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         VALUES (${name}, ${displayName}, ${description}, ${theme || null}, ${unlockCost || 0}, ${isStarter || false})
         RETURNING *
       `;
+
+      // Auto-generate world image in the background
+      generateWorldImage(world.id, displayName, description, theme || undefined).then(async (imageUrl) => {
+        if (imageUrl) {
+          await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
+        }
+      });
+
       return res.status(201).json({ world });
     } catch (error) {
       console.error('Error creating world:', error);

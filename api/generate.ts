@@ -254,6 +254,95 @@ IMPORTANT:
   return res.status(200).json({ avatarUrl: result.url, type: 'pet', ...(result.isDataUrl && { warning: 'Using data URL fallback' }) });
 }
 
+// World image generation
+interface WorldImageRequest {
+  type: 'worldImage';
+  worldId: string;
+  worldName: string;
+  worldDescription: string;
+  theme?: string;
+}
+
+async function handleWorldImage(req: WorldImageRequest, res: VercelResponse) {
+  const { worldId, worldName, worldDescription, theme } = req;
+
+  if (!worldId || !worldName || !worldDescription) {
+    return res.status(400).json({ error: 'Missing required fields: worldId, worldName, worldDescription' });
+  }
+
+  // Determine the central image based on the theme/name
+  const themeIconMap: Record<string, string> = {
+    'magical-forest': 'a majestic glowing tree with magical sparkles',
+    'space': 'a sleek futuristic spaceship with glowing engines',
+    'underwater': 'a beautiful coral castle with swimming fish',
+    'dinosaurs': 'a friendly dinosaur silhouette',
+    'pirates': 'a pirate ship with billowing sails',
+  };
+
+  // Try to infer the theme from the world name/description if not explicitly set
+  let centralImage = 'a magical glowing symbol representing the theme';
+  if (theme && themeIconMap[theme]) {
+    centralImage = themeIconMap[theme];
+  } else {
+    // Try to match based on world name/description
+    const nameAndDesc = `${worldName} ${worldDescription}`.toLowerCase();
+    if (nameAndDesc.includes('forest') || nameAndDesc.includes('tree') || nameAndDesc.includes('magic')) {
+      centralImage = themeIconMap['magical-forest'];
+    } else if (nameAndDesc.includes('space') || nameAndDesc.includes('star') || nameAndDesc.includes('galaxy') || nameAndDesc.includes('rocket')) {
+      centralImage = themeIconMap['space'];
+    } else if (nameAndDesc.includes('underwater') || nameAndDesc.includes('ocean') || nameAndDesc.includes('sea') || nameAndDesc.includes('fish')) {
+      centralImage = themeIconMap['underwater'];
+    } else if (nameAndDesc.includes('dinosaur') || nameAndDesc.includes('dino') || nameAndDesc.includes('prehistoric')) {
+      centralImage = themeIconMap['dinosaurs'];
+    } else if (nameAndDesc.includes('pirate') || nameAndDesc.includes('ship') || nameAndDesc.includes('treasure')) {
+      centralImage = themeIconMap['pirates'];
+    } else if (nameAndDesc.includes('castle') || nameAndDesc.includes('kingdom')) {
+      centralImage = 'a majestic castle with towers and flags';
+    } else if (nameAndDesc.includes('dragon')) {
+      centralImage = 'a friendly dragon curled around a glowing crystal';
+    } else if (nameAndDesc.includes('fairy') || nameAndDesc.includes('pixie')) {
+      centralImage = 'sparkling fairy wings with magical dust';
+    } else if (nameAndDesc.includes('robot') || nameAndDesc.includes('machine')) {
+      centralImage = 'a friendly robot with glowing eyes';
+    } else if (nameAndDesc.includes('candy') || nameAndDesc.includes('sweet')) {
+      centralImage = 'colorful candy swirls and lollipops';
+    } else if (nameAndDesc.includes('cloud') || nameAndDesc.includes('sky')) {
+      centralImage = 'fluffy clouds with a rainbow';
+    } else if (nameAndDesc.includes('cave') || nameAndDesc.includes('crystal') || nameAndDesc.includes('gem')) {
+      centralImage = 'glowing crystals and gems';
+    } else if (nameAndDesc.includes('jungle') || nameAndDesc.includes('safari')) {
+      centralImage = 'tropical leaves with exotic birds';
+    } else if (nameAndDesc.includes('snow') || nameAndDesc.includes('ice') || nameAndDesc.includes('winter')) {
+      centralImage = 'sparkling snowflakes and icicles';
+    }
+  }
+
+  const prompt = `${STYLE_PREFIX}
+
+Create a circular planet-like world icon for a children's app. This represents "${worldName}" - ${worldDescription}.
+
+REQUIREMENTS:
+- The image should look like a floating spherical planet viewed from space
+- The planet should have a gentle 3D spherical appearance with soft lighting from the top-left
+- In the CENTER of the planet, feature: ${centralImage}
+- The planet surface should have colors and textures that match the theme
+- Add a soft glowing aura around the planet
+- The background should be transparent or a very dark space-like gradient
+- Style should be whimsical, magical, and appealing to children ages 4-8
+- The planet should feel like a portal to an adventure world
+- Use vibrant but soft colors
+- NO text or labels in the image
+- The central icon should be clearly visible and recognizable
+- Add subtle sparkles or magical particles around the planet`;
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [
+    { text: prompt },
+  ];
+
+  const result = await generateAndUpload(parts, `world-images/${worldId}.png`);
+  return res.status(200).json({ imageUrl: result.url, worldId });
+}
+
 // Name audio generation (child or pet name TTS)
 interface NameAudioRequest {
   type: 'nameAudio';
@@ -426,8 +515,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleNameAudio(req.body, res);
       case 'backgroundMusic':
         return handleBackgroundMusic(req.body, res);
+      case 'worldImage':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return handleWorldImage(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, or backgroundMusic' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, or worldImage' });
     }
   } catch (error) {
     console.error('Generation error:', error);
