@@ -12,17 +12,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
-    // PUT - Update segment
+    // PUT - Update segment (narration and/or image)
     if (req.method === 'PUT') {
-      const { narrationSequence } = req.body;
-      console.log('Updating segment:', segmentId, 'narrationSequence items:', narrationSequence?.length ?? 0);
+      const { narrationSequence, imageUrl } = req.body;
+      console.log('Updating segment:', segmentId, {
+        narrationSequence: narrationSequence?.length ?? 'not provided',
+        imageUrl: imageUrl ? 'provided' : 'not provided'
+      });
+
       try {
-        const [segment] = await sql`
-          UPDATE segments SET
-            narration_sequence = ${narrationSequence ? JSON.stringify(narrationSequence) : null}
-          WHERE id = ${segmentId} RETURNING *
-        `;
-        console.log('Segment updated:', segment?.id, 'narration_sequence items:', segment?.narration_sequence?.length ?? 0);
+        // Build dynamic update based on what's provided
+        let segment;
+        if (narrationSequence !== undefined && imageUrl !== undefined) {
+          [segment] = await sql`
+            UPDATE segments SET
+              narration_sequence = ${narrationSequence ? JSON.stringify(narrationSequence) : null},
+              image_url = ${imageUrl}
+            WHERE id = ${segmentId} RETURNING *
+          `;
+        } else if (narrationSequence !== undefined) {
+          [segment] = await sql`
+            UPDATE segments SET
+              narration_sequence = ${narrationSequence ? JSON.stringify(narrationSequence) : null}
+            WHERE id = ${segmentId} RETURNING *
+          `;
+        } else if (imageUrl !== undefined) {
+          [segment] = await sql`
+            UPDATE segments SET
+              image_url = ${imageUrl}
+            WHERE id = ${segmentId} RETURNING *
+          `;
+        } else {
+          return res.status(400).json({ error: 'No update data provided' });
+        }
+
+        console.log('Segment updated:', segment?.id);
         if (!segment) return res.status(404).json({ error: 'Segment not found' });
         return res.status(200).json({ segment });
       } catch (error) {

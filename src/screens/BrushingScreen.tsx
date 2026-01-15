@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, VolumeX, Pause, Play, X, Loader2 } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, X } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
@@ -14,7 +14,7 @@ import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { personalizeStory, rePersonalizeStoryArc } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
-import { generateImagesForChapter, type ImageGenerationProgress } from '../services/imageGeneration';
+// Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
 import type { CharacterPosition } from '../types';
 
@@ -31,7 +31,7 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, updateStoryImages } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
@@ -40,13 +40,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
-  const [isPreparingImages, setIsPreparingImages] = useState(true);
-  const [imageProgress, setImageProgress] = useState<ImageGenerationProgress | null>(null);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
-  const imageGenerationStarted = useRef(false);
   const lastSplicedSegmentRef = useRef<string | null>(null);
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
 
@@ -90,9 +87,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         );
         setCurrentStoryArc(storyArc);
       } else {
-        // No stories available for this world - skip loading and show error
+        // No stories available for this world
         console.warn('[BrushingScreen] No stories available for world:', child.activeWorldId);
-        setIsPreparingImages(false);
       }
     }
   }, [child, setCurrentStoryArc, getPetById, getStoriesForWorld]);
@@ -121,48 +117,18 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     });
   }, [child?.currentStoryArc?.petId, child?.activePetId, storyPetId, pet]);
 
-  // Generate images for the current chapter
+  // Images are now pre-generated in admin - log if any are missing
   useEffect(() => {
-    console.log('[BrushingScreen] Image generation effect running', {
-      hasStoryArc: !!child?.currentStoryArc,
-      alreadyStarted: imageGenerationStarted.current,
-    });
-
-    if (!child?.currentStoryArc || imageGenerationStarted.current) return;
+    if (!child?.currentStoryArc) return;
 
     const storyArc = child.currentStoryArc;
     const chapter = storyArc.chapters[storyArc.currentChapterIndex];
+    const missingImages = chapter?.segments.filter(s => !s.imageUrl).length || 0;
 
-    console.log('[BrushingScreen] Chapter:', storyArc.currentChapterIndex, 'Segments:', chapter?.segments?.length);
-
-    // Check if images already exist for this chapter
-    const hasAllImages = chapter?.segments.every(s => s.imageUrl);
-    console.log('[BrushingScreen] hasAllImages:', hasAllImages);
-    if (hasAllImages) {
-      setIsPreparingImages(false);
-      return;
+    if (missingImages > 0) {
+      console.warn(`[BrushingScreen] ${missingImages} segments missing images - generate them in admin`);
     }
-
-    imageGenerationStarted.current = true;
-    console.log('[BrushingScreen] Starting image generation...');
-
-    // Generate images in the background with character context for avatar consistency
-    generateImagesForChapter(
-      storyArc.currentChapterIndex,
-      storyArc,
-      (progress) => setImageProgress(progress),
-      child,
-      pet
-    ).then((imageUrlMap) => {
-      if (imageUrlMap.size > 0) {
-        updateStoryImages(imageUrlMap);
-      }
-      setIsPreparingImages(false);
-    }).catch((error) => {
-      console.error('Failed to generate images:', error);
-      setIsPreparingImages(false);
-    });
-  }, [child?.currentStoryArc, updateStoryImages, child, pet]);
+  }, [child?.currentStoryArc]);
 
   const handleBrushingComplete = async () => {
     if (!child) return;
@@ -435,9 +401,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [isRunning, showCountdown]);
 
-  // Countdown before starting (wait for images to be ready first)
+  // Countdown before starting
   useEffect(() => {
-    if (!showCountdown || isPreparingImages) return;
+    if (!showCountdown) return;
 
     // Play initial countdown sound
     playSound('countdown');
@@ -457,37 +423,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showCountdown, isPreparingImages, start, playSound]);
-
-  // Render image preparation screen
-  if (isPreparingImages) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-            className="mb-6"
-          >
-            <Loader2 className="w-16 h-16 text-white" />
-          </motion.div>
-          <p className="text-white text-xl mb-2">Preparing your adventure...</p>
-          {imageProgress && (
-            <p className="text-white/60 text-sm">
-              Creating scene {imageProgress.completed + 1} of {imageProgress.total}
-            </p>
-          )}
-        </motion.div>
-      </div>
-    );
-  }
+  }, [showCountdown, start, playSound]);
 
   // Render error if no story is available
-  if (!currentChapter && !isPreparingImages) {
+  if (!currentChapter) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
         <motion.div

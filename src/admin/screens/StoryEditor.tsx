@@ -17,6 +17,8 @@ import {
   Mic,
   Music,
   Wand2,
+  Image,
+  RefreshCw,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -201,6 +203,128 @@ function SegmentAudioEditor({ segment, storyId, chapterNumber, onUpdate }: Segme
   );
 }
 
+// Component for managing image on a single segment
+interface SegmentImageEditorProps {
+  segment: Segment;
+  storyId: string;
+  previousImageUrl?: string | null;
+  onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
+}
+
+function SegmentImageEditor({ segment, storyId, previousImageUrl, onUpdate }: SegmentImageEditorProps) {
+  const [generating, setGenerating] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const hasImage = !!segment.image_url;
+  const hasPrompt = !!segment.image_prompt;
+
+  const handleGenerateImage = async () => {
+    if (!segment.image_prompt) {
+      alert('No image prompt for this segment');
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'image',
+          prompt: segment.image_prompt,
+          segmentId: segment.id,
+          referenceImageUrl: previousImageUrl || undefined,
+          // Don't include characters - using overlay system instead
+          includeUser: false,
+          includePet: false,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+
+      const data = await res.json();
+      console.log('Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
+
+      // Save to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.imageUrl }),
+      });
+
+      if (!saveRes.ok) {
+        const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to save image URL to database:', saveError);
+        throw new Error(`Failed to save: ${saveError.details || saveError.error}`);
+      }
+
+      onUpdate(segment.id, { image_url: data.imageUrl });
+    } catch (error) {
+      console.error('Failed to generate image:', error);
+      alert('Failed to generate image. Check console for details.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  if (!hasPrompt) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-2 flex-wrap">
+      {/* Generate/Regenerate Image Button */}
+      <button
+        onClick={handleGenerateImage}
+        disabled={generating}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {generating ? (
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+        ) : hasImage ? (
+          <RefreshCw className="w-3.5 h-3.5" />
+        ) : (
+          <Image className="w-3.5 h-3.5" />
+        )}
+        {hasImage ? 'Regenerate Image' : 'Generate Image'}
+      </button>
+
+      {/* Preview Button */}
+      {hasImage && (
+        <button
+          onClick={() => setShowPreview(!showPreview)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          {showPreview ? 'Hide' : 'Preview'}
+        </button>
+      )}
+
+      {/* Image status indicator */}
+      {hasImage && (
+        <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
+          <CheckCircle className="w-3 h-3" />
+          Image ready
+        </span>
+      )}
+
+      {/* Image Preview */}
+      {showPreview && segment.image_url && (
+        <div className="w-full mt-2">
+          <img
+            src={segment.image_url}
+            alt="Scene preview"
+            className="w-full max-w-md rounded-lg border border-slate-600"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,6 +340,10 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const musicAudioRef = useRef<HTMLAudioElement>(null);
+
+  // Chapter image generation state
+  const [generatingImagesForChapter, setGeneratingImagesForChapter] = useState<string | null>(null);
+  const [imageGenProgress, setImageGenProgress] = useState<{ current: number; total: number } | null>(null);
 
   const fetchStory = useCallback(async () => {
     try {
@@ -383,7 +511,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     }
   };
 
-  // Update a segment in local state after audio changes
+  // Update a segment in local state after audio/image changes
   const handleSegmentUpdate = useCallback((segmentId: string, updates: Partial<Segment>) => {
     setStory((prev) => {
       if (!prev) return prev;
@@ -398,6 +526,63 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       };
     });
   }, []);
+
+  // Generate all images for a chapter
+  const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
+    const segmentsWithPrompts = chapter.segments.filter(s => s.image_prompt);
+    if (segmentsWithPrompts.length === 0) {
+      alert('No segments with image prompts in this chapter');
+      return;
+    }
+
+    setGeneratingImagesForChapter(chapter.id);
+    setImageGenProgress({ current: 0, total: segmentsWithPrompts.length });
+
+    let previousImageUrl: string | null = null;
+
+    for (let i = 0; i < segmentsWithPrompts.length; i++) {
+      const segment = segmentsWithPrompts[i];
+      setImageGenProgress({ current: i + 1, total: segmentsWithPrompts.length });
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'image',
+            prompt: segment.image_prompt,
+            segmentId: segment.id,
+            referenceImageUrl: previousImageUrl || undefined,
+            includeUser: false,
+            includePet: false,
+          }),
+        });
+
+        if (!res.ok) {
+          const error = await res.text();
+          console.error(`Failed to generate image for segment ${segment.id}:`, error);
+          continue;
+        }
+
+        const data = await res.json();
+
+        // Save to database
+        await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: data.imageUrl }),
+        });
+
+        handleSegmentUpdate(segment.id, { image_url: data.imageUrl });
+        previousImageUrl = data.imageUrl;
+      } catch (error) {
+        console.error(`Error generating image for segment ${segment.id}:`, error);
+      }
+    }
+
+    setGeneratingImagesForChapter(null);
+    setImageGenProgress(null);
+  }, [storyId, handleSegmentUpdate]);
 
   if (loading) {
     return (
@@ -623,6 +808,35 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                         </div>
                       )}
 
+                      {/* Chapter Actions - Generate All Images */}
+                      <div className="mb-4 flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => handleGenerateChapterImages(chapter)}
+                          disabled={generatingImagesForChapter === chapter.id}
+                          className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {generatingImagesForChapter === chapter.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Image className="w-4 h-4" />
+                          )}
+                          {chapter.segments.every(s => s.image_url) ? 'Regenerate All Images' : 'Generate All Images'}
+                        </button>
+
+                        {generatingImagesForChapter === chapter.id && imageGenProgress && (
+                          <span className="text-sm text-slate-400">
+                            Generating image {imageGenProgress.current} of {imageGenProgress.total}...
+                          </span>
+                        )}
+
+                        {/* Image status summary */}
+                        {!generatingImagesForChapter && (
+                          <span className="ml-auto text-xs text-slate-500">
+                            {chapter.segments.filter(s => s.image_url).length}/{chapter.segments.length} images ready
+                          </span>
+                        )}
+                      </div>
+
                       {/* Segments */}
                       <div className="space-y-4">
                         {chapter.segments.map((segment, idx) => (
@@ -668,6 +882,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               segment={segment}
                               storyId={storyId}
                               chapterNumber={chapter.chapter_number}
+                              onUpdate={handleSegmentUpdate}
+                            />
+
+                            {/* Image Editor */}
+                            <SegmentImageEditor
+                              segment={segment}
+                              storyId={storyId}
+                              previousImageUrl={idx > 0 ? chapter.segments[idx - 1].image_url : null}
                               onUpdate={handleSegmentUpdate}
                             />
                           </div>
