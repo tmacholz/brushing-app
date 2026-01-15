@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -12,13 +12,9 @@ import {
   RefreshCw,
   Image,
   Trash2,
+  Upload,
 } from 'lucide-react';
-
-// Character types available for children
-const CHARACTER_TYPES = [
-  { id: 'boy', displayName: 'Boy', icon: '👦' },
-  { id: 'girl', displayName: 'Girl', icon: '👧' },
-] as const;
+import { characters, type Character } from '../../data/characters';
 
 interface Pet {
   id: string;
@@ -53,6 +49,8 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
   const [loadingSprites, setLoadingSprites] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [generatingPose, setGeneratingPose] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch pets
   const fetchData = useCallback(async () => {
@@ -100,16 +98,63 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     }
   }, [selectedCharacterType, selectedPet, fetchSprites]);
 
+  // Get the selected character from the characters data
+  const getSelectedCharacter = (): Character | undefined => {
+    if (selectedCharacterType) {
+      return characters.find(c => c.id === selectedCharacterType);
+    }
+    return undefined;
+  };
+
   // Get the source avatar URL for sprite generation
   const getSourceAvatarUrl = (): string | null => {
     if (selectedCharacterType) {
-      // Character templates stored in public folder or Vercel Blob
-      // For now, use a placeholder - you'll need to upload these images
-      return `/characters/${selectedCharacterType}-avatar.png`;
+      const character = getSelectedCharacter();
+      return character?.avatarUrl || null;
     } else if (selectedPet?.avatar_url) {
       return selectedPet.avatar_url;
     }
     return null;
+  };
+
+  // State for showing upload success
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null);
+
+  // Handle avatar upload for characters
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedCharacterType) return;
+
+    setUploadingAvatar(true);
+    setError(null);
+    setUploadedAvatarUrl(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('characterId', selectedCharacterType);
+
+      const res = await fetch('/api/admin/characters?entity=avatar', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upload avatar');
+      }
+
+      // Show the new URL to the user
+      setUploadedAvatarUrl(data.avatarUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload avatar');
+    } finally {
+      setUploadingAvatar(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
   // Generate single sprite
@@ -230,8 +275,9 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     );
   }
 
+  const selectedCharacter = getSelectedCharacter();
   const selectedName = selectedCharacterType
-    ? CHARACTER_TYPES.find(c => c.id === selectedCharacterType)?.displayName
+    ? selectedCharacter?.displayName
     : selectedPet?.display_name;
 
   return (
@@ -280,6 +326,42 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
           </motion.div>
         )}
 
+        {uploadedAvatarUrl && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 mb-6"
+          >
+            <p className="text-green-400 font-medium mb-2">Avatar uploaded successfully!</p>
+            <div className="flex items-center gap-4 mb-3">
+              <img
+                src={uploadedAvatarUrl}
+                alt="Uploaded avatar"
+                className="w-16 h-16 rounded-full object-cover border-2 border-green-500"
+              />
+              <div className="flex-1">
+                <p className="text-sm text-slate-300 mb-1">New avatar URL:</p>
+                <input
+                  type="text"
+                  readOnly
+                  value={uploadedAvatarUrl}
+                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-300 font-mono"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mb-2">
+              Update <code className="bg-slate-700 px-1 rounded">src/data/characters.ts</code> with this URL to make it permanent.
+            </p>
+            <button
+              onClick={() => setUploadedAvatarUrl(null)}
+              className="text-green-300 text-sm underline"
+            >
+              Dismiss
+            </button>
+          </motion.div>
+        )}
+
         {/* Character/Pet Selection or Sprite Management */}
         {!selectedCharacterType && !selectedPet ? (
           <>
@@ -294,7 +376,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 }`}
               >
                 <User className="w-4 h-4" />
-                Character Types ({CHARACTER_TYPES.length})
+                Character Types ({characters.length})
               </button>
               <button
                 onClick={() => setActiveTab('pets')}
@@ -312,7 +394,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
             {/* Selection Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {activeTab === 'characters' &&
-                CHARACTER_TYPES.map((character) => (
+                characters.map((character) => (
                   <motion.button
                     key={character.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -321,9 +403,17 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                     className="bg-slate-800/50 border border-slate-700/50 hover:border-cyan-500/50 rounded-xl p-6 text-left transition-colors"
                   >
                     <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center text-3xl">
-                        {character.icon}
-                      </div>
+                      {character.avatarUrl ? (
+                        <img
+                          src={character.avatarUrl}
+                          alt={character.displayName}
+                          className="w-16 h-16 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center">
+                          <User className="w-8 h-8 text-cyan-400" />
+                        </div>
+                      )}
                       <div>
                         <h3 className="font-medium text-white text-lg">{character.displayName}</h3>
                         <p className="text-sm text-slate-400">Character sprites</p>
@@ -384,12 +474,43 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
           <>
             {/* Sprite Management */}
             <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                {selectedCharacterType && (
-                  <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center text-3xl border-2 border-cyan-500">
-                    {CHARACTER_TYPES.find(c => c.id === selectedCharacterType)?.icon}
+              <div className="flex items-center gap-4">
+                {/* Character Avatar with Upload */}
+                {selectedCharacter && (
+                  <div className="relative group">
+                    {selectedCharacter.avatarUrl ? (
+                      <img
+                        src={selectedCharacter.avatarUrl}
+                        alt={selectedCharacter.displayName}
+                        className="w-16 h-16 rounded-full object-cover border-2 border-cyan-500"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-cyan-500/20 rounded-full flex items-center justify-center border-2 border-cyan-500">
+                        <User className="w-8 h-8 text-cyan-400" />
+                      </div>
+                    )}
+                    {/* Upload overlay */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingAvatar}
+                      className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      {uploadingAvatar ? (
+                        <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      ) : (
+                        <Upload className="w-5 h-5 text-white" />
+                      )}
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                    />
                   </div>
                 )}
+                {/* Pet Avatar */}
                 {selectedPet?.avatar_url && (
                   <img
                     src={selectedPet.avatar_url}
@@ -400,6 +521,13 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 {selectedPet && !selectedPet.avatar_url && (
                   <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center border-2 border-purple-500">
                     <Cat className="w-8 h-8 text-purple-400" />
+                  </div>
+                )}
+                {/* Avatar hint for characters */}
+                {selectedCharacter && (
+                  <div className="text-sm text-slate-400">
+                    <p className="font-medium text-slate-300">{selectedCharacter.displayName}</p>
+                    <p>Hover avatar to upload new image</p>
                   </div>
                 )}
               </div>
@@ -414,7 +542,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 </button>
                 <button
                   onClick={handleGenerateAll}
-                  disabled={generatingAll}
+                  disabled={generatingAll || !getSourceAvatarUrl()}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 text-white rounded-lg transition-colors"
                 >
                   {generatingAll ? (

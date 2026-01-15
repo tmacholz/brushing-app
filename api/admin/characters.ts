@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { put } from '@vercel/blob';
 import { getDb } from '../../lib/db.js';
 
 interface PoseDefinitionRow {
@@ -426,5 +427,90 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  return res.status(400).json({ error: 'Missing or invalid entity parameter. Use "poses" or "sprites"' });
+  // ==================== AVATAR UPLOAD ====================
+  if (entity === 'avatar') {
+    if (req.method === 'POST') {
+      try {
+        // For Vercel, we need to handle the raw body with Content-Type multipart/form-data
+        const contentType = req.headers['content-type'] || '';
+
+        if (!contentType.includes('multipart/form-data')) {
+          return res.status(400).json({ error: 'Content-Type must be multipart/form-data' });
+        }
+
+        // Parse multipart form data manually
+        const boundary = contentType.split('boundary=')[1];
+        if (!boundary) {
+          return res.status(400).json({ error: 'Missing boundary in Content-Type' });
+        }
+
+        // Get the raw body as a buffer
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        const body = Buffer.concat(chunks);
+        const bodyStr = body.toString('latin1');
+
+        // Extract characterId from form data
+        const characterIdMatch = bodyStr.match(/name="characterId"\r\n\r\n([^\r\n]+)/);
+        if (!characterIdMatch) {
+          return res.status(400).json({ error: 'Missing characterId field' });
+        }
+        const characterId = characterIdMatch[1].trim();
+
+        // Validate characterId
+        const validCharacterIds = ['boy', 'girl'];
+        if (!validCharacterIds.includes(characterId)) {
+          return res.status(400).json({ error: 'Invalid characterId. Must be "boy" or "girl"' });
+        }
+
+        // Extract file data
+        const fileHeaderMatch = bodyStr.match(/name="file".*?filename="([^"]+)".*?Content-Type:\s*([^\r\n]+)\r\n\r\n/s);
+        if (!fileHeaderMatch) {
+          return res.status(400).json({ error: 'Missing file field' });
+        }
+
+        const mimeType = fileHeaderMatch[2].trim();
+
+        // Find where the file content starts and ends
+        const fileContentStart = bodyStr.indexOf('\r\n\r\n', bodyStr.indexOf('filename="')) + 4;
+        const fileContentEnd = bodyStr.lastIndexOf(`\r\n--${boundary}`);
+
+        if (fileContentStart === -1 || fileContentEnd === -1) {
+          return res.status(400).json({ error: 'Could not parse file content' });
+        }
+
+        // Extract file buffer (use latin1 encoding to preserve binary data)
+        const fileBuffer = Buffer.from(bodyStr.slice(fileContentStart, fileContentEnd), 'latin1');
+
+        // Determine file extension from mime type
+        const ext = mimeType.includes('png') ? 'png' : mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'png';
+
+        // Upload to Vercel Blob
+        const storagePath = `character-avatars/character-${characterId}.${ext}`;
+        const blob = await put(storagePath, fileBuffer, {
+          access: 'public',
+          contentType: mimeType,
+          allowOverwrite: true,
+        });
+
+        console.log(`Uploaded character avatar for ${characterId}: ${blob.url}`);
+
+        return res.status(200).json({
+          success: true,
+          characterId,
+          avatarUrl: blob.url,
+          message: `Avatar uploaded successfully. Update src/data/characters.ts with this URL: ${blob.url}`,
+        });
+      } catch (error) {
+        console.error('Error uploading avatar:', error);
+        return res.status(500).json({ error: 'Failed to upload avatar' });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  return res.status(400).json({ error: 'Missing or invalid entity parameter. Use "poses", "sprites", or "avatar"' });
 }
