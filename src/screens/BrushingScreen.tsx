@@ -309,10 +309,17 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Background music playback
   useEffect(() => {
     const musicUrl = child?.currentStoryArc?.backgroundMusicUrl;
-    if (!musicUrl) return;
+    console.log('[BrushingScreen] Background music URL:', musicUrl);
+    console.log('[BrushingScreen] Story arc:', child?.currentStoryArc?.title, child?.currentStoryArc);
+
+    if (!musicUrl) {
+      console.log('[BrushingScreen] No background music URL found');
+      return;
+    }
 
     // Create audio element if it doesn't exist
     if (!backgroundMusicRef.current) {
+      console.log('[BrushingScreen] Creating audio element for:', musicUrl);
       backgroundMusicRef.current = new Audio(musicUrl);
       backgroundMusicRef.current.loop = true;
       backgroundMusicRef.current.volume = 0.15; // Low volume so narration is clear

@@ -30,11 +30,20 @@ export function ContentProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
 
         // Use database content directly (no static fallback)
+        console.log('[ContentContext] Received data:', data);
         if (data.worlds) {
+          console.log('[ContentContext] Worlds:', data.worlds.length);
           setWorlds(data.worlds);
         }
 
         if (data.storyTemplates) {
+          console.log('[ContentContext] Story templates:', data.storyTemplates);
+          // Log background music URLs
+          for (const stories of Object.values(data.storyTemplates)) {
+            for (const story of stories as any[]) {
+              console.log(`[ContentContext] Story "${story.title}" backgroundMusicUrl:`, story.backgroundMusicUrl);
+            }
+          }
           setStoryTemplates(data.storyTemplates);
         }
       } catch (err) {
