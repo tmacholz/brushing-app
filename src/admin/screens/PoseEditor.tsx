@@ -122,7 +122,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
     if (!confirm('Are you sure you want to delete this pose?')) return;
 
     try {
-      const res = await fetch(`/api/admin/characters?entity=poses?id=${poseId}`, {
+      const res = await fetch(`/api/admin/characters?entity=poses&id=${poseId}`, {
         method: 'DELETE',
       });
 
