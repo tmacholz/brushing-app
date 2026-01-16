@@ -243,15 +243,46 @@ interface SegmentImageEditorProps {
   storyId: string;
   previousImageUrl?: string | null;
   storyBible?: StoryBible | null;
+  references?: StoryReference[];
   onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
 }
 
-function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, onUpdate }: SegmentImageEditorProps) {
+function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, references, onUpdate }: SegmentImageEditorProps) {
   const [generating, setGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
   const hasImage = !!segment.image_url;
   const hasPrompt = !!segment.image_prompt;
+
+  // Find relevant visual references for this segment
+  const findRelevantReferences = () => {
+    if (!references || references.length === 0) return [];
+
+    // Only include references that have generated images
+    const refsWithImages = references.filter(r => r.image_url);
+    if (refsWithImages.length === 0) return [];
+
+    const searchText = `${segment.text} ${segment.image_prompt || ''}`.toLowerCase();
+
+    // Find references whose name appears in the segment text or image prompt
+    const relevantRefs = refsWithImages.filter(ref => {
+      // Extract key words from reference name (remove articles, common words)
+      const nameWords = ref.name.toLowerCase()
+        .replace(/^(the|a|an)\s+/i, '')
+        .split(/\s+/)
+        .filter(w => w.length > 2);
+
+      // Check if any significant word from the reference name appears in the segment
+      return nameWords.some(word => searchText.includes(word));
+    });
+
+    return relevantRefs.map(ref => ({
+      type: ref.type,
+      name: ref.name,
+      description: ref.description,
+      imageUrl: ref.image_url!,
+    }));
+  };
 
   const handleGenerateImage = async () => {
     if (!segment.image_prompt) {
@@ -261,6 +292,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
 
     setGenerating(true);
     try {
+      const visualReferences = findRelevantReferences();
+      console.log('[ImageGen] Segment regenerate: Found', visualReferences.length, 'relevant references:', visualReferences.map(r => r.name));
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -273,6 +307,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
           includeUser: false,
           includePet: false,
           storyBible: storyBible || undefined,
+          visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
         }),
       });
 
@@ -282,24 +317,28 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
       }
 
       const data = await res.json();
-      console.log('Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
+      console.log('[ImageGen] Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
 
       // Save to database
+      console.log('[ImageGen] Saving to database...');
       const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: data.imageUrl }),
       });
 
+      const saveData = await saveRes.json().catch(() => ({ error: 'Failed to parse response' }));
+      console.log('[ImageGen] Database save response:', saveRes.status, saveData);
+
       if (!saveRes.ok) {
-        const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to save image URL to database:', saveError);
-        throw new Error(`Failed to save: ${saveError.details || saveError.error}`);
+        console.error('[ImageGen] Failed to save image URL to database:', saveData);
+        throw new Error(`Failed to save: ${saveData.details || saveData.error}`);
       }
 
+      console.log('[ImageGen] Database save successful, updating UI state');
       onUpdate(segment.id, { image_url: data.imageUrl });
     } catch (error) {
-      console.error('Failed to generate image:', error);
+      console.error('[ImageGen] Failed to generate image:', error);
       alert('Failed to generate image. Check console for details.');
     } finally {
       setGenerating(false);
@@ -1879,6 +1918,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               storyId={storyId}
                               previousImageUrl={idx > 0 ? chapter.segments[idx - 1].image_url : null}
                               storyBible={story?.story_bible}
+                              references={story?.references}
                               onUpdate={handleSegmentUpdate}
                             />
                           </div>
