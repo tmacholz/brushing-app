@@ -277,7 +277,9 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   parts.push({ text: fullPrompt });
 
   const result = await generateAndUpload(parts, `story-images/${segmentId}.png`);
-  return res.status(200).json({ imageUrl: result.url, segmentId });
+  // Add cache-busting timestamp to force UI update on regeneration
+  const imageUrlWithCacheBust = `${result.url}?t=${Date.now()}`;
+  return res.status(200).json({ imageUrl: imageUrlWithCacheBust, segmentId });
 }
 
 // User avatar generation
