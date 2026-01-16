@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, type ExistingStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -99,7 +99,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Generate story pitches
       if (action === 'pitches') {
-        const pitches = await generateStoryPitches(world.display_name, world.description, Math.min(count, 5));
+        // Get existing stories in this world to avoid similar pitches
+        const existingStoriesRaw = await sql`SELECT title, description FROM stories WHERE world_id = ${id}`;
+        const existingStories: ExistingStory[] = existingStoriesRaw.map(s => ({
+          title: s.title,
+          description: s.description
+        }));
+
+        const pitches = await generateStoryPitches(world.display_name, world.description, Math.min(count, 5), existingStories);
         const savedPitches = [];
         for (const pitch of pitches) {
           const [saved] = await sql`
@@ -115,7 +122,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Generate outline from user idea
       if (action === 'outline') {
         if (!idea) return res.status(400).json({ error: 'Missing required field: idea' });
-        const pitch = await generateOutlineFromIdea(world.display_name, world.description, idea);
+
+        // Get existing stories in this world for context
+        const existingStoriesRaw = await sql`SELECT title, description FROM stories WHERE world_id = ${id}`;
+        const existingStories: ExistingStory[] = existingStoriesRaw.map(s => ({
+          title: s.title,
+          description: s.description
+        }));
+
+        const pitch = await generateOutlineFromIdea(world.display_name, world.description, idea, existingStories);
         const [saved] = await sql`
           INSERT INTO story_pitches (world_id, title, description, outline)
           VALUES (${id}, ${pitch.title}, ${pitch.description}, ${JSON.stringify(pitch.outline)})

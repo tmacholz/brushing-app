@@ -217,10 +217,28 @@ Be specific and detailed - this bible will be the source of truth for the entire
   return extractJson<StoryBible>(text);
 }
 
-export async function generateStoryPitches(worldName: string, worldDescription: string, count: number = 3): Promise<StoryPitch[]> {
+export interface ExistingStory {
+  title: string;
+  description: string;
+}
+
+export async function generateStoryPitches(
+  worldName: string,
+  worldDescription: string,
+  count: number = 3,
+  existingStories: ExistingStory[] = []
+): Promise<StoryPitch[]> {
+  const existingStoriesSection = existingStories.length > 0
+    ? `\nEXISTING STORIES IN THIS WORLD (generate stories that are DIFFERENT from these - avoid similar plots, themes, conflicts, and settings):
+${existingStories.map((s, i) => `${i + 1}. "${s.title}" - ${s.description}`).join('\n')}
+
+IMPORTANT: Each new story must have a DISTINCT premise, different conflict type, and explore different aspects of the world. Avoid rehashing similar adventures.`
+    : '';
+
   const prompt = `Generate ${count} unique story ideas for a children's toothbrushing app (ages 4-8).
 World: ${worldName} - ${worldDescription}
 Each story: 5-chapter adventure with [CHILD] and [PET] as main characters.
+${existingStoriesSection}
 Respond with ONLY a JSON array:
 [{"title": "Story Title", "description": "1-2 sentence hook", "outline": [{"chapter": 1, "title": "Ch Title", "summary": "Brief summary"}, ...for all 5 chapters]}]`;
 
@@ -228,11 +246,23 @@ Respond with ONLY a JSON array:
   return extractJson<StoryPitch[]>(text);
 }
 
-export async function generateOutlineFromIdea(worldName: string, worldDescription: string, userIdea: string): Promise<StoryPitch> {
+export async function generateOutlineFromIdea(
+  worldName: string,
+  worldDescription: string,
+  userIdea: string,
+  existingStories: ExistingStory[] = []
+): Promise<StoryPitch> {
+  const existingStoriesSection = existingStories.length > 0
+    ? `\nEXISTING STORIES IN THIS WORLD (ensure this new story is DIFFERENT from these):
+${existingStories.map((s, i) => `${i + 1}. "${s.title}" - ${s.description}`).join('\n')}
+`
+    : '';
+
   const prompt = `Create a 5-chapter story outline based on this idea for a children's toothbrushing app (ages 4-8).
 World: ${worldName} - ${worldDescription}
 User's idea: "${userIdea}"
 Features [CHILD] and [PET] as main characters.
+${existingStoriesSection}
 Respond with ONLY a JSON object:
 {"title": "Story Title", "description": "1-2 sentence hook", "outline": [{"chapter": 1, "title": "Ch Title", "summary": "Brief summary"}, ...for all 5 chapters]}`;
 
