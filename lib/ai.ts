@@ -491,21 +491,23 @@ ${allImagePrompts}
 CLIFFHANGERS:
 ${allCliffhangers}
 
-Extract the KEY VISUAL ELEMENTS that appear multiple times or are important to the story. Focus on elements that need to look consistent across different scenes.
+Extract the KEY VISUAL ELEMENTS that need to look consistent across different scenes.
+
+IMPORTANT: Pay special attention to the IMAGE PROMPTS above - these describe exactly what will appear in each illustration. Any characters, creatures, objects, or locations mentioned in the image prompts are HIGH PRIORITY for reference sheets since they will be directly illustrated.
 
 DO NOT INCLUDE:
 - [CHILD] or [PET] - these are the main characters handled separately
 - Generic background elements (sky, grass, trees unless they're special)
-- Single-use throwaway objects
+- Single-use throwaway objects that only appear once
 
-DO INCLUDE (up to 8 total, prioritize most important):
-1. CHARACTERS: NPCs, creatures, allies, or antagonists that appear in the story (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
-2. OBJECTS: Important recurring items (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
-3. LOCATIONS: Specific places that appear multiple times (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
+DO INCLUDE (up to 8 total, prioritize by frequency in image prompts):
+1. CHARACTERS: NPCs, creatures, allies, or antagonists mentioned in image prompts (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
+2. OBJECTS: Important items that appear in multiple image prompts (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
+3. LOCATIONS: Specific places described in image prompts (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
 
 For CHARACTERS, provide descriptions suitable for generating a CHARACTER REFERENCE SHEET (showing the character from multiple angles).
 
-Respond with ONLY a JSON array (max 8 items, sorted by importance):
+Respond with ONLY a JSON array (max 8 items, sorted by frequency in image prompts):
 [
   {
     "type": "character",
