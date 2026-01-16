@@ -127,6 +127,15 @@ async function generateAndUpload(
   return { url: `data:image/png;base64,${finalBase64}`, isDataUrl: true };
 }
 
+// Story Bible type for visual consistency
+interface StoryBible {
+  colorPalette?: string;
+  lightingStyle?: string;
+  artDirection?: string;
+  keyLocations?: { name: string; visualDescription: string; mood: string }[];
+  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+}
+
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
@@ -139,10 +148,11 @@ interface StoryImageRequest {
   includePet?: boolean;
   childName?: string;
   petName?: string;
+  storyBible?: StoryBible; // For visual consistency across all images
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
-  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName } = req;
+  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible } = req;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
@@ -188,6 +198,37 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
 
   // Build the complete prompt
   let fullPrompt = STYLE_PREFIX + '\n\n';
+
+  // Add Story Bible visual guidelines if provided
+  if (storyBible) {
+    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    if (storyBible.colorPalette) {
+      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+    }
+    if (storyBible.lightingStyle) {
+      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+    }
+    if (storyBible.artDirection) {
+      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+    }
+
+    // Add relevant location descriptions if any match the prompt
+    if (storyBible.keyLocations && storyBible.keyLocations.length > 0) {
+      fullPrompt += '\nKEY LOCATIONS (use these visual descriptions if the scene is in one of these places):\n';
+      storyBible.keyLocations.forEach(loc => {
+        fullPrompt += `- ${loc.name}: ${loc.visualDescription} (mood: ${loc.mood})\n`;
+      });
+    }
+
+    // Add recurring character appearances for consistency
+    if (storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
+      fullPrompt += '\nRECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
+      storyBible.recurringCharacters.forEach(char => {
+        fullPrompt += `- ${char.name}: ${char.visualDescription}\n`;
+      });
+    }
+    fullPrompt += '\n';
+  }
 
   if (referenceDescriptions.length > 0) {
     fullPrompt += 'REFERENCE IMAGES PROVIDED:\n' + referenceDescriptions.join('\n') + '\n\n';

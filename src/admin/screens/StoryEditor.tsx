@@ -52,6 +52,15 @@ interface Chapter {
   teaser_narration_sequence: NarrationSequenceItem[] | null;
 }
 
+// Story Bible for visual consistency
+interface StoryBible {
+  colorPalette?: string;
+  lightingStyle?: string;
+  artDirection?: string;
+  keyLocations?: { name: string; visualDescription: string; mood: string }[];
+  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+}
+
 interface Story {
   id: string;
   world_id: string;
@@ -61,6 +70,7 @@ interface Story {
   is_published: boolean;
   total_chapters: number;
   background_music_url: string | null;
+  story_bible: StoryBible | null;
   chapters: Chapter[];
 }
 
@@ -212,10 +222,11 @@ interface SegmentImageEditorProps {
   segment: Segment;
   storyId: string;
   previousImageUrl?: string | null;
+  storyBible?: StoryBible | null;
   onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
 }
 
-function SegmentImageEditor({ segment, storyId, previousImageUrl, onUpdate }: SegmentImageEditorProps) {
+function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, onUpdate }: SegmentImageEditorProps) {
   const [generating, setGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
@@ -241,6 +252,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, onUpdate }: Se
           // Don't include characters - using overlay system instead
           includeUser: false,
           includePet: false,
+          storyBible: storyBible || undefined,
         }),
       });
 
@@ -724,6 +736,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             referenceImageUrl: previousImageUrl || undefined,
             includeUser: false,
             includePet: false,
+            storyBible: story?.story_bible || undefined,
           }),
         });
 
@@ -1069,6 +1082,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               segment={segment}
                               storyId={storyId}
                               previousImageUrl={idx > 0 ? chapter.segments[idx - 1].image_url : null}
+                              storyBible={story?.story_bible}
                               onUpdate={handleSegmentUpdate}
                             />
                           </div>
