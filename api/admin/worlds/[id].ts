@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateFullStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -131,14 +131,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const [pitch] = await sql`SELECT * FROM story_pitches WHERE id = ${pitchId} AND world_id = ${id}`;
         if (!pitch) return res.status(404).json({ error: 'Pitch not found' });
 
+        const outline = pitch.outline as { chapter: number; title: string; summary: string }[];
+
+        // Step 1: Generate Story Bible for consistency across chapters and images
+        console.log('[Story] Generating Story Bible for:', pitch.title);
+        const storyBible = await generateStoryBible(
+          world.display_name,
+          world.description,
+          pitch.title,
+          pitch.description,
+          outline
+        );
+        console.log('[Story] Story Bible created with', storyBible.keyLocations.length, 'locations and', storyBible.recurringCharacters.length, 'characters');
+
+        // Step 2: Create story record with bible
         const [story] = await sql`
-          INSERT INTO stories (world_id, title, description, total_chapters, status)
-          VALUES (${id}, ${pitch.title}, ${pitch.description}, 5, 'generating')
+          INSERT INTO stories (world_id, title, description, total_chapters, status, story_bible)
+          VALUES (${id}, ${pitch.title}, ${pitch.description}, 5, 'generating', ${JSON.stringify(storyBible)})
           RETURNING *
         `;
 
-        const outline = pitch.outline as { chapter: number; title: string; summary: string }[];
-        const chapters = await generateFullStory(world.display_name, world.description, pitch.title, pitch.description, outline);
+        // Step 3: Generate chapters using the story bible for consistency
+        const chapters = await generateFullStory(world.display_name, world.description, pitch.title, pitch.description, outline, storyBible);
 
         for (const chapter of chapters) {
           const [savedChapter] = await sql`

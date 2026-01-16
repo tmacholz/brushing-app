@@ -75,6 +75,109 @@ export interface StoryPitch {
   outline: { chapter: number; title: string; summary: string }[];
 }
 
+// Story Bible - comprehensive reference for consistent storytelling and visuals
+export interface StoryBible {
+  // Narrative elements
+  tone: string; // e.g., "whimsical and heartwarming with gentle humor"
+  themes: string[]; // e.g., ["friendship", "bravery", "helping others"]
+  narrativeStyle: string; // e.g., "Third person, warm narrator voice, simple sentences"
+
+  // Character behavior in THIS story
+  childRole: string; // How [CHILD] acts in this story, e.g., "curious explorer who asks questions"
+  petRole: string; // How [PET] acts, e.g., "loyal sidekick who provides comic relief"
+  characterDynamic: string; // How they interact, e.g., "[CHILD] leads, [PET] encourages and helps"
+
+  // World and visual consistency
+  keyLocations: {
+    name: string;
+    visualDescription: string; // Detailed visual for image generation
+    mood: string;
+  }[];
+
+  // Supporting characters (NPCs)
+  recurringCharacters: {
+    name: string;
+    visualDescription: string;
+    personality: string;
+    role: string; // e.g., "wise mentor", "comic relief", "needs help"
+  }[];
+
+  // Visual style guide
+  colorPalette: string; // e.g., "warm golden yellows, soft greens, magical purples"
+  lightingStyle: string; // e.g., "soft dappled sunlight filtering through leaves"
+  artDirection: string; // Additional visual notes
+
+  // Story-specific elements
+  magicSystem: string | null; // If applicable, how magic works
+  stakes: string; // What's at risk, e.g., "The forest animals will lose their home"
+  resolution: string; // How it ends (for consistent buildup)
+}
+
+export async function generateStoryBible(
+  worldName: string,
+  worldDescription: string,
+  storyTitle: string,
+  storyDescription: string,
+  outline: { chapter: number; title: string; summary: string }[]
+): Promise<StoryBible> {
+  const outlineText = outline.map(ch => `  Chapter ${ch.chapter}: "${ch.title}" - ${ch.summary}`).join('\n');
+
+  const prompt = `Create a comprehensive "Story Bible" for a children's story (ages 4-8) in a toothbrushing app.
+
+STORY DETAILS:
+World: ${worldName} - ${worldDescription}
+Title: "${storyTitle}"
+Description: ${storyDescription}
+
+CHAPTER OUTLINE:
+${outlineText}
+
+The main characters are [CHILD] (the player's child, personalized at runtime) and [PET] (their magical companion, also personalized).
+
+Create a Story Bible that will ensure CONSISTENCY across all 5 chapters for both the NARRATIVE and VISUAL elements. This bible will be referenced when writing each chapter AND when generating images.
+
+Respond with ONLY this JSON structure:
+{
+  "tone": "Describe the overall emotional tone (1 sentence)",
+  "themes": ["theme1", "theme2", "theme3"],
+  "narrativeStyle": "Describe the writing style and narrator voice",
+
+  "childRole": "How [CHILD] behaves and grows in THIS specific story",
+  "petRole": "How [PET] behaves and helps in THIS specific story",
+  "characterDynamic": "How [CHILD] and [PET] interact and support each other",
+
+  "keyLocations": [
+    {
+      "name": "Location Name",
+      "visualDescription": "Detailed visual description for image generation - colors, lighting, key features, atmosphere",
+      "mood": "emotional quality of this place"
+    }
+  ],
+
+  "recurringCharacters": [
+    {
+      "name": "Character Name",
+      "visualDescription": "Detailed visual appearance for consistent image generation",
+      "personality": "2-3 word personality",
+      "role": "their role in the story"
+    }
+  ],
+
+  "colorPalette": "The dominant colors that should appear throughout the story's images",
+  "lightingStyle": "Consistent lighting approach for all scenes",
+  "artDirection": "Any additional visual style notes for consistency",
+
+  "magicSystem": "How magic/fantasy elements work in this story (or null if not applicable)",
+  "stakes": "What's at risk - why does this adventure matter?",
+  "resolution": "Brief description of how the story resolves (for proper buildup)"
+}
+
+Be specific and detailed - this bible will be the source of truth for the entire story!`;
+
+  const text = await callGemini(prompt);
+  return extractJson<StoryBible>(text);
+}
+
 export async function generateStoryPitches(worldName: string, worldDescription: string, count: number = 3): Promise<StoryPitch[]> {
   const prompt = `Generate ${count} unique story ideas for a children's toothbrushing app (ages 4-8).
 World: ${worldName} - ${worldDescription}
@@ -143,9 +246,35 @@ export async function generateFullStory(
   worldDescription: string,
   storyTitle: string,
   storyDescription: string,
-  outline: { chapter: number; title: string; summary: string }[]
+  outline: { chapter: number; title: string; summary: string }[],
+  storyBible?: StoryBible
 ): Promise<GeneratedChapter[]> {
   const chapters: GeneratedChapter[] = [];
+
+  // Build story bible reference section if provided
+  const bibleSection = storyBible ? `
+STORY BIBLE (maintain consistency with these elements throughout):
+- Tone: ${storyBible.tone}
+- Themes: ${storyBible.themes.join(', ')}
+- Narrative Style: ${storyBible.narrativeStyle}
+- [CHILD]'s Role: ${storyBible.childRole}
+- [PET]'s Role: ${storyBible.petRole}
+- Character Dynamic: ${storyBible.characterDynamic}
+- Stakes: ${storyBible.stakes}
+- Resolution Direction: ${storyBible.resolution}
+
+KEY LOCATIONS (use these visual descriptions for image prompts):
+${storyBible.keyLocations.map(loc => `- ${loc.name}: ${loc.visualDescription} (mood: ${loc.mood})`).join('\n')}
+
+RECURRING CHARACTERS (maintain consistent appearances):
+${storyBible.recurringCharacters.map(char => `- ${char.name}: ${char.visualDescription} (${char.personality}, role: ${char.role})`).join('\n')}
+
+VISUAL STYLE (apply to all image prompts):
+- Color Palette: ${storyBible.colorPalette}
+- Lighting: ${storyBible.lightingStyle}
+- Art Direction: ${storyBible.artDirection}
+${storyBible.magicSystem ? `- Magic System: ${storyBible.magicSystem}` : ''}
+` : '';
 
   for (let i = 0; i < outline.length; i++) {
     const chapterOutline = outline[i];
@@ -153,20 +282,26 @@ export async function generateFullStory(
     const isLastChapter = i === outline.length - 1;
     const previousChapter = i > 0 ? chapters[i - 1] : null;
 
+    // Build previous chapters summary for context
+    const previousChaptersSummary = chapters.length > 0
+      ? `\nPREVIOUS CHAPTERS SUMMARY:\n${chapters.map(ch => `- Chapter ${ch.chapterNumber} "${ch.title}": ${ch.segments.map(s => s.text).join(' ').slice(0, 150)}...`).join('\n')}`
+      : '';
+
     const prompt = `Write Chapter ${chapterOutline.chapter} of a children's story for a toothbrushing app (ages 4-8).
 Story: "${storyTitle}" - ${storyDescription}
 World: ${worldName} - ${worldDescription}
 Chapter ${chapterOutline.chapter}: "${chapterOutline.title}" - ${chapterOutline.summary}
+${bibleSection}${previousChaptersSummary}
 ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger}"` : ''}
 
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
 Use [CHILD] and [PET] as placeholders in the story text.
 ${isFirstChapter ? 'Start with excitement!' : 'Begin with brief recap.'}
-${isLastChapter ? 'End with happy conclusion.' : 'End with exciting cliffhanger!'}
+${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : 'End with exciting cliffhanger!'}
 
 IMPORTANT - CHARACTER OVERLAY SYSTEM:
 For each segment, provide:
-- "imagePrompt": A BACKGROUND-ONLY scene description. Do NOT include [CHILD] or [PET] in the image prompt. Other NPCs (talking animals, magical creatures they meet) CAN appear. Focus on environment, setting, atmosphere, and lighting.
+- "imagePrompt": A BACKGROUND-ONLY scene description. Do NOT include [CHILD] or [PET] in the image prompt. Other NPCs/recurring characters CAN appear - use their visual descriptions from the Story Bible. Include the color palette and lighting style from the bible. Focus on environment, setting, atmosphere.
 - "childPose": The child's expression/pose. Options: "happy", "excited", "surprised", "worried", "walking", or null if child not in scene.
 - "petPose": The pet's expression/pose. Options: "happy", "excited", "alert", "worried", "following", or null if pet not in scene.
 - "childPosition": Where the child appears. Options: "left", "center", "right", or "off-screen".
@@ -175,7 +310,7 @@ For each segment, provide:
 Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
 
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'Exciting cliffhanger...'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description with Story Bible visual style", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'Exciting cliffhanger...'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{

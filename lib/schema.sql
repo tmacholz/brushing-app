@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS stories (
   description TEXT NOT NULL,
   cover_image_url TEXT,
   background_music_url TEXT,
+  story_bible JSONB DEFAULT NULL, -- Story Bible for consistent narrative/visuals
   total_chapters INTEGER DEFAULT 5,
   status VARCHAR(20) DEFAULT 'draft',
   is_published BOOLEAN DEFAULT false,
@@ -37,6 +38,8 @@ CREATE TABLE IF NOT EXISTS stories (
 
 -- Migration: Add background_music_url if table already exists
 -- ALTER TABLE stories ADD COLUMN IF NOT EXISTS background_music_url TEXT;
+-- Migration: Add story_bible column
+-- ALTER TABLE stories ADD COLUMN IF NOT EXISTS story_bible JSONB DEFAULT NULL;
 
 -- Chapters table
 CREATE TABLE IF NOT EXISTS chapters (
