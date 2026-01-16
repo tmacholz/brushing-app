@@ -136,6 +136,14 @@ interface StoryBible {
   recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
 }
 
+// Visual reference for consistent imagery
+interface VisualReference {
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  imageUrl: string;
+}
+
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
@@ -149,10 +157,11 @@ interface StoryImageRequest {
   childName?: string;
   petName?: string;
   storyBible?: StoryBible; // For visual consistency across all images
+  visualReferences?: VisualReference[]; // Reference images for characters/objects/locations
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
-  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible } = req;
+  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible, visualReferences } = req;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
@@ -169,6 +178,23 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
       parts.push({ inlineData: imageData });
       referenceDescriptions.push(`[Image ${imageIndex}] Previous scene - use for style, color palette, and lighting consistency`);
       imageIndex++;
+    }
+  }
+
+  // Add visual references (characters, objects, locations) for consistency
+  // These are the reference sheets we generated - use them for exact appearance matching
+  if (visualReferences && visualReferences.length > 0) {
+    for (const ref of visualReferences) {
+      const imageData = await fetchImageAsBase64(ref.imageUrl);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        const typeLabel = ref.type === 'character' ? 'CHARACTER REFERENCE SHEET' :
+                         ref.type === 'location' ? 'LOCATION REFERENCE' : 'OBJECT REFERENCE SHEET';
+        referenceDescriptions.push(
+          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - If this ${ref.type} appears in the scene, match its appearance EXACTLY from this reference`
+        );
+        imageIndex++;
+      }
     }
   }
 

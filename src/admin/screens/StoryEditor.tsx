@@ -1165,6 +1165,37 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   }, [storyId]);
 
   // Generate all images for a chapter
+  // Helper to find relevant references for a segment using fuzzy matching
+  const findRelevantReferences = useCallback((segment: Segment, allReferences: StoryReference[]) => {
+    if (!allReferences || allReferences.length === 0) return [];
+
+    // Only include references that have generated images
+    const refsWithImages = allReferences.filter(r => r.image_url);
+    if (refsWithImages.length === 0) return [];
+
+    const searchText = `${segment.text} ${segment.image_prompt || ''}`.toLowerCase();
+
+    // Find references whose name appears in the segment text or image prompt
+    const relevantRefs = refsWithImages.filter(ref => {
+      // Extract key words from reference name (remove articles, common words)
+      const nameWords = ref.name.toLowerCase()
+        .replace(/^(the|a|an)\s+/i, '')
+        .split(/\s+/)
+        .filter(w => w.length > 2);
+
+      // Check if any significant word from the reference name appears in the segment
+      return nameWords.some(word => searchText.includes(word));
+    });
+
+    // Return matching refs, formatted for the API
+    return relevantRefs.map(ref => ({
+      type: ref.type,
+      name: ref.name,
+      description: ref.description,
+      imageUrl: ref.image_url!,
+    }));
+  }, []);
+
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
     const segmentsWithPrompts = chapter.segments.filter(s => s.image_prompt);
     if (segmentsWithPrompts.length === 0) {
@@ -1181,6 +1212,11 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       const segment = segmentsWithPrompts[i];
       setImageGenProgress({ current: i + 1, total: segmentsWithPrompts.length });
 
+      // Find relevant visual references for this segment
+      const visualReferences = findRelevantReferences(segment, story?.references || []);
+      console.log(`[ImageGen] Segment ${i + 1}: Found ${visualReferences.length} relevant references:`,
+        visualReferences.map(r => r.name));
+
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
@@ -1193,6 +1229,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             includeUser: false,
             includePet: false,
             storyBible: story?.story_bible || undefined,
+            visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
           }),
         });
 
@@ -1220,7 +1257,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
     setGeneratingImagesForChapter(null);
     setImageGenProgress(null);
-  }, [storyId, handleSegmentUpdate]);
+  }, [storyId, handleSegmentUpdate, findRelevantReferences, story?.references, story?.story_bible]);
 
   if (loading) {
     return (
