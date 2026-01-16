@@ -105,3 +105,46 @@ export const rePersonalizeStoryArc = (
     chapters: rePersonalizedChapters,
   };
 };
+
+/**
+ * Refresh a story arc's content from the latest template data.
+ * Preserves progress (isRead, readAt, currentChapterIndex) while updating
+ * segment content (imageUrl, narrationSequence) from the template.
+ *
+ * Use this when admin has added new audio/images after a story was started.
+ */
+export const refreshStoryArcContent = (
+  storyArc: StoryArc,
+  storyTemplate: StoryTemplate,
+  childName: string,
+  petName: string
+): StoryArc => {
+  const refreshedChapters = storyTemplate.chapters.map((templateChapter, idx) => {
+    const existingChapter = storyArc.chapters[idx];
+    const personalizedChapter = personalizeChapter(templateChapter, childName, petName);
+
+    return {
+      ...personalizedChapter,
+      // Preserve progress state only
+      isRead: existingChapter?.isRead ?? false,
+      readAt: existingChapter?.readAt ?? null,
+      // Use TEMPLATE data for content (not existing) - this gets latest audio/images
+      segments: personalizedChapter.segments.map((segment, segIdx) => {
+        const templateSegment = templateChapter.segments[segIdx];
+        return {
+          ...segment,
+          // Use template's imageUrl and narrationSequence (latest from admin)
+          imageUrl: templateSegment?.imageUrl ?? null,
+          narrationSequence: templateSegment?.narrationSequence ?? null,
+        };
+      }),
+    };
+  });
+
+  return {
+    ...storyArc,
+    title: replaceTokens(storyTemplate.title, childName, petName),
+    backgroundMusicUrl: storyTemplate.backgroundMusicUrl ?? storyArc.backgroundMusicUrl,
+    chapters: refreshedChapters,
+  };
+};

@@ -12,7 +12,7 @@ import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
-import { personalizeStory, rePersonalizeStoryArc } from '../utils/storyGenerator';
+import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
@@ -68,15 +68,16 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [storyPetId]);
 
-  // Get or create story arc
+  // Get or create story arc, and refresh content from latest template data
+  const storyRefreshed = useRef(false);
   useEffect(() => {
     if (!child) return;
 
+    const activePet = getPetById(child.activePetId);
+    const stories = getStoriesForWorld(child.activeWorldId);
+
     // Create new story if needed
     if (!child.currentStoryArc) {
-      const activePet = getPetById(child.activePetId);
-      const stories = getStoriesForWorld(child.activeWorldId);
-
       if (stories.length > 0) {
         // Use the first available story from the database/content
         const storyArc = personalizeStory(
@@ -89,6 +90,21 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       } else {
         // No stories available for this world
         console.warn('[BrushingScreen] No stories available for world:', child.activeWorldId);
+      }
+    } else if (!storyRefreshed.current) {
+      // Refresh existing story arc with latest content (audio/images) from template
+      // This ensures admin-generated content is picked up even for in-progress stories
+      const storyTemplate = stories.find(s => s.id === child.currentStoryArc?.storyTemplateId);
+      if (storyTemplate) {
+        console.log('[BrushingScreen] Refreshing story arc content from template');
+        const refreshedArc = refreshStoryArcContent(
+          child.currentStoryArc,
+          storyTemplate,
+          child.name,
+          activePet?.displayName ?? 'Friend'
+        );
+        storyRefreshed.current = true;
+        setCurrentStoryArc(refreshedArc);
       }
     }
   }, [child, setCurrentStoryArc, getPetById, getStoriesForWorld]);
