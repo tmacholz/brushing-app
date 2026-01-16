@@ -9,21 +9,37 @@ interface GenerateResponse {
   }>;
 }
 
-async function callGemini(prompt: string, maxRetries: number = 3): Promise<string> {
+// Track last call time for rate limiting
+let lastCallTime = 0;
+const MIN_CALL_INTERVAL_MS = 1500; // Minimum 1.5 seconds between calls
+
+async function callGemini(prompt: string, maxRetries: number = 5): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
+  }
+
+  // Enforce minimum interval between calls
+  const now = Date.now();
+  const timeSinceLastCall = now - lastCallTime;
+  if (timeSinceLastCall < MIN_CALL_INTERVAL_MS) {
+    const waitTime = MIN_CALL_INTERVAL_MS - timeSinceLastCall;
+    console.log(`[Gemini] Waiting ${waitTime}ms before next call (rate limiting)`);
+    await new Promise(resolve => setTimeout(resolve, waitTime));
   }
 
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     if (attempt > 0) {
-      // Exponential backoff: 2s, 4s, 8s...
-      const delay = Math.pow(2, attempt) * 1000;
-      console.log(`[Gemini] Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      // Exponential backoff with jitter: 3s, 6s, 12s, 24s...
+      const baseDelay = Math.pow(2, attempt) * 1500;
+      const jitter = Math.random() * 1000; // Add up to 1s jitter
+      const delay = baseDelay + jitter;
+      console.log(`[Gemini] Rate limited, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
 
+    lastCallTime = Date.now();
     const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -34,6 +50,11 @@ async function callGemini(prompt: string, maxRetries: number = 3): Promise<strin
     });
 
     if (response.status === 429) {
+      // Try to get retry-after header
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) {
+        console.log(`[Gemini] Rate limited, retry-after header: ${retryAfter}s`);
+      }
       lastError = new Error('Rate limited by Gemini API');
       continue; // Retry
     }
@@ -44,7 +65,7 @@ async function callGemini(prompt: string, maxRetries: number = 3): Promise<strin
     }
 
     const data = await response.json();
-    console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 1000));
+    console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 500));
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
