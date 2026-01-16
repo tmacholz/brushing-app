@@ -718,7 +718,13 @@ REQUIREMENTS:
 - The image should make children excited to read the story
 - Maintain the children's book illustration style from the reference images
 - Create a sense of wonder and adventure
-- NO text, labels, or watermarks in the image`;
+
+CRITICAL - NO TEXT:
+- Do NOT include ANY text, letters, words, or typography in the image
+- Do NOT write the title on the image
+- Do NOT include any labels, captions, or watermarks
+- The image should be PURELY illustrative with no written elements whatsoever
+- Text will be added separately by the app - generate only artwork`;
 
   parts.push({ text: fullPrompt });
 
