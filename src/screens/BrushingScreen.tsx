@@ -52,6 +52,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [showBonusWheel, setShowBonusWheel] = useState(false);
   const [tokensEarned, setTokensEarned] = useState(0);
   const [allWheelRewards, setAllWheelRewards] = useState<ChestReward[]>([]);
+  const [showFinalCompletion, setShowFinalCompletion] = useState(false); // Gate for completion screen
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -212,6 +213,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
+    setShowFinalCompletion(true);
     onComplete(pointsEarned);
   };
 
@@ -236,6 +238,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Bonus wheel complete handler
   const handleWheelComplete = () => {
     setShowBonusWheel(false);
+    setShowFinalCompletion(true);
     onComplete(pointsEarned);
   };
 
@@ -601,8 +604,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
-  // Render completion screen (after mystery chest or bonus wheel)
-  if (isComplete && !showMysteryChest && !showTaskCheckIn && !showBonusWheel) {
+  // Render completion screen (only after explicitly set)
+  if (isComplete && showFinalCompletion) {
     // Determine rewards to show - from wheel or chest
     const rewardsToShow = allWheelRewards.length > 0 ? allWheelRewards : (chestReward ? [chestReward] : []);
     const newCollectibles = rewardsToShow.filter(r => r.type !== 'points' && r.isNew);

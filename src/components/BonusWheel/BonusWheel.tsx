@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ChestReward } from '../../types';
 import { generateChestReward, getRewardDisplayInfo } from '../../services/rewardGenerator';
@@ -50,8 +50,8 @@ export function BonusWheel({
   const [localCollectedStickers, setLocalCollectedStickers] = useState(collectedStickers);
   const [localCollectedAccessories, setLocalCollectedAccessories] = useState(collectedAccessories);
 
-  const handleSpin = async () => {
-    if (phase !== 'ready' || tokensRemaining <= 0 || isAnimating) return;
+  const doSpin = useCallback(async () => {
+    if (tokensRemaining <= 0 || isAnimating) return;
 
     setPhase('spinning');
     setIsAnimating(true);
@@ -101,19 +101,33 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
+  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, rotation, playSound, onRewardClaimed]);
+
+  const handleSpin = () => {
+    if (phase !== 'ready') return;
+    doSpin();
   };
 
-  const handleContinue = () => {
-    setTokensRemaining(prev => prev - 1);
+  const handleContinue = useCallback(() => {
+    const newTokensRemaining = tokensRemaining - 1;
+    setTokensRemaining(newTokensRemaining);
+    setCurrentReward(null);
 
-    if (tokensRemaining - 1 > 0) {
-      setPhase('ready');
-      setCurrentReward(null);
+    if (newTokensRemaining > 0) {
+      // Go to spinning state for subsequent spins (skip the ready/tap screen)
+      setPhase('spinning');
       playSound('storyTransition');
     } else {
       setPhase('complete');
     }
-  };
+  }, [tokensRemaining, playSound]);
+
+  // Auto-spin when entering spinning phase (for subsequent spins)
+  useEffect(() => {
+    if (phase === 'spinning' && !isAnimating) {
+      doSpin();
+    }
+  }, [phase, isAnimating, doSpin]);
 
   const displayInfo = currentReward ? getRewardDisplayInfo(currentReward) : null;
 
