@@ -1117,8 +1117,25 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
         console.log('[handleSegmentUpdate] No prev story, returning');
         return prev;
       }
-      console.log('[handleSegmentUpdate] Updating story state');
-      return {
+
+      // Debug: check if segment exists and log old vs new
+      let foundSegment = false;
+      for (const ch of prev.chapters) {
+        for (const seg of ch.segments) {
+          if (seg.id === segmentId) {
+            foundSegment = true;
+            console.log('[handleSegmentUpdate] Found segment, old image_url:', seg.image_url);
+            console.log('[handleSegmentUpdate] New image_url:', updates.image_url);
+            console.log('[handleSegmentUpdate] URLs are same?', seg.image_url === updates.image_url);
+          }
+        }
+      }
+      if (!foundSegment) {
+        console.error('[handleSegmentUpdate] SEGMENT NOT FOUND:', segmentId);
+      }
+
+      console.log('[handleSegmentUpdate] Creating new story object');
+      const newStory = {
         ...prev,
         chapters: prev.chapters.map((chapter) => ({
           ...chapter,
@@ -1127,6 +1144,8 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           ),
         })),
       };
+      console.log('[handleSegmentUpdate] Returning new story');
+      return newStory;
     });
   }, []);
 
