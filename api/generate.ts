@@ -648,6 +648,90 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
   }
 }
 
+// Cover image generation for stories
+interface CoverImageRequest {
+  type: 'coverImage';
+  storyId: string;
+  storyTitle: string;
+  storyDescription: string;
+  referenceImageUrls?: string[]; // Existing segment images for style reference
+  storyBible?: StoryBible;
+}
+
+async function handleCoverImage(req: CoverImageRequest, res: VercelResponse) {
+  const { storyId, storyTitle, storyDescription, referenceImageUrls, storyBible } = req;
+
+  if (!storyId || !storyTitle) {
+    return res.status(400).json({ error: 'Missing required fields: storyId, storyTitle' });
+  }
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+  const referenceDescriptions: string[] = [];
+  let imageIndex = 1;
+
+  // Add reference images from existing segments (up to 3 for style consistency)
+  if (referenceImageUrls && referenceImageUrls.length > 0) {
+    const imagesToUse = referenceImageUrls.slice(0, 3);
+    for (const url of imagesToUse) {
+      const imageData = await fetchImageAsBase64(url);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        referenceDescriptions.push(`[Image ${imageIndex}] Existing story scene - use for style, color palette, and character appearance consistency`);
+        imageIndex++;
+      }
+    }
+  }
+
+  // Build the cover image prompt
+  let fullPrompt = STYLE_PREFIX + '\n\n';
+
+  // Add Story Bible visual guidelines if provided
+  if (storyBible) {
+    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    if (storyBible.colorPalette) {
+      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+    }
+    if (storyBible.lightingStyle) {
+      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+    }
+    if (storyBible.artDirection) {
+      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+    }
+    fullPrompt += '\n';
+  }
+
+  if (referenceDescriptions.length > 0) {
+    fullPrompt += 'REFERENCE IMAGES PROVIDED (match this art style EXACTLY):\n' + referenceDescriptions.join('\n') + '\n\n';
+  }
+
+  fullPrompt += `CREATE A STORY COVER IMAGE:
+
+Story Title: "${storyTitle}"
+Story Description: ${storyDescription || 'A magical adventure story'}
+
+REQUIREMENTS:
+- Create an eye-catching cover illustration that captures the story's essence
+- The composition should be PORTRAIT oriented, suitable for a book cover
+- Feature a dramatic or intriguing scene that hints at the adventure
+- Include space at the top for the title (but DO NOT include any text in the image)
+- Use vibrant, appealing colors that match the story's theme
+- The image should make children excited to read the story
+- Maintain the children's book illustration style from the reference images
+- Create a sense of wonder and adventure
+
+CRITICAL - NO TEXT:
+- Do NOT include ANY text, letters, words, or typography in the image
+- Do NOT write the title on the image
+- Do NOT include any labels, captions, or watermarks
+- The image should be PURELY illustrative with no written elements whatsoever
+- Text will be added separately by the app - generate only artwork`;
+
+  parts.push({ text: fullPrompt });
+
+  const result = await generateAndUpload(parts, `story-covers/${storyId}.png`);
+  return res.status(200).json({ coverImageUrl: result.url, storyId });
+}
+
 // Character sprite generation (transparent PNG for overlay compositing)
 interface SpriteGenerationRequest {
   type: 'sprite';
@@ -905,8 +989,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleSegmentAudio(req.body, res);
       case 'chapterAudio':
         return handleChapterAudio(req.body, res);
+      case 'coverImage':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return handleCoverImage(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, or chapterAudio' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, chapterAudio, or coverImage' });
     }
   } catch (error) {
     console.error('Generation error:', error);

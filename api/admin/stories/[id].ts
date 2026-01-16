@@ -13,59 +13,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ===== CHAPTER OPERATIONS (when ?chapter=<id> is provided) =====
   const { chapter: chapterId } = req.query;
   if (typeof chapterId === 'string') {
-    // PUT - Update chapter narration sequences
+    // PUT - Update chapter content and/or narration sequences
     if (req.method === 'PUT') {
-      const { recapNarrationSequence, cliffhangerNarrationSequence, teaserNarrationSequence } = req.body;
-      console.log('Updating chapter narration:', chapterId, {
-        recap: recapNarrationSequence?.length ?? 'not provided',
-        cliffhanger: cliffhangerNarrationSequence?.length ?? 'not provided',
-        teaser: teaserNarrationSequence?.length ?? 'not provided',
+      const {
+        title,
+        recap,
+        cliffhanger,
+        nextChapterTeaser,
+        recapNarrationSequence,
+        cliffhangerNarrationSequence,
+        teaserNarrationSequence
+      } = req.body;
+      console.log('Updating chapter:', chapterId, {
+        title: title ?? 'not provided',
+        recap: recap !== undefined ? 'provided' : 'not provided',
+        cliffhanger: cliffhanger !== undefined ? 'provided' : 'not provided',
+        nextChapterTeaser: nextChapterTeaser !== undefined ? 'provided' : 'not provided',
+        recapNarration: recapNarrationSequence?.length ?? 'not provided',
+        cliffhangerNarration: cliffhangerNarrationSequence?.length ?? 'not provided',
+        teaserNarration: teaserNarrationSequence?.length ?? 'not provided',
       });
 
       try {
-        // Build dynamic update based on what's provided
-        const updates: Record<string, unknown> = {};
-        if (recapNarrationSequence !== undefined) {
-          updates.recap_narration_sequence = recapNarrationSequence ? JSON.stringify(recapNarrationSequence) : null;
-        }
-        if (cliffhangerNarrationSequence !== undefined) {
-          updates.cliffhanger_narration_sequence = cliffhangerNarrationSequence ? JSON.stringify(cliffhangerNarrationSequence) : null;
-        }
-        if (teaserNarrationSequence !== undefined) {
-          updates.teaser_narration_sequence = teaserNarrationSequence ? JSON.stringify(teaserNarrationSequence) : null;
-        }
+        // Check if any field is provided
+        const hasContent = title !== undefined || recap !== undefined || cliffhanger !== undefined || nextChapterTeaser !== undefined;
+        const hasNarration = recapNarrationSequence !== undefined || cliffhangerNarrationSequence !== undefined || teaserNarrationSequence !== undefined;
 
-        if (Object.keys(updates).length === 0) {
+        if (!hasContent && !hasNarration) {
           return res.status(400).json({ error: 'No update data provided' });
         }
 
-        // Execute update
-        let chapter;
-        if (recapNarrationSequence !== undefined && cliffhangerNarrationSequence === undefined && teaserNarrationSequence === undefined) {
-          [chapter] = await sql`
-            UPDATE chapters SET recap_narration_sequence = ${updates.recap_narration_sequence}
-            WHERE id = ${chapterId} RETURNING *
-          `;
-        } else if (cliffhangerNarrationSequence !== undefined && recapNarrationSequence === undefined && teaserNarrationSequence === undefined) {
-          [chapter] = await sql`
-            UPDATE chapters SET cliffhanger_narration_sequence = ${updates.cliffhanger_narration_sequence}
-            WHERE id = ${chapterId} RETURNING *
-          `;
-        } else if (teaserNarrationSequence !== undefined && recapNarrationSequence === undefined && cliffhangerNarrationSequence === undefined) {
-          [chapter] = await sql`
-            UPDATE chapters SET teaser_narration_sequence = ${updates.teaser_narration_sequence}
-            WHERE id = ${chapterId} RETURNING *
-          `;
-        } else {
-          // Multiple fields - update all provided
-          [chapter] = await sql`
-            UPDATE chapters SET
-              recap_narration_sequence = COALESCE(${updates.recap_narration_sequence ?? null}, recap_narration_sequence),
-              cliffhanger_narration_sequence = COALESCE(${updates.cliffhanger_narration_sequence ?? null}, cliffhanger_narration_sequence),
-              teaser_narration_sequence = COALESCE(${updates.teaser_narration_sequence ?? null}, teaser_narration_sequence)
-            WHERE id = ${chapterId} RETURNING *
-          `;
-        }
+        // Build and execute update with all fields
+        const [chapter] = await sql`
+          UPDATE chapters SET
+            title = COALESCE(${title ?? null}, title),
+            recap = COALESCE(${recap ?? null}, recap),
+            cliffhanger = COALESCE(${cliffhanger ?? null}, cliffhanger),
+            next_chapter_teaser = COALESCE(${nextChapterTeaser ?? null}, next_chapter_teaser),
+            recap_narration_sequence = COALESCE(${recapNarrationSequence ? JSON.stringify(recapNarrationSequence) : null}, recap_narration_sequence),
+            cliffhanger_narration_sequence = COALESCE(${cliffhangerNarrationSequence ? JSON.stringify(cliffhangerNarrationSequence) : null}, cliffhanger_narration_sequence),
+            teaser_narration_sequence = COALESCE(${teaserNarrationSequence ? JSON.stringify(teaserNarrationSequence) : null}, teaser_narration_sequence)
+          WHERE id = ${chapterId} RETURNING *
+        `;
 
         console.log('Chapter updated:', chapter?.id);
         if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
@@ -82,39 +71,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
-    // PUT - Update segment (narration and/or image)
+    // PUT - Update segment (text, prompts, narration, and/or image)
     if (req.method === 'PUT') {
-      const { narrationSequence, imageUrl } = req.body;
+      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl } = req.body;
       console.log('Updating segment:', segmentId, {
+        text: text !== undefined ? 'provided' : 'not provided',
+        brushingPrompt: brushingPrompt !== undefined ? 'provided' : 'not provided',
+        imagePrompt: imagePrompt !== undefined ? 'provided' : 'not provided',
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided'
       });
 
       try {
-        // Build dynamic update based on what's provided
-        let segment;
-        if (narrationSequence !== undefined && imageUrl !== undefined) {
-          [segment] = await sql`
-            UPDATE segments SET
-              narration_sequence = ${narrationSequence ? JSON.stringify(narrationSequence) : null},
-              image_url = ${imageUrl}
-            WHERE id = ${segmentId} RETURNING *
-          `;
-        } else if (narrationSequence !== undefined) {
-          [segment] = await sql`
-            UPDATE segments SET
-              narration_sequence = ${narrationSequence ? JSON.stringify(narrationSequence) : null}
-            WHERE id = ${segmentId} RETURNING *
-          `;
-        } else if (imageUrl !== undefined) {
-          [segment] = await sql`
-            UPDATE segments SET
-              image_url = ${imageUrl}
-            WHERE id = ${segmentId} RETURNING *
-          `;
-        } else {
+        // Check if any field is provided
+        const hasUpdate = text !== undefined || brushingPrompt !== undefined || imagePrompt !== undefined ||
+          narrationSequence !== undefined || imageUrl !== undefined;
+
+        if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
         }
+
+        // Build and execute update with all fields
+        const [segment] = await sql`
+          UPDATE segments SET
+            text = COALESCE(${text ?? null}, text),
+            brushing_prompt = COALESCE(${brushingPrompt ?? null}, brushing_prompt),
+            image_prompt = COALESCE(${imagePrompt ?? null}, image_prompt),
+            narration_sequence = COALESCE(${narrationSequence ? JSON.stringify(narrationSequence) : null}, narration_sequence),
+            image_url = COALESCE(${imageUrl ?? null}, image_url)
+          WHERE id = ${segmentId} RETURNING *
+        `;
 
         console.log('Segment updated:', segment?.id);
         if (!segment) return res.status(404).json({ error: 'Segment not found' });
@@ -175,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update story metadata
   if (req.method === 'PUT') {
-    const { title, description, status, isPublished, backgroundMusicUrl } = req.body;
+    const { title, description, status, isPublished, backgroundMusicUrl, coverImageUrl } = req.body;
 
     try {
       const [story] = await sql`
@@ -184,7 +170,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           description = COALESCE(${description}, description),
           status = COALESCE(${status}, status),
           is_published = COALESCE(${isPublished}, is_published),
-          background_music_url = COALESCE(${backgroundMusicUrl}, background_music_url)
+          background_music_url = COALESCE(${backgroundMusicUrl}, background_music_url),
+          cover_image_url = COALESCE(${coverImageUrl}, cover_image_url)
         WHERE id = ${id} RETURNING *
       `;
       if (!story) return res.status(404).json({ error: 'Story not found' });

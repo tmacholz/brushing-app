@@ -366,7 +366,11 @@ ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
 Use [CHILD] and [PET] as placeholders in the story text.
 ${isFirstChapter ? 'Start with excitement!' : 'Begin with brief recap.'}
-${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : 'End with exciting cliffhanger!'}
+${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : `End with an exciting cliffhanger that:
+- Poses a QUESTION about what will happen next (e.g., "Will [CHILD] and [PET] reach the cave in time?" or "What could be making that strange sound?")
+- Does NOT introduce new characters, actions, or events (no "Suddenly, a mysterious figure appeared...")
+- Creates suspense by leaving an existing situation unresolved
+- Makes the reader wonder about the outcome of the current scene`}
 
 IMPORTANT - CHARACTER OVERLAY SYSTEM:
 For each segment, provide:
@@ -379,7 +383,7 @@ For each segment, provide:
 Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
 
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description with Story Bible visual style", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'Exciting cliffhanger...'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description with Story Bible visual style", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{
