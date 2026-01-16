@@ -693,12 +693,14 @@ CHARACTER DESCRIPTION:
 ${description}
 
 REQUIREMENTS:
-- Create a CHARACTER REFERENCE SHEET showing the character from THREE angles: front view, 3/4 view, and side profile
-- Arrange the three views horizontally in a row, evenly spaced
-- Each view should show the FULL CHARACTER (head to toe if applicable)
+- Create a CHARACTER REFERENCE SHEET with FOUR views arranged in a 2x2 grid:
+  - Top left: FRONT view (full body, facing camera)
+  - Top right: SIDE view (full body, profile facing right)
+  - Bottom left: BACK view (full body, facing away)
+  - Bottom right: HEADSHOT (close-up of face/head, showing expression and details)
 - Maintain EXACT consistency in design, colors, proportions, and details across all views
 - The character should be on a simple, clean background (light gray or white gradient)
-- Include subtle labels below each view: "FRONT", "3/4 VIEW", "SIDE"
+- Include subtle labels below/beside each view: "FRONT", "SIDE", "BACK", "HEADSHOT"
 - The style should be suitable for children's book illustration
 - Make the character expressive, friendly, and appealing to children ages 4-8
 - Ensure the design is clear enough to be used as a reference for future illustrations
@@ -706,7 +708,7 @@ REQUIREMENTS:
 CRITICAL - NO TEXT except the view labels:
 - Do NOT include the character's name in the image
 - Do NOT include any other text, captions, or watermarks
-- Only include the small view labels (FRONT, 3/4 VIEW, SIDE)`;
+- Only include the small view labels (FRONT, SIDE, BACK, HEADSHOT)`;
   } else if (referenceType === 'location') {
     // Generate a single establishing shot of the location
     fullPrompt += `CREATE A LOCATION REFERENCE IMAGE for: "${name}"
@@ -727,25 +729,28 @@ CRITICAL - NO TEXT:
 - Do NOT include ANY text, labels, signs, or writing in the image
 - The image should be PURELY environmental artwork`;
   } else {
-    // Object reference - single detailed view
-    fullPrompt += `CREATE AN OBJECT REFERENCE IMAGE for: "${name}"
+    // Object reference - multiple views for consistency
+    fullPrompt += `CREATE AN OBJECT REFERENCE SHEET for: "${name}"
 
 OBJECT DESCRIPTION:
 ${description}
 
 REQUIREMENTS:
-- Create a clear, detailed illustration of this object
-- Show the object from its most recognizable angle
-- The object should be centered and prominent in the frame
-- Use a simple, clean background that doesn't distract from the object
-- Include enough detail that this image can be used as a reference for consistency
+- Create an OBJECT REFERENCE SHEET with THREE views arranged in a row:
+  - Left: FRONT view (facing camera directly)
+  - Center: SIDE view (profile, facing right)
+  - Right: BACK view (facing away from camera)
+- Maintain EXACT consistency in design, colors, proportions, and details across all views
+- The object should be on a simple, clean background (light gray or white gradient)
+- Include subtle labels below each view: "FRONT", "SIDE", "BACK"
 - The style should match children's book illustration - friendly and appealing
 - Add subtle magical sparkles or glow if the object is magical/enchanted
+- Ensure the design is clear enough to be used as a reference for future illustrations
 
-CRITICAL - NO TEXT:
-- Do NOT include ANY text, labels, or writing in the image
-- Do NOT write the object's name on the image
-- The image should be PURELY illustrative`;
+CRITICAL - NO TEXT except the view labels:
+- Do NOT include the object's name in the image
+- Do NOT include any other text, captions, or watermarks
+- Only include the small view labels (FRONT, SIDE, BACK)`;
   }
 
   parts.push({ text: fullPrompt });
