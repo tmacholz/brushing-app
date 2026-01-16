@@ -3,7 +3,7 @@ import { put } from '@vercel/blob';
 import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-04-17:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
 
 // ElevenLabs for name audio
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
