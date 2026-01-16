@@ -19,6 +19,9 @@ import {
   Wand2,
   Image,
   RefreshCw,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -70,6 +73,7 @@ interface Story {
   is_published: boolean;
   total_chapters: number;
   background_music_url: string | null;
+  cover_image_url: string | null;
   story_bible: StoryBible | null;
   chapters: Chapter[];
 }
@@ -493,6 +497,102 @@ function ChapterFieldAudioEditor({
   );
 }
 
+// Editable text field component for inline editing
+interface EditableFieldProps {
+  value: string;
+  onSave: (newValue: string) => Promise<void>;
+  multiline?: boolean;
+  className?: string;
+  label?: string;
+}
+
+function EditableField({ value, onSave, multiline = false, className = '', label }: EditableFieldProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (editValue === value) {
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(editValue);
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Failed to save:', error);
+      alert('Failed to save changes');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditValue(value);
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <div className="flex flex-col gap-2">
+        {label && <label className="text-xs text-slate-500 uppercase tracking-wide">{label}</label>}
+        {multiline ? (
+          <textarea
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 resize-none text-sm"
+            rows={3}
+            autoFocus
+          />
+        ) : (
+          <input
+            type="text"
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 text-sm"
+            autoFocus
+          />
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+            Save
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={saving}
+            className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`group relative ${className}`}>
+      {label && <label className="text-xs text-slate-500 uppercase tracking-wide">{label}</label>}
+      <div className="flex items-start gap-2">
+        <span className="flex-1">{value}</span>
+        <button
+          onClick={() => setIsEditing(true)}
+          className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-cyan-400 transition-all"
+          title="Edit"
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
@@ -512,6 +612,10 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   // Chapter image generation state
   const [generatingImagesForChapter, setGeneratingImagesForChapter] = useState<string | null>(null);
   const [imageGenProgress, setImageGenProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Cover image generation state
+  const [generatingCoverImage, setGeneratingCoverImage] = useState(false);
+  const [showCoverPreview, setShowCoverPreview] = useState(false);
 
   const fetchStory = useCallback(async () => {
     try {
@@ -656,6 +760,59 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     setMusicPlaying(false);
   };
 
+  const handleGenerateCoverImage = async () => {
+    if (!story) return;
+    setGeneratingCoverImage(true);
+    setError(null);
+
+    try {
+      // Collect existing segment image URLs for style reference
+      const referenceImageUrls: string[] = [];
+      for (const chapter of story.chapters) {
+        for (const segment of chapter.segments) {
+          if (segment.image_url && referenceImageUrls.length < 3) {
+            referenceImageUrls.push(segment.image_url);
+          }
+        }
+      }
+
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'coverImage',
+          storyId: story.id,
+          storyTitle: story.title,
+          storyDescription: story.description,
+          referenceImageUrls,
+          storyBible: story.story_bible || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate cover image');
+      }
+
+      const data = await res.json();
+
+      // Save cover image URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coverImageUrl: data.coverImageUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save cover image URL');
+
+      setStory({ ...story, cover_image_url: data.coverImageUrl });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate cover image');
+    } finally {
+      setGeneratingCoverImage(false);
+    }
+  };
+
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => {
       const next = new Set(prev);
@@ -707,6 +864,78 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       };
     });
   }, []);
+
+  // Save chapter content changes to API
+  const handleSaveChapterField = useCallback(async (
+    chapterId: string,
+    field: 'title' | 'recap' | 'cliffhanger' | 'nextChapterTeaser',
+    value: string
+  ) => {
+    const res = await fetch(`/api/admin/stories/${storyId}?chapter=${chapterId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.details || error.error);
+    }
+
+    // Update local state
+    setStory((prev) => {
+      if (!prev) return prev;
+      const fieldMap: Record<string, string> = {
+        title: 'title',
+        recap: 'recap',
+        cliffhanger: 'cliffhanger',
+        nextChapterTeaser: 'next_chapter_teaser',
+      };
+      return {
+        ...prev,
+        chapters: prev.chapters.map((chapter) =>
+          chapter.id === chapterId ? { ...chapter, [fieldMap[field]]: value } : chapter
+        ),
+      };
+    });
+  }, [storyId]);
+
+  // Save segment content changes to API
+  const handleSaveSegmentField = useCallback(async (
+    segmentId: string,
+    field: 'text' | 'brushingPrompt' | 'imagePrompt',
+    value: string
+  ) => {
+    const res = await fetch(`/api/admin/stories/${storyId}?segment=${segmentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.details || error.error);
+    }
+
+    // Update local state
+    setStory((prev) => {
+      if (!prev) return prev;
+      const fieldMap: Record<string, string> = {
+        text: 'text',
+        brushingPrompt: 'brushing_prompt',
+        imagePrompt: 'image_prompt',
+      };
+      return {
+        ...prev,
+        chapters: prev.chapters.map((chapter) => ({
+          ...chapter,
+          segments: chapter.segments.map((segment) =>
+            segment.id === segmentId ? { ...segment, [fieldMap[field]]: value } : segment
+          ),
+        })),
+      };
+    });
+  }, [storyId]);
 
   // Generate all images for a chapter
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
@@ -947,6 +1176,71 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           )}
         </section>
 
+        {/* Cover Image Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+            <Image className="w-5 h-5 text-emerald-400" />
+            Cover Image
+          </h2>
+
+          <div className="flex items-start gap-4 flex-wrap">
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={handleGenerateCoverImage}
+                disabled={generatingCoverImage}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {generatingCoverImage ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Wand2 className="w-4 h-4" />
+                )}
+                {story.cover_image_url ? 'Regenerate Cover' : 'Generate Cover'}
+              </button>
+
+              {story.cover_image_url && (
+                <button
+                  onClick={() => setShowCoverPreview(!showCoverPreview)}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+                >
+                  {showCoverPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showCoverPreview ? 'Hide Preview' : 'Show Preview'}
+                </button>
+              )}
+
+              {story.cover_image_url && (
+                <span className="text-sm text-green-400 flex items-center gap-1.5">
+                  <CheckCircle className="w-4 h-4" />
+                  Cover ready
+                </span>
+              )}
+            </div>
+
+            {/* Cover preview */}
+            {showCoverPreview && story.cover_image_url && (
+              <div className="flex-1 min-w-[200px] max-w-md">
+                <img
+                  src={story.cover_image_url}
+                  alt="Story cover"
+                  className="w-full rounded-lg border border-slate-600 shadow-lg"
+                />
+              </div>
+            )}
+          </div>
+
+          {generatingCoverImage && (
+            <p className="mt-3 text-sm text-slate-400">
+              Generating cover image... This uses existing segment images for style consistency.
+            </p>
+          )}
+
+          {!story.cover_image_url && !generatingCoverImage && (
+            <p className="mt-3 text-sm text-slate-500">
+              Generate a cover image for this story. It will use existing segment images as style references if available.
+            </p>
+          )}
+        </section>
+
         {/* Chapters */}
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Chapters</h2>
@@ -956,22 +1250,22 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
               key={chapter.id}
               className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden"
             >
-              <button
-                onClick={() => toggleChapter(chapter.id)}
-                className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
-              >
-                <div className="flex items-center gap-4">
+              <div className="flex items-center px-6 py-4 gap-4">
+                <button
+                  onClick={() => toggleChapter(chapter.id)}
+                  className="flex items-center gap-4 flex-1 hover:bg-slate-700/30 -m-2 p-2 rounded-lg transition-colors"
+                >
                   <span className="w-8 h-8 bg-cyan-500/20 text-cyan-400 rounded-lg flex items-center justify-center font-semibold">
                     {chapter.chapter_number}
                   </span>
-                  <span className="font-medium">{chapter.title}</span>
-                </div>
-                {expandedChapters.has(chapter.id) ? (
-                  <ChevronDown className="w-5 h-5 text-slate-400" />
-                ) : (
-                  <ChevronRight className="w-5 h-5 text-slate-400" />
-                )}
-              </button>
+                  <span className="font-medium flex-1 text-left">{chapter.title}</span>
+                  {expandedChapters.has(chapter.id) ? (
+                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-slate-400" />
+                  )}
+                </button>
+              </div>
 
               <AnimatePresence>
                 {expandedChapters.has(chapter.id) && (
@@ -982,11 +1276,26 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                     className="overflow-hidden"
                   >
                     <div className="px-6 pb-6 pt-2 border-t border-slate-700/50">
+                      {/* Chapter Title (editable) */}
+                      <div className="mb-4">
+                        <EditableField
+                          label="Chapter Title"
+                          value={chapter.title}
+                          onSave={(value) => handleSaveChapterField(chapter.id, 'title', value)}
+                          className="text-lg font-medium text-white"
+                        />
+                      </div>
+
                       {/* Recap */}
                       {chapter.recap && (
                         <div className="mb-4">
-                          <label className="text-xs text-slate-500 uppercase tracking-wide">Recap</label>
-                          <p className="text-sm text-slate-300 mt-1 italic">"{chapter.recap}"</p>
+                          <EditableField
+                            label="Recap"
+                            value={chapter.recap}
+                            onSave={(value) => handleSaveChapterField(chapter.id, 'recap', value)}
+                            multiline
+                            className="text-sm text-slate-300 italic"
+                          />
                           <ChapterFieldAudioEditor
                             chapterId={chapter.id}
                             storyId={storyId}
@@ -1050,22 +1359,42 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               </div>
                             </div>
 
-                            <p className="text-sm text-slate-200 mb-2">{segment.text}</p>
+                            {/* Editable segment text */}
+                            <div className="mb-2">
+                              <EditableField
+                                value={segment.text}
+                                onSave={(value) => handleSaveSegmentField(segment.id, 'text', value)}
+                                multiline
+                                className="text-sm text-slate-200"
+                              />
+                            </div>
 
+                            {/* Editable brushing prompt */}
                             {segment.brushing_prompt && (
-                              <p className="text-xs text-amber-400/80 mb-2">
-                                🪥 {segment.brushing_prompt}
-                              </p>
+                              <div className="mb-2">
+                                <EditableField
+                                  label="Brushing Prompt"
+                                  value={segment.brushing_prompt}
+                                  onSave={(value) => handleSaveSegmentField(segment.id, 'brushingPrompt', value)}
+                                  className="text-xs text-amber-400/80"
+                                />
+                              </div>
                             )}
 
+                            {/* Editable image prompt */}
                             {segment.image_prompt && (
                               <details className="mt-2">
                                 <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
-                                  Image prompt
+                                  Image prompt (click to edit)
                                 </summary>
-                                <p className="text-xs text-slate-400 mt-1 pl-3 border-l border-slate-600">
-                                  {segment.image_prompt}
-                                </p>
+                                <div className="mt-1 pl-3 border-l border-slate-600">
+                                  <EditableField
+                                    value={segment.image_prompt}
+                                    onSave={(value) => handleSaveSegmentField(segment.id, 'imagePrompt', value)}
+                                    multiline
+                                    className="text-xs text-slate-400"
+                                  />
+                                </div>
                               </details>
                             )}
 
@@ -1092,8 +1421,13 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                       {/* Cliffhanger */}
                       {chapter.cliffhanger && (
                         <div className="mt-4 pt-4 border-t border-slate-600/50">
-                          <label className="text-xs text-slate-500 uppercase tracking-wide">Cliffhanger</label>
-                          <p className="text-sm text-purple-300 mt-1 italic">"{chapter.cliffhanger}"</p>
+                          <EditableField
+                            label="Cliffhanger"
+                            value={chapter.cliffhanger}
+                            onSave={(value) => handleSaveChapterField(chapter.id, 'cliffhanger', value)}
+                            multiline
+                            className="text-sm text-purple-300 italic"
+                          />
                           <ChapterFieldAudioEditor
                             chapterId={chapter.id}
                             storyId={storyId}
@@ -1110,8 +1444,13 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                       {/* Next Chapter Teaser */}
                       {chapter.next_chapter_teaser && (
                         <div className="mt-2">
-                          <label className="text-xs text-slate-500 uppercase tracking-wide">Next Chapter Teaser</label>
-                          <p className="text-sm text-slate-400 mt-1">{chapter.next_chapter_teaser}</p>
+                          <EditableField
+                            label="Next Chapter Teaser"
+                            value={chapter.next_chapter_teaser}
+                            onSave={(value) => handleSaveChapterField(chapter.id, 'nextChapterTeaser', value)}
+                            multiline
+                            className="text-sm text-slate-400"
+                          />
                           <ChapterFieldAudioEditor
                             chapterId={chapter.id}
                             storyId={storyId}

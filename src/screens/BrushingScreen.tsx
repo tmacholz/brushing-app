@@ -719,24 +719,30 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   };
 
-  // Get background image for story phase
+  // Get background image for story phase and cliffhanger
+  // During cliffhanger, persist the last segment's image
+  const lastSegment = currentChapter?.segments[currentChapter.segments.length - 1];
   const backgroundImage = phase === 'story' && currentSegment?.imageUrl
     ? currentSegment.imageUrl
-    : null;
+    : phase === 'cliffhanger' && lastSegment?.imageUrl
+      ? lastSegment.imageUrl
+      : null;
 
   // Determine if we should use character overlay compositing
   // Use compositing if sprites are ready and segment has pose data
+  // For cliffhanger, use the last segment's pose data
+  const segmentForCompositing = phase === 'cliffhanger' ? lastSegment : currentSegment;
   const useCompositing = spritesReady &&
-    phase === 'story' &&
-    currentSegment?.childPose &&
+    (phase === 'story' || phase === 'cliffhanger') &&
+    segmentForCompositing?.childPose &&
     backgroundImage;
 
-  // Get sprite URLs for current segment poses
-  const currentChildSprite = currentSegment?.childPose
-    ? childSprites[currentSegment.childPose]
+  // Get sprite URLs for current segment poses (or last segment during cliffhanger)
+  const currentChildSprite = segmentForCompositing?.childPose
+    ? childSprites[segmentForCompositing.childPose]
     : undefined;
-  const currentPetSprite = currentSegment?.petPose
-    ? petSprites[currentSegment.petPose]
+  const currentPetSprite = segmentForCompositing?.petPose
+    ? petSprites[segmentForCompositing.petPose]
     : undefined;
 
   return (
@@ -758,8 +764,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
               backgroundUrl={backgroundImage}
               childSpriteUrl={currentChildSprite}
               petSpriteUrl={currentPetSprite}
-              childPosition={(currentSegment?.childPosition as CharacterPosition) || 'center'}
-              petPosition={(currentSegment?.petPosition as CharacterPosition) || 'right'}
+              childPosition={(segmentForCompositing?.childPosition as CharacterPosition) || 'center'}
+              petPosition={(segmentForCompositing?.petPosition as CharacterPosition) || 'right'}
             />
           </motion.div>
         ) : backgroundImage ? (
