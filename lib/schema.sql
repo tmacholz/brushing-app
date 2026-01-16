@@ -290,3 +290,30 @@ CREATE INDEX IF NOT EXISTS idx_collectibles_rarity ON collectibles(rarity);
 -- ALTER TABLE children ADD COLUMN IF NOT EXISTS collected_stickers TEXT[] DEFAULT ARRAY[]::TEXT[];
 -- ALTER TABLE children ADD COLUMN IF NOT EXISTS collected_accessories TEXT[] DEFAULT ARRAY[]::TEXT[];
 -- ALTER TABLE children ADD COLUMN IF NOT EXISTS equipped_accessories JSONB DEFAULT '{}';
+
+-- =====================================================
+-- Story Reference Images (for visual consistency)
+-- =====================================================
+
+-- Visual reference images for consistent story illustrations
+-- Characters, objects, and locations that appear across multiple segments
+CREATE TABLE IF NOT EXISTS story_references (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  story_id UUID REFERENCES stories(id) ON DELETE CASCADE,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('character', 'object', 'location')),
+  name VARCHAR(100) NOT NULL,
+  description TEXT NOT NULL,           -- Detailed visual description for image generation
+  image_url TEXT,                       -- Generated reference image (null until generated)
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_story_references_story_id ON story_references(story_id);
+CREATE INDEX IF NOT EXISTS idx_story_references_type ON story_references(type);
+
+DROP TRIGGER IF EXISTS update_story_references_updated_at ON story_references;
+CREATE TRIGGER update_story_references_updated_at
+    BEFORE UPDATE ON story_references
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();

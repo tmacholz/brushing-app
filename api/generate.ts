@@ -648,6 +648,112 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
   }
 }
 
+// Story reference image generation (for visual consistency)
+interface ReferenceImageRequest {
+  type: 'referenceImage';
+  referenceId: string;
+  referenceType: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  storyBible?: StoryBible;
+}
+
+async function handleReferenceImage(req: ReferenceImageRequest, res: VercelResponse) {
+  const { referenceId, referenceType, name, description, storyBible } = req;
+
+  if (!referenceId || !referenceType || !name || !description) {
+    return res.status(400).json({ error: 'Missing required fields: referenceId, referenceType, name, description' });
+  }
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+  // Build the prompt based on reference type
+  let fullPrompt = STYLE_PREFIX + '\n\n';
+
+  // Add Story Bible visual guidelines if provided
+  if (storyBible) {
+    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    if (storyBible.colorPalette) {
+      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+    }
+    if (storyBible.lightingStyle) {
+      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+    }
+    if (storyBible.artDirection) {
+      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+    }
+    fullPrompt += '\n';
+  }
+
+  if (referenceType === 'character') {
+    // Generate a character reference sheet with multiple views
+    fullPrompt += `CREATE A CHARACTER REFERENCE SHEET for: "${name}"
+
+CHARACTER DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create a CHARACTER REFERENCE SHEET showing the character from THREE angles: front view, 3/4 view, and side profile
+- Arrange the three views horizontally in a row, evenly spaced
+- Each view should show the FULL CHARACTER (head to toe if applicable)
+- Maintain EXACT consistency in design, colors, proportions, and details across all views
+- The character should be on a simple, clean background (light gray or white gradient)
+- Include subtle labels below each view: "FRONT", "3/4 VIEW", "SIDE"
+- The style should be suitable for children's book illustration
+- Make the character expressive, friendly, and appealing to children ages 4-8
+- Ensure the design is clear enough to be used as a reference for future illustrations
+
+CRITICAL - NO TEXT except the view labels:
+- Do NOT include the character's name in the image
+- Do NOT include any other text, captions, or watermarks
+- Only include the small view labels (FRONT, 3/4 VIEW, SIDE)`;
+  } else if (referenceType === 'location') {
+    // Generate a single establishing shot of the location
+    fullPrompt += `CREATE A LOCATION REFERENCE IMAGE for: "${name}"
+
+LOCATION DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create a beautiful, detailed establishing shot of this location
+- The image should capture the key features, atmosphere, and mood described
+- Use the story's color palette and lighting style for consistency
+- The scene should feel inviting and suitable for a children's adventure story
+- Include enough detail that this image can be used as a reference for scenes set in this location
+- No characters should appear in this image - just the environment
+- The composition should showcase the most distinctive elements of the location
+
+CRITICAL - NO TEXT:
+- Do NOT include ANY text, labels, signs, or writing in the image
+- The image should be PURELY environmental artwork`;
+  } else {
+    // Object reference - single detailed view
+    fullPrompt += `CREATE AN OBJECT REFERENCE IMAGE for: "${name}"
+
+OBJECT DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create a clear, detailed illustration of this object
+- Show the object from its most recognizable angle
+- The object should be centered and prominent in the frame
+- Use a simple, clean background that doesn't distract from the object
+- Include enough detail that this image can be used as a reference for consistency
+- The style should match children's book illustration - friendly and appealing
+- Add subtle magical sparkles or glow if the object is magical/enchanted
+
+CRITICAL - NO TEXT:
+- Do NOT include ANY text, labels, or writing in the image
+- Do NOT write the object's name on the image
+- The image should be PURELY illustrative`;
+  }
+
+  parts.push({ text: fullPrompt });
+
+  const result = await generateAndUpload(parts, `story-references/${referenceId}.png`);
+  return res.status(200).json({ imageUrl: result.url, referenceId });
+}
+
 // Cover image generation for stories
 interface CoverImageRequest {
   type: 'coverImage';
@@ -992,8 +1098,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'coverImage':
         if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handleCoverImage(req.body, res);
+      case 'referenceImage':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return handleReferenceImage(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, chapterAudio, or coverImage' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, chapterAudio, coverImage, or referenceImage' });
     }
   } catch (error) {
     console.error('Generation error:', error);

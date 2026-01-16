@@ -22,6 +22,11 @@ import {
   Pencil,
   Check,
   X,
+  Users,
+  MapPin,
+  Package,
+  Plus,
+  Upload,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -64,6 +69,17 @@ interface StoryBible {
   recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
 }
 
+// Visual reference for consistent imagery
+interface StoryReference {
+  id: string;
+  story_id: string;
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  image_url: string | null;
+  sort_order: number;
+}
+
 interface Story {
   id: string;
   world_id: string;
@@ -76,6 +92,7 @@ interface Story {
   cover_image_url: string | null;
   story_bible: StoryBible | null;
   chapters: Chapter[];
+  references: StoryReference[];
 }
 
 interface StoryEditorProps {
@@ -617,6 +634,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [generatingCoverImage, setGeneratingCoverImage] = useState(false);
   const [showCoverPreview, setShowCoverPreview] = useState(false);
 
+  // Reference management state
+  const [generatingRefImages, setGeneratingRefImages] = useState<Set<string>>(new Set());
+  const [generatingAllRefs, setGeneratingAllRefs] = useState(false);
+  const [showAddReference, setShowAddReference] = useState(false);
+  const [newRefType, setNewRefType] = useState<'character' | 'object' | 'location'>('character');
+  const [newRefName, setNewRefName] = useState('');
+  const [newRefDescription, setNewRefDescription] = useState('');
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -812,6 +837,209 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       setGeneratingCoverImage(false);
     }
   };
+
+  // Generate image for a single reference
+  const handleGenerateReferenceImage = async (reference: StoryReference) => {
+    if (!story) return;
+
+    setGeneratingRefImages(prev => new Set(prev).add(reference.id));
+    setError(null);
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'referenceImage',
+          referenceId: reference.id,
+          referenceType: reference.type,
+          name: reference.name,
+          description: reference.description,
+          storyBible: story.story_bible || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate reference image');
+      }
+
+      const data = await res.json();
+
+      // Save image URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?reference=${reference.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.imageUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save reference image URL');
+
+      // Update local state
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.map(r =>
+            r.id === reference.id ? { ...r, image_url: data.imageUrl } : r
+          ),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+    } finally {
+      setGeneratingRefImages(prev => {
+        const next = new Set(prev);
+        next.delete(reference.id);
+        return next;
+      });
+    }
+  };
+
+  // Generate images for all references without images
+  const handleGenerateAllReferenceImages = async () => {
+    if (!story) return;
+
+    const refsWithoutImages = story.references.filter(r => !r.image_url);
+    if (refsWithoutImages.length === 0) {
+      alert('All references already have images');
+      return;
+    }
+
+    setGeneratingAllRefs(true);
+    setError(null);
+
+    try {
+      for (const ref of refsWithoutImages) {
+        await handleGenerateReferenceImage(ref);
+        // Small delay between generations to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } finally {
+      setGeneratingAllRefs(false);
+    }
+  };
+
+  // Delete a reference
+  const handleDeleteReference = async (referenceId: string) => {
+    if (!confirm('Are you sure you want to delete this reference?')) return;
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Failed to delete reference');
+
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.filter(r => r.id !== referenceId),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete reference');
+    }
+  };
+
+  // Add a new reference
+  const handleAddReference = async () => {
+    if (!newRefName.trim() || !newRefDescription.trim()) {
+      alert('Please provide both name and description');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addReference',
+          type: newRefType,
+          name: newRefName.trim(),
+          description: newRefDescription.trim(),
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to add reference');
+
+      const data = await res.json();
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: [...prev.references, data.reference],
+        };
+      });
+
+      // Reset form
+      setNewRefName('');
+      setNewRefDescription('');
+      setShowAddReference(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add reference');
+    }
+  };
+
+  // Re-extract references from story
+  const handleReExtractReferences = async () => {
+    if (!confirm('This will replace all current references with newly extracted ones. Continue?')) return;
+
+    setGeneratingAllRefs(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'extractReferences' }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to extract references');
+      }
+
+      const data = await res.json();
+      setStory(prev => {
+        if (!prev) return prev;
+        return { ...prev, references: data.references };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to extract references');
+    } finally {
+      setGeneratingAllRefs(false);
+    }
+  };
+
+  // Update reference field
+  const handleSaveReferenceField = useCallback(async (
+    referenceId: string,
+    field: 'name' | 'description',
+    value: string
+  ) => {
+    const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.details || error.error);
+    }
+
+    setStory(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        references: prev.references.map(r =>
+          r.id === referenceId ? { ...r, [field]: value } : r
+        ),
+      };
+    });
+  }, [storyId]);
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => {
@@ -1237,6 +1465,209 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           {!story.cover_image_url && !generatingCoverImage && (
             <p className="mt-3 text-sm text-slate-500">
               Generate a cover image for this story. It will use existing segment images as style references if available.
+            </p>
+          )}
+        </section>
+
+        {/* Visual References Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              Visual References
+              <span className="text-sm font-normal text-slate-400">
+                ({story.references?.length || 0} items)
+              </span>
+            </h2>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleReExtractReferences}
+                disabled={generatingAllRefs}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors disabled:opacity-50"
+                title="Re-extract references from story"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${generatingAllRefs ? 'animate-spin' : ''}`} />
+                Re-extract
+              </button>
+
+              <button
+                onClick={() => setShowAddReference(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add
+              </button>
+
+              {story.references && story.references.some(r => !r.image_url) && (
+                <button
+                  onClick={handleGenerateAllReferenceImages}
+                  disabled={generatingAllRefs}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {generatingAllRefs ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  Generate All Images
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Add Reference Form */}
+          <AnimatePresence>
+            {showAddReference && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mb-4"
+              >
+                <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <select
+                      value={newRefType}
+                      onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
+                      className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
+                    >
+                      <option value="character">Character</option>
+                      <option value="object">Object</option>
+                      <option value="location">Location</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Name (e.g., 'the wise owl')"
+                      value={newRefName}
+                      onChange={(e) => setNewRefName(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
+                    />
+                  </div>
+                  <textarea
+                    placeholder="Detailed visual description for image generation..."
+                    value={newRefDescription}
+                    onChange={(e) => setNewRefDescription(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setShowAddReference(false)}
+                      className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddReference}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Add Reference
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* References Grid */}
+          {story.references && story.references.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {story.references.map((ref) => {
+                const isGenerating = generatingRefImages.has(ref.id);
+                const TypeIcon = ref.type === 'character' ? Users : ref.type === 'location' ? MapPin : Package;
+                const typeColor = ref.type === 'character' ? 'text-blue-400' : ref.type === 'location' ? 'text-green-400' : 'text-amber-400';
+
+                return (
+                  <div
+                    key={ref.id}
+                    className="bg-slate-700/30 rounded-lg overflow-hidden"
+                  >
+                    {/* Image Preview */}
+                    <div className="aspect-video bg-slate-800/50 relative">
+                      {ref.image_url ? (
+                        <img
+                          src={ref.image_url}
+                          alt={ref.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center text-slate-500">
+                            <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <span className="text-xs">No image yet</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overlay buttons */}
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button
+                          onClick={() => handleGenerateReferenceImage(ref)}
+                          disabled={isGenerating}
+                          className="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors disabled:opacity-50"
+                          title={ref.image_url ? 'Regenerate image' : 'Generate image'}
+                        >
+                          {isGenerating ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteReference(ref.id)}
+                          className="p-1.5 bg-black/50 hover:bg-red-500/70 rounded-lg text-white transition-colors"
+                          title="Delete reference"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Type badge */}
+                      <div className={`absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-xs flex items-center gap-1 ${typeColor}`}>
+                        <TypeIcon className="w-3 h-3" />
+                        {ref.type}
+                      </div>
+                    </div>
+
+                    {/* Details */}
+                    <div className="p-3">
+                      <EditableField
+                        value={ref.name}
+                        onSave={(value) => handleSaveReferenceField(ref.id, 'name', value)}
+                        className="font-medium text-white text-sm mb-1"
+                      />
+                      <details className="text-xs text-slate-400">
+                        <summary className="cursor-pointer hover:text-slate-300">
+                          Description (click to edit)
+                        </summary>
+                        <div className="mt-1">
+                          <EditableField
+                            value={ref.description}
+                            onSave={(value) => handleSaveReferenceField(ref.id, 'description', value)}
+                            multiline
+                            className="text-xs text-slate-400"
+                          />
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-8">
+              No visual references yet. References are automatically extracted when a story is generated,
+              or you can add them manually.
+            </p>
+          )}
+
+          {generatingAllRefs && (
+            <p className="mt-3 text-sm text-slate-400">
+              {generatingRefImages.size > 0
+                ? `Generating reference images... (${generatingRefImages.size} in progress)`
+                : 'Extracting visual references from story...'}
             </p>
           )}
         </section>

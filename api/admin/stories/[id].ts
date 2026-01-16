@@ -127,9 +127,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed for segment' });
   }
 
+  // ===== REFERENCE OPERATIONS (when ?reference=<id> is provided) =====
+  const { reference: referenceId } = req.query;
+  if (typeof referenceId === 'string') {
+    // PUT - Update reference (name, description, image_url)
+    if (req.method === 'PUT') {
+      const { name, description, imageUrl } = req.body;
+      console.log('Updating reference:', referenceId, {
+        name: name !== undefined ? 'provided' : 'not provided',
+        description: description !== undefined ? 'provided' : 'not provided',
+        imageUrl: imageUrl !== undefined ? 'provided' : 'not provided',
+      });
+
+      try {
+        const hasUpdate = name !== undefined || description !== undefined || imageUrl !== undefined;
+        if (!hasUpdate) {
+          return res.status(400).json({ error: 'No update data provided' });
+        }
+
+        const [reference] = await sql`
+          UPDATE story_references SET
+            name = COALESCE(${name ?? null}, name),
+            description = COALESCE(${description ?? null}, description),
+            image_url = COALESCE(${imageUrl ?? null}, image_url)
+          WHERE id = ${referenceId} AND story_id = ${id} RETURNING *
+        `;
+
+        console.log('Reference updated:', reference?.id);
+        if (!reference) return res.status(404).json({ error: 'Reference not found' });
+        return res.status(200).json({ reference });
+      } catch (error) {
+        console.error('Error updating reference:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to update reference', details: message });
+      }
+    }
+
+    // DELETE - Delete a reference
+    if (req.method === 'DELETE') {
+      try {
+        const [reference] = await sql`
+          DELETE FROM story_references WHERE id = ${referenceId} AND story_id = ${id} RETURNING id
+        `;
+        if (!reference) return res.status(404).json({ error: 'Reference not found' });
+        return res.status(200).json({ success: true });
+      } catch (error) {
+        console.error('Error deleting reference:', error);
+        return res.status(500).json({ error: 'Failed to delete reference' });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed for reference' });
+  }
+
   // ===== STORY OPERATIONS =====
 
-  // GET - Get full story with chapters and segments
+  // GET - Get full story with chapters, segments, and references
   if (req.method === 'GET') {
     try {
       console.log('[API] GET story:', id);
@@ -151,7 +204,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       );
 
-      return res.status(200).json({ story: { ...story, chapters: chaptersWithSegments } });
+      // Fetch story references
+      const references = await sql`SELECT * FROM story_references WHERE story_id = ${id} ORDER BY sort_order`;
+      console.log('[API] References found:', references.length);
+
+      return res.status(200).json({ story: { ...story, chapters: chaptersWithSegments, references } });
     } catch (error) {
       console.error('[API] Error fetching story:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -194,10 +251,106 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // POST - Publish/unpublish
+  // POST - Publish/unpublish or add reference
   if (req.method === 'POST') {
-    const { publish = true } = req.body;
+    const { action, publish = true, type, name, description } = req.body;
 
+    // Add new reference
+    if (action === 'addReference') {
+      if (!type || !name || !description) {
+        return res.status(400).json({ error: 'Missing required fields: type, name, description' });
+      }
+      if (!['character', 'object', 'location'].includes(type)) {
+        return res.status(400).json({ error: 'Invalid type. Must be: character, object, or location' });
+      }
+
+      try {
+        // Get the next sort_order
+        const [maxOrder] = await sql`
+          SELECT COALESCE(MAX(sort_order), -1) as max_order FROM story_references WHERE story_id = ${id}
+        `;
+        const sortOrder = (maxOrder?.max_order ?? -1) + 1;
+
+        const [reference] = await sql`
+          INSERT INTO story_references (story_id, type, name, description, sort_order)
+          VALUES (${id}, ${type}, ${name}, ${description}, ${sortOrder})
+          RETURNING *
+        `;
+        return res.status(201).json({ reference });
+      } catch (error) {
+        console.error('Error adding reference:', error);
+        return res.status(500).json({ error: 'Failed to add reference' });
+      }
+    }
+
+    // Re-extract references from story
+    if (action === 'extractReferences') {
+      try {
+        // Import the extraction function
+        const { extractStoryReferences } = await import('../../../lib/ai.js');
+
+        // Get story with bible
+        const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
+        if (!story) return res.status(404).json({ error: 'Story not found' });
+
+        // Get all chapters with segments
+        const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+        const chaptersWithSegments = await Promise.all(
+          chapters.map(async (ch) => {
+            const segments = await sql`SELECT * FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+            return {
+              chapterNumber: ch.chapter_number,
+              title: ch.title,
+              recap: ch.recap,
+              cliffhanger: ch.cliffhanger,
+              nextChapterTeaser: ch.next_chapter_teaser,
+              segments: segments.map(s => ({
+                segmentOrder: s.segment_order,
+                text: s.text,
+                imagePrompt: s.image_prompt,
+                durationSeconds: s.duration_seconds,
+                brushingZone: s.brushing_zone,
+                brushingPrompt: s.brushing_prompt,
+                childPose: s.child_pose,
+                petPose: s.pet_pose,
+                childPosition: s.child_position,
+                petPosition: s.pet_position,
+              })),
+            };
+          })
+        );
+
+        // Extract references
+        const references = await extractStoryReferences(
+          story.title,
+          story.description,
+          chaptersWithSegments,
+          story.story_bible || undefined
+        );
+
+        // Delete existing references and insert new ones
+        await sql`DELETE FROM story_references WHERE story_id = ${id}`;
+
+        const savedRefs = [];
+        for (let i = 0; i < references.length; i++) {
+          const ref = references[i];
+          const [saved] = await sql`
+            INSERT INTO story_references (story_id, type, name, description, sort_order)
+            VALUES (${id}, ${ref.type}, ${ref.name}, ${ref.description}, ${i})
+            RETURNING *
+          `;
+          savedRefs.push(saved);
+        }
+
+        return res.status(200).json({ references: savedRefs });
+      } catch (error) {
+        console.error('Error extracting references:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to extract references', details: message });
+      }
+    }
+
+    // Default: Publish/unpublish
     try {
       const [story] = await sql`
         UPDATE stories SET
