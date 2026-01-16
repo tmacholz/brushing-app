@@ -158,8 +158,8 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
 
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         // Use overlap around name clips to reduce perceived gaps from audio silence padding
-        const NAME_OVERLAP_BEFORE = 0.22; // Overlap before name clips (tighten lead-in)
-        const NAME_OVERLAP_AFTER = 0.19; // Overlap after name clips (tighten follow-up)
+        const NAME_OVERLAP_BEFORE = 0.25; // Overlap before name clips (tighten lead-in)
+        const NAME_OVERLAP_AFTER = 0.20; // Overlap after name clips (tighten follow-up)
         let scheduleTime = ctx.currentTime;
         const sources: AudioBufferSourceNode[] = [];
 
