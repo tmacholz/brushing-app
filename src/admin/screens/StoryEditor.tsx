@@ -26,7 +26,6 @@ import {
   MapPin,
   Package,
   Plus,
-  Upload,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
