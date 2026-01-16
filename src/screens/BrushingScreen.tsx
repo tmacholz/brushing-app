@@ -12,11 +12,12 @@ import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
+import { MysteryChest } from '../components/MysteryChest';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
-import type { CharacterPosition } from '../types';
+import type { CharacterPosition, ChestReward } from '../types';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -31,7 +32,7 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
@@ -41,6 +42,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
+  const [showMysteryChest, setShowMysteryChest] = useState(false);
+  const [chestReward, setChestReward] = useState<ChestReward | null>(null);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -176,7 +179,23 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Mark chapter as complete
     await completeChapter(chapterIndex);
 
-    onComplete(points.total);
+    // Show mystery chest before completion screen
+    setShowMysteryChest(true);
+  };
+
+  const handleChestRewardClaimed = async (reward: ChestReward) => {
+    setChestReward(reward);
+    await claimChestReward(reward);
+
+    // Add bonus points from chest if applicable
+    if (reward.type === 'points') {
+      setPointsEarned(prev => prev + reward.amount);
+    }
+  };
+
+  const handleChestClose = () => {
+    setShowMysteryChest(false);
+    onComplete(pointsEarned);
   };
 
   const {
@@ -502,8 +521,21 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
-  // Render completion screen
-  if (isComplete) {
+  // Render mystery chest overlay
+  if (isComplete && showMysteryChest) {
+    return (
+      <MysteryChest
+        worldId={child?.activeWorldId}
+        collectedStickers={child?.collectedStickers ?? []}
+        collectedAccessories={child?.collectedAccessories ?? []}
+        onRewardClaimed={handleChestRewardClaimed}
+        onClose={handleChestClose}
+      />
+    );
+  }
+
+  // Render completion screen (after mystery chest)
+  if (isComplete && !showMysteryChest) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
         <motion.div
@@ -523,6 +555,29 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           <p className="text-white/90 text-xl mb-8">
             You earned {pointsEarned} points!
           </p>
+
+          {/* Show what reward was found */}
+          {chestReward && chestReward.type !== 'points' && chestReward.isNew && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/20 rounded-2xl p-4 mb-6 max-w-md"
+            >
+              <p className="text-white/80 text-sm mb-1">You found:</p>
+              <div className="flex items-center justify-center gap-3">
+                {chestReward.collectible.imageUrl && (
+                  <img
+                    src={chestReward.collectible.imageUrl}
+                    alt={chestReward.collectible.displayName}
+                    className="w-12 h-12 rounded-lg object-cover"
+                  />
+                )}
+                <span className="text-white font-bold">
+                  {chestReward.collectible.displayName}
+                </span>
+              </div>
+            </motion.div>
+          )}
 
           {currentChapter && (
             <div className="bg-white/20 rounded-2xl p-6 mb-8 max-w-md">

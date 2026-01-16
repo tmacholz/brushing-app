@@ -28,6 +28,10 @@ function toChild(row: Record<string, unknown>) {
     lastBrushDate: row.last_brush_date,
     nameAudioUrl: row.name_audio_url,
     createdAt: row.created_at,
+    // Collectibles
+    collectedStickers: row.collected_stickers || [],
+    collectedAccessories: row.collected_accessories || [],
+    equippedAccessories: row.equipped_accessories || {},
   };
 }
 
@@ -133,6 +137,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         completedStoryArcs,
         lastBrushDate,
         nameAudioUrl,
+        collectedStickers,
+        collectedAccessories,
+        equippedAccessories,
       } = req.body;
 
       try {
@@ -154,7 +161,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             current_story_arc = ${currentStoryArc !== undefined ? (currentStoryArc ? JSON.stringify(currentStoryArc) : null) : sql`current_story_arc`},
             completed_story_arcs = COALESCE(${completedStoryArcs}, completed_story_arcs),
             last_brush_date = ${lastBrushDate !== undefined ? lastBrushDate : sql`last_brush_date`},
-            name_audio_url = COALESCE(${nameAudioUrl}, name_audio_url)
+            name_audio_url = COALESCE(${nameAudioUrl}, name_audio_url),
+            collected_stickers = COALESCE(${collectedStickers}, collected_stickers),
+            collected_accessories = COALESCE(${collectedAccessories}, collected_accessories),
+            equipped_accessories = ${equippedAccessories !== undefined ? JSON.stringify(equippedAccessories) : sql`equipped_accessories`}
           WHERE id = ${id}
           RETURNING *
         `;

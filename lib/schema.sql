@@ -258,3 +258,32 @@ INSERT INTO pose_definitions (character_type, pose_key, display_name, generation
 ('pet', 'worried', 'Worried', 'Droopy posture, concerned expression, ears down or equivalent', 4),
 ('pet', 'following', 'Following', 'Moving alongside pose, loyal companion gesture, looking up adoringly', 5)
 ON CONFLICT (character_type, pose_key) DO NOTHING;
+
+-- =====================================================
+-- Collectibles System
+-- =====================================================
+
+-- Collectibles catalog (stickers + accessories)
+CREATE TABLE IF NOT EXISTS collectibles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type VARCHAR(20) NOT NULL CHECK (type IN ('sticker', 'accessory')),
+  name VARCHAR(100) NOT NULL UNIQUE,
+  display_name VARCHAR(100) NOT NULL,
+  description TEXT,
+  image_url TEXT NOT NULL,
+  rarity VARCHAR(20) NOT NULL DEFAULT 'common' CHECK (rarity IN ('common', 'uncommon', 'rare')),
+  world_id VARCHAR(50),       -- null = universal, references world name
+  pet_id VARCHAR(50),         -- for accessories, references pet name
+  is_published BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_collectibles_type ON collectibles(type);
+CREATE INDEX IF NOT EXISTS idx_collectibles_world_id ON collectibles(world_id);
+CREATE INDEX IF NOT EXISTS idx_collectibles_rarity ON collectibles(rarity);
+
+-- Add collectibles columns to children table
+-- Run these as migrations if table already exists:
+-- ALTER TABLE children ADD COLUMN IF NOT EXISTS collected_stickers TEXT[] DEFAULT ARRAY[]::TEXT[];
+-- ALTER TABLE children ADD COLUMN IF NOT EXISTS collected_accessories TEXT[] DEFAULT ARRAY[]::TEXT[];
+-- ALTER TABLE children ADD COLUMN IF NOT EXISTS equipped_accessories JSONB DEFAULT '{}';

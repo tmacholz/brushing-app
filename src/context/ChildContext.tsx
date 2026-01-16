@@ -1,5 +1,5 @@
 import { createContext, useContext, useCallback, useMemo, useState, useEffect, type ReactNode } from 'react';
-import type { Child, StoryArc } from '../types';
+import type { Child, StoryArc, ChestReward, EquippedAccessories } from '../types';
 import { usePets } from './PetsContext';
 import { getBrushById } from '../data/brushes';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
@@ -37,6 +37,11 @@ interface ChildContextType {
   updateCharacter: (characterId: string) => Promise<void>;
   resetChild: () => Promise<void>;
   resetAllData: () => Promise<void>;
+
+  // Collectibles
+  claimChestReward: (reward: ChestReward) => Promise<void>;
+  equipAccessory: (petId: string, accessoryId: string) => Promise<void>;
+  unequipAccessory: (petId: string, accessoryId: string) => Promise<void>;
 
   // Refresh data from server
   refreshChildren: () => Promise<void>;
@@ -474,6 +479,52 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     }
   }, [allChildren]);
 
+  // Claim a chest reward and add to inventory
+  const claimChestReward = useCallback(async (reward: ChestReward) => {
+    if (!child) return;
+
+    if (reward.type === 'points') {
+      await addPoints(reward.amount);
+    } else if (reward.type === 'sticker' && reward.isNew) {
+      const newStickers = [...child.collectedStickers, reward.collectible.id];
+      await updateChild({ collectedStickers: newStickers });
+    } else if (reward.type === 'accessory' && reward.isNew) {
+      const newAccessories = [...child.collectedAccessories, reward.collectible.id];
+      await updateChild({ collectedAccessories: newAccessories });
+    }
+    // If not new, the reward is a duplicate - no action needed
+  }, [child, addPoints, updateChild]);
+
+  // Equip an accessory to a pet
+  const equipAccessory = useCallback(async (petId: string, accessoryId: string) => {
+    if (!child) return;
+
+    const currentEquipped = child.equippedAccessories[petId] || [];
+    if (currentEquipped.includes(accessoryId)) return; // Already equipped
+
+    const newEquipped: EquippedAccessories = {
+      ...child.equippedAccessories,
+      [petId]: [...currentEquipped, accessoryId],
+    };
+
+    await updateChild({ equippedAccessories: newEquipped });
+  }, [child, updateChild]);
+
+  // Unequip an accessory from a pet
+  const unequipAccessory = useCallback(async (petId: string, accessoryId: string) => {
+    if (!child) return;
+
+    const currentEquipped = child.equippedAccessories[petId] || [];
+    if (!currentEquipped.includes(accessoryId)) return; // Not equipped
+
+    const newEquipped: EquippedAccessories = {
+      ...child.equippedAccessories,
+      [petId]: currentEquipped.filter(id => id !== accessoryId),
+    };
+
+    await updateChild({ equippedAccessories: newEquipped });
+  }, [child, updateChild]);
+
   return (
     <ChildContext.Provider
       value={{
@@ -498,6 +549,9 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         updateCharacter,
         resetChild,
         resetAllData,
+        claimChestReward,
+        equipAccessory,
+        unequipAccessory,
         refreshChildren,
       }}
     >
