@@ -9,38 +9,56 @@ interface GenerateResponse {
   }>;
 }
 
-async function callGemini(prompt: string): Promise<string> {
+async function callGemini(prompt: string, maxRetries: number = 3): Promise<string> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
   }
 
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
-    }),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini API error: ${errorText}`);
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (attempt > 0) {
+      // Exponential backoff: 2s, 4s, 8s...
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`[Gemini] Rate limited, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
+      }),
+    });
+
+    if (response.status === 429) {
+      lastError = new Error('Rate limited by Gemini API');
+      continue; // Retry
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 1000));
+
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      // Log full response for debugging
+      console.error('[Gemini] No text found. Full response:', JSON.stringify(data, null, 2));
+      const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+      throw new Error(`No text in Gemini response. Reason: ${blockReason || 'unknown'}`);
+    }
+
+    return text;
   }
 
-  const data = await response.json();
-  console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 1000));
-
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  if (!text) {
-    // Log full response for debugging
-    console.error('[Gemini] No text found. Full response:', JSON.stringify(data, null, 2));
-    const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
-    throw new Error(`No text in Gemini response. Reason: ${blockReason || 'unknown'}`);
-  }
-
-  return text;
+  throw lastError || new Error('Gemini API failed after retries');
 }
 
 function extractJson<T>(text: string): T {
