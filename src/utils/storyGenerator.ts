@@ -109,7 +109,7 @@ export const rePersonalizeStoryArc = (
 /**
  * Refresh a story arc's content from the latest template data.
  * Preserves progress (isRead, readAt, currentChapterIndex) while updating
- * segment content (imageUrl, narrationSequence) from the template.
+ * segment content (imageUrl, narrationSequence) and chapter narration from the template.
  *
  * Use this when admin has added new audio/images after a story was started.
  */
@@ -128,7 +128,11 @@ export const refreshStoryArcContent = (
       // Preserve progress state only
       isRead: existingChapter?.isRead ?? false,
       readAt: existingChapter?.readAt ?? null,
-      // Use TEMPLATE data for content (not existing) - this gets latest audio/images
+      // Use TEMPLATE data for chapter narration sequences (latest from admin)
+      recapNarrationSequence: templateChapter.recapNarrationSequence ?? null,
+      cliffhangerNarrationSequence: templateChapter.cliffhangerNarrationSequence ?? null,
+      teaserNarrationSequence: templateChapter.teaserNarrationSequence ?? null,
+      // Use TEMPLATE data for segment content (not existing) - this gets latest audio/images
       segments: personalizedChapter.segments.map((segment, segIdx) => {
         const templateSegment = templateChapter.segments[segIdx];
         return {

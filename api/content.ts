@@ -52,7 +52,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             title,
             recap,
             cliffhanger,
-            next_chapter_teaser
+            next_chapter_teaser,
+            recap_narration_sequence,
+            cliffhanger_narration_sequence,
+            teaser_narration_sequence
           FROM chapters
           WHERE story_id = ${story.id}
           ORDER BY chapter_number
@@ -89,6 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               nextChapterTeaser: chapter.next_chapter_teaser,
               isRead: false,
               readAt: null,
+              recapNarrationSequence: chapter.recap_narration_sequence,
+              cliffhangerNarrationSequence: chapter.cliffhanger_narration_sequence,
+              teaserNarrationSequence: chapter.teaser_narration_sequence,
               segments: segments.map((seg) => ({
                 id: seg.id,
                 text: seg.text,

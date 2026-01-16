@@ -47,8 +47,18 @@ CREATE TABLE IF NOT EXISTS chapters (
   recap TEXT,
   cliffhanger TEXT,
   next_chapter_teaser TEXT,
+  -- Pre-recorded audio narration sequences
+  -- Array of {type: 'audio', url: string} | {type: 'name', placeholder: 'CHILD'|'PET'}
+  recap_narration_sequence JSONB DEFAULT NULL,
+  cliffhanger_narration_sequence JSONB DEFAULT NULL,
+  teaser_narration_sequence JSONB DEFAULT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- Migration: Add chapter narration columns if table already exists
+-- ALTER TABLE chapters ADD COLUMN IF NOT EXISTS recap_narration_sequence JSONB DEFAULT NULL;
+-- ALTER TABLE chapters ADD COLUMN IF NOT EXISTS cliffhanger_narration_sequence JSONB DEFAULT NULL;
+-- ALTER TABLE chapters ADD COLUMN IF NOT EXISTS teaser_narration_sequence JSONB DEFAULT NULL;
 
 -- Segments table (individual story beats with brushing prompts)
 CREATE TABLE IF NOT EXISTS segments (

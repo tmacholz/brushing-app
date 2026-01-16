@@ -418,6 +418,16 @@ interface SegmentAudioRequest {
   segmentOrder: number;
 }
 
+// Chapter audio generation (recap, cliffhanger, teaser)
+interface ChapterAudioRequest {
+  type: 'chapterAudio';
+  chapterId: string;
+  text: string;
+  storyId: string;
+  chapterNumber: number;
+  fieldName: 'recap' | 'cliffhanger' | 'teaser';
+}
+
 type NarrationSequenceItem =
   | { type: 'audio'; url: string }
   | { type: 'name'; placeholder: 'CHILD' | 'PET' };
@@ -535,6 +545,64 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
     console.error('Segment audio generation error:', error);
     return res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to generate segment audio'
+    });
+  }
+}
+
+async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse) {
+  const { chapterId, text, storyId, chapterNumber, fieldName } = req;
+
+  if (!chapterId || !text || !storyId || !fieldName) {
+    return res.status(400).json({ error: 'Missing required fields: chapterId, text, storyId, fieldName' });
+  }
+
+  if (!ELEVENLABS_API_KEY) {
+    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return res.status(500).json({ error: 'BLOB_READ_WRITE_TOKEN not configured' });
+  }
+
+  try {
+    const parts = parseTextIntoParts(text);
+    console.log(`[AudioGen] Chapter ${chapterId} ${fieldName}: ${parts.length} parts to process`);
+
+    const narrationSequence: NarrationSequenceItem[] = [];
+    let clipIndex = 0;
+
+    for (const part of parts) {
+      if (part.type === 'placeholder') {
+        narrationSequence.push({ type: 'name', placeholder: part.name });
+      } else {
+        console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
+
+        const audioBuffer = await generateTtsClip(part.content);
+
+        const storagePath = `story-audio/${storyId}/ch${chapterNumber}/${fieldName}/clip${clipIndex}.mp3`;
+        const blob = await put(storagePath, Buffer.from(audioBuffer), {
+          access: 'public',
+          contentType: 'audio/mpeg',
+          allowOverwrite: true,
+        });
+
+        narrationSequence.push({ type: 'audio', url: blob.url });
+        clipIndex++;
+      }
+    }
+
+    console.log(`[AudioGen] Chapter ${chapterId} ${fieldName}: Generated ${clipIndex} clips, sequence length: ${narrationSequence.length}`);
+
+    return res.status(200).json({
+      narrationSequence,
+      chapterId,
+      fieldName,
+      clipCount: clipIndex,
+    });
+  } catch (error) {
+    console.error('Chapter audio generation error:', error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate chapter audio'
     });
   }
 }
@@ -794,8 +862,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleSpriteGeneration(req.body, res);
       case 'segmentAudio':
         return handleSegmentAudio(req.body, res);
+      case 'chapterAudio':
+        return handleChapterAudio(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, or segmentAudio' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, or chapterAudio' });
     }
   } catch (error) {
     console.error('Generation error:', error);

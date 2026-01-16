@@ -10,6 +10,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid story ID' });
   }
 
+  // ===== CHAPTER OPERATIONS (when ?chapter=<id> is provided) =====
+  const { chapter: chapterId } = req.query;
+  if (typeof chapterId === 'string') {
+    // PUT - Update chapter narration sequences
+    if (req.method === 'PUT') {
+      const { recapNarrationSequence, cliffhangerNarrationSequence, teaserNarrationSequence } = req.body;
+      console.log('Updating chapter narration:', chapterId, {
+        recap: recapNarrationSequence?.length ?? 'not provided',
+        cliffhanger: cliffhangerNarrationSequence?.length ?? 'not provided',
+        teaser: teaserNarrationSequence?.length ?? 'not provided',
+      });
+
+      try {
+        // Build dynamic update based on what's provided
+        const updates: Record<string, unknown> = {};
+        if (recapNarrationSequence !== undefined) {
+          updates.recap_narration_sequence = recapNarrationSequence ? JSON.stringify(recapNarrationSequence) : null;
+        }
+        if (cliffhangerNarrationSequence !== undefined) {
+          updates.cliffhanger_narration_sequence = cliffhangerNarrationSequence ? JSON.stringify(cliffhangerNarrationSequence) : null;
+        }
+        if (teaserNarrationSequence !== undefined) {
+          updates.teaser_narration_sequence = teaserNarrationSequence ? JSON.stringify(teaserNarrationSequence) : null;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          return res.status(400).json({ error: 'No update data provided' });
+        }
+
+        // Execute update
+        let chapter;
+        if (recapNarrationSequence !== undefined && cliffhangerNarrationSequence === undefined && teaserNarrationSequence === undefined) {
+          [chapter] = await sql`
+            UPDATE chapters SET recap_narration_sequence = ${updates.recap_narration_sequence}
+            WHERE id = ${chapterId} RETURNING *
+          `;
+        } else if (cliffhangerNarrationSequence !== undefined && recapNarrationSequence === undefined && teaserNarrationSequence === undefined) {
+          [chapter] = await sql`
+            UPDATE chapters SET cliffhanger_narration_sequence = ${updates.cliffhanger_narration_sequence}
+            WHERE id = ${chapterId} RETURNING *
+          `;
+        } else if (teaserNarrationSequence !== undefined && recapNarrationSequence === undefined && cliffhangerNarrationSequence === undefined) {
+          [chapter] = await sql`
+            UPDATE chapters SET teaser_narration_sequence = ${updates.teaser_narration_sequence}
+            WHERE id = ${chapterId} RETURNING *
+          `;
+        } else {
+          // Multiple fields - update all provided
+          [chapter] = await sql`
+            UPDATE chapters SET
+              recap_narration_sequence = COALESCE(${updates.recap_narration_sequence ?? null}, recap_narration_sequence),
+              cliffhanger_narration_sequence = COALESCE(${updates.cliffhanger_narration_sequence ?? null}, cliffhanger_narration_sequence),
+              teaser_narration_sequence = COALESCE(${updates.teaser_narration_sequence ?? null}, teaser_narration_sequence)
+            WHERE id = ${chapterId} RETURNING *
+          `;
+        }
+
+        console.log('Chapter updated:', chapter?.id);
+        if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+        return res.status(200).json({ chapter });
+      } catch (error) {
+        console.error('Error updating chapter:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to update chapter', details: message });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed for chapter' });
+  }
+
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
     // PUT - Update segment (narration and/or image)

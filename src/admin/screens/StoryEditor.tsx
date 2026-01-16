@@ -46,6 +46,10 @@ interface Chapter {
   cliffhanger: string | null;
   next_chapter_teaser: string | null;
   segments: Segment[];
+  // Pre-recorded audio narration sequences
+  recap_narration_sequence: NarrationSequenceItem[] | null;
+  cliffhanger_narration_sequence: NarrationSequenceItem[] | null;
+  teaser_narration_sequence: NarrationSequenceItem[] | null;
 }
 
 interface Story {
@@ -325,6 +329,158 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, onUpdate }: Se
   );
 }
 
+// Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
+interface ChapterFieldAudioEditorProps {
+  chapterId: string;
+  storyId: string;
+  chapterNumber: number;
+  fieldName: 'recap' | 'cliffhanger' | 'teaser';
+  fieldLabel: string;
+  text: string | null;
+  narrationSequence: NarrationSequenceItem[] | null;
+  onUpdate: (chapterId: string, field: string, sequence: NarrationSequenceItem[]) => void;
+}
+
+function ChapterFieldAudioEditor({
+  chapterId,
+  storyId,
+  chapterNumber,
+  fieldName,
+  fieldLabel,
+  text,
+  narrationSequence,
+  onUpdate,
+}: ChapterFieldAudioEditorProps) {
+  const [generating, setGenerating] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const hasNarration = narrationSequence && narrationSequence.length > 0;
+  const audioClipsCount = narrationSequence?.filter(item => item.type === 'audio').length ?? 0;
+
+  if (!text) return null;
+
+  const handleGenerateAudio = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'chapterAudio',
+          chapterId,
+          text,
+          storyId,
+          chapterNumber,
+          fieldName,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(error);
+      }
+
+      const data = await res.json();
+      console.log(`${fieldLabel} audio generated:`, { chapterId, clipCount: data.clipCount, sequence: data.narrationSequence });
+
+      // Save to database using the appropriate field name
+      const saveBody: Record<string, unknown> = {};
+      if (fieldName === 'recap') {
+        saveBody.recapNarrationSequence = data.narrationSequence;
+      } else if (fieldName === 'cliffhanger') {
+        saveBody.cliffhangerNarrationSequence = data.narrationSequence;
+      } else {
+        saveBody.teaserNarrationSequence = data.narrationSequence;
+      }
+
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?chapter=${chapterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saveBody),
+      });
+
+      if (!saveRes.ok) {
+        const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
+        console.error(`Failed to save ${fieldName} narration sequence:`, saveError);
+        throw new Error(`Failed to save: ${saveError.details || saveError.error}`);
+      }
+
+      onUpdate(chapterId, `${fieldName}_narration_sequence`, data.narrationSequence);
+    } catch (error) {
+      console.error(`Failed to generate ${fieldName} audio:`, error);
+      alert(`Failed to generate ${fieldName} audio. Check console for details.`);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handlePreview = () => {
+    if (!narrationSequence) return;
+
+    const firstAudioClip = narrationSequence.find(item => item.type === 'audio');
+    if (firstAudioClip && firstAudioClip.type === 'audio') {
+      if (audioRef.current) {
+        if (playing) {
+          audioRef.current.pause();
+          setPlaying(false);
+        } else {
+          audioRef.current.src = firstAudioClip.url;
+          audioRef.current.play();
+          setPlaying(true);
+        }
+      }
+    }
+  };
+
+  const handleEnded = () => {
+    setPlaying(false);
+  };
+
+  const placeholderCount = narrationSequence?.filter(item => item.type === 'name').length ?? 0;
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap mt-2">
+      <audio ref={audioRef} onEnded={handleEnded} />
+
+      <button
+        onClick={handleGenerateAudio}
+        disabled={generating}
+        className="flex items-center gap-1.5 px-2.5 py-1 text-xs bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-lg transition-colors disabled:opacity-50"
+      >
+        {generating ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Mic className="w-3 h-3" />
+        )}
+        {hasNarration ? 'Regen' : 'Generate'} Audio
+      </button>
+
+      {hasNarration && (
+        <button
+          onClick={handlePreview}
+          className="flex items-center gap-1 px-2.5 py-1 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+        >
+          {playing ? (
+            <Pause className="w-3 h-3" />
+          ) : (
+            <Play className="w-3 h-3" />
+          )}
+          Preview
+        </button>
+      )}
+
+      {hasNarration && (
+        <span className="text-xs text-green-400 flex items-center gap-1">
+          <CheckCircle className="w-3 h-3" />
+          {audioClipsCount} clip{audioClipsCount !== 1 ? 's' : ''}
+          {placeholderCount > 0 && ` + ${placeholderCount} name`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
@@ -523,6 +679,19 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             segment.id === segmentId ? { ...segment, ...updates } : segment
           ),
         })),
+      };
+    });
+  }, []);
+
+  // Update a chapter in local state after audio changes
+  const handleChapterUpdate = useCallback((chapterId: string, field: string, sequence: NarrationSequenceItem[]) => {
+    setStory((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        chapters: prev.chapters.map((chapter) =>
+          chapter.id === chapterId ? { ...chapter, [field]: sequence } : chapter
+        ),
       };
     });
   }, []);
@@ -805,6 +974,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                         <div className="mb-4">
                           <label className="text-xs text-slate-500 uppercase tracking-wide">Recap</label>
                           <p className="text-sm text-slate-300 mt-1 italic">"{chapter.recap}"</p>
+                          <ChapterFieldAudioEditor
+                            chapterId={chapter.id}
+                            storyId={storyId}
+                            chapterNumber={chapter.chapter_number}
+                            fieldName="recap"
+                            fieldLabel="Recap"
+                            text={chapter.recap}
+                            narrationSequence={chapter.recap_narration_sequence}
+                            onUpdate={handleChapterUpdate}
+                          />
                         </div>
                       )}
 
@@ -901,6 +1080,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                         <div className="mt-4 pt-4 border-t border-slate-600/50">
                           <label className="text-xs text-slate-500 uppercase tracking-wide">Cliffhanger</label>
                           <p className="text-sm text-purple-300 mt-1 italic">"{chapter.cliffhanger}"</p>
+                          <ChapterFieldAudioEditor
+                            chapterId={chapter.id}
+                            storyId={storyId}
+                            chapterNumber={chapter.chapter_number}
+                            fieldName="cliffhanger"
+                            fieldLabel="Cliffhanger"
+                            text={chapter.cliffhanger}
+                            narrationSequence={chapter.cliffhanger_narration_sequence}
+                            onUpdate={handleChapterUpdate}
+                          />
                         </div>
                       )}
 
@@ -909,6 +1098,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                         <div className="mt-2">
                           <label className="text-xs text-slate-500 uppercase tracking-wide">Next Chapter Teaser</label>
                           <p className="text-sm text-slate-400 mt-1">{chapter.next_chapter_teaser}</p>
+                          <ChapterFieldAudioEditor
+                            chapterId={chapter.id}
+                            storyId={storyId}
+                            chapterNumber={chapter.chapter_number}
+                            fieldName="teaser"
+                            fieldLabel="Teaser"
+                            text={chapter.next_chapter_teaser}
+                            narrationSequence={chapter.teaser_narration_sequence}
+                            onUpdate={handleChapterUpdate}
+                          />
                         </div>
                       )}
                     </div>

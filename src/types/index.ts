@@ -94,6 +94,10 @@ export interface StoryChapter {
   nextChapterTeaser: string;
   isRead: boolean;
   readAt: string | null;
+  // Pre-recorded audio narration sequences for chapter intro/outro
+  recapNarrationSequence: NarrationSequenceItem[] | null;
+  cliffhangerNarrationSequence: NarrationSequenceItem[] | null;
+  teaserNarrationSequence: NarrationSequenceItem[] | null;
 }
 
 // Item in the narration sequence - either an audio clip or a name placeholder
