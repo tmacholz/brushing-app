@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import type { TaskDefinition, TaskCheckInResult, Pet } from '../../types';
@@ -12,6 +12,9 @@ interface TaskCheckInProps {
 
 type CheckInPhase = 'intro' | 'question' | 'celebration' | 'encouragement' | 'summary';
 
+const CELEBRATION_DURATION = 1800; // 1.8 seconds for celebration/encouragement
+const INTRO_DURATION = 1500; // 1.5 seconds for intro
+
 export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
   const { playSound } = useAudio();
   const [phase, setPhase] = useState<CheckInPhase>('intro');
@@ -23,8 +26,22 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
   const currentTask = enabledTasks[currentTaskIndex];
   const isLastTask = currentTaskIndex >= enabledTasks.length - 1;
 
-  // Intro animation
+  // Move to next question or summary
+  const moveToNext = useCallback(() => {
+    if (isLastTask) {
+      setPhase('summary');
+      playSound('success');
+    } else {
+      setCurrentTaskIndex(prev => prev + 1);
+      setPhase('question');
+      playSound('storyTransition');
+    }
+  }, [isLastTask, playSound]);
+
+  // Intro animation - auto advance
   useEffect(() => {
+    if (phase !== 'intro') return;
+
     const timer = setTimeout(() => {
       if (enabledTasks.length > 0) {
         setPhase('question');
@@ -33,9 +50,21 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
         // No tasks enabled, go straight to summary
         setPhase('summary');
       }
-    }, 2000);
+    }, INTRO_DURATION);
+
     return () => clearTimeout(timer);
-  }, [enabledTasks.length, playSound]);
+  }, [phase, enabledTasks.length, playSound]);
+
+  // Auto-advance after celebration or encouragement
+  useEffect(() => {
+    if (phase !== 'celebration' && phase !== 'encouragement') return;
+
+    const timer = setTimeout(() => {
+      moveToNext();
+    }, CELEBRATION_DURATION);
+
+    return () => clearTimeout(timer);
+  }, [phase, moveToNext]);
 
   const handleAnswer = (completed: boolean) => {
     if (!currentTask) return;
@@ -55,16 +84,6 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
     } else {
       setPhase('encouragement');
       playSound('tap');
-    }
-  };
-
-  const handleContinue = () => {
-    if (isLastTask) {
-      setPhase('summary');
-    } else {
-      setCurrentTaskIndex(prev => prev + 1);
-      setPhase('question');
-      playSound('storyTransition');
     }
   };
 
@@ -222,7 +241,7 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
           </motion.div>
         )}
 
-        {/* Celebration Phase */}
+        {/* Celebration Phase - Auto-advances */}
         {phase === 'celebration' && (
           <motion.div
             key="celebration"
@@ -252,7 +271,7 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
                     opacity: [1, 1, 0],
                     rotate: Math.random() * 360,
                   }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
+                  transition={{ duration: 1.2, ease: 'easeOut' }}
                 >
                   {['🎉', '⭐', '✨', '🌟', '💫'][Math.floor(Math.random() * 5)]}
                 </motion.div>
@@ -266,34 +285,21 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
             >
               🎉
             </motion.div>
-            <h2 className="text-3xl font-bold text-white mb-2">Awesome!</h2>
-            <p className="text-white/90 text-xl mb-2">You earned a spin token!</p>
+            <h2 className="text-3xl font-bold text-white mb-4">Awesome!</h2>
 
             <motion.div
               initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: 'spring', delay: 0.3 }}
-              className="inline-flex items-center gap-2 bg-yellow-400 text-yellow-900 font-bold py-2 px-4 rounded-full text-lg mb-8"
+              animate={{ scale: [0, 1.2, 1] }}
+              transition={{ type: 'spring', delay: 0.2 }}
+              className="inline-flex items-center gap-2 bg-yellow-400 text-yellow-900 font-bold py-3 px-6 rounded-full text-xl"
             >
-              <span className="text-2xl">🎟️</span>
-              +1 Token
+              <span className="text-3xl">🎟️</span>
+              +1 Token!
             </motion.div>
-
-            <motion.button
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.5 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleContinue}
-              className="bg-white text-purple-700 font-bold py-3 px-8 rounded-full text-lg shadow-lg"
-            >
-              {isLastTask ? 'See My Tokens!' : 'Next Question'}
-            </motion.button>
           </motion.div>
         )}
 
-        {/* Encouragement Phase */}
+        {/* Encouragement Phase - Auto-advances */}
         {phase === 'encouragement' && (
           <motion.div
             key="encouragement"
@@ -304,27 +310,15 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
           >
             <motion.div
               animate={{ y: [0, -5, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
+              transition={{ duration: 1, repeat: Infinity }}
               className="text-8xl mb-4"
             >
               {getPetEmoji()}
             </motion.div>
             <h2 className="text-2xl font-bold text-white mb-2">No worries!</h2>
-            <p className="text-white/90 text-lg mb-8">
-              You'll do better next time! {pet?.displayName || 'Your buddy'} believes in you!
+            <p className="text-white/90 text-lg">
+              You'll get it next time!
             </p>
-
-            <motion.button
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleContinue}
-              className="bg-white text-purple-700 font-bold py-3 px-8 rounded-full text-lg shadow-lg"
-            >
-              {isLastTask ? 'See My Tokens!' : 'Next Question'}
-            </motion.button>
           </motion.div>
         )}
 

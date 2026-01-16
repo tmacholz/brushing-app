@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { motion, AnimatePresence, useAnimation } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { ChestReward } from '../../types';
 import { generateChestReward, getRewardDisplayInfo } from '../../services/rewardGenerator';
 import { useAudio } from '../../context/AudioContext';
@@ -15,14 +15,14 @@ interface BonusWheelProps {
 
 // Wheel segments configuration
 const WHEEL_SEGMENTS = [
-  { label: '5 pts', emoji: '⭐', color: 'from-yellow-400 to-amber-500' },
-  { label: 'Sticker', emoji: '🎨', color: 'from-pink-400 to-rose-500' },
-  { label: '10 pts', emoji: '⭐', color: 'from-yellow-500 to-orange-500' },
-  { label: 'Rare!', emoji: '✨', color: 'from-purple-400 to-indigo-500' },
-  { label: '15 pts', emoji: '⭐', color: 'from-amber-400 to-yellow-500' },
-  { label: 'Sticker', emoji: '🎨', color: 'from-fuchsia-400 to-pink-500' },
-  { label: '25 pts', emoji: '🌟', color: 'from-orange-400 to-red-500' },
-  { label: 'Bonus!', emoji: '🎁', color: 'from-cyan-400 to-blue-500' },
+  { label: '5 pts', emoji: '⭐', color: '#fbbf24' },
+  { label: 'Sticker', emoji: '🎨', color: '#f472b6' },
+  { label: '10 pts', emoji: '⭐', color: '#fb923c' },
+  { label: 'Rare!', emoji: '✨', color: '#a78bfa' },
+  { label: '15 pts', emoji: '⭐', color: '#fcd34d' },
+  { label: 'Sticker', emoji: '🎨', color: '#f9a8d4' },
+  { label: '25 pts', emoji: '🌟', color: '#fb7185' },
+  { label: 'Bonus!', emoji: '🎁', color: '#22d3ee' },
 ];
 
 const SEGMENT_ANGLE = 360 / WHEEL_SEGMENTS.length;
@@ -43,7 +43,7 @@ export function BonusWheel({
   const [currentReward, setCurrentReward] = useState<ChestReward | null>(null);
   const [allRewards, setAllRewards] = useState<ChestReward[]>([]);
   const [rotation, setRotation] = useState(0);
-  const wheelControls = useAnimation();
+  const [isAnimating, setIsAnimating] = useState(false);
   const spinCountRef = useRef(0);
 
   // Track collected items as we claim them
@@ -51,9 +51,10 @@ export function BonusWheel({
   const [localCollectedAccessories, setLocalCollectedAccessories] = useState(collectedAccessories);
 
   const handleSpin = async () => {
-    if (phase !== 'ready' || tokensRemaining <= 0) return;
+    if (phase !== 'ready' || tokensRemaining <= 0 || isAnimating) return;
 
     setPhase('spinning');
+    setIsAnimating(true);
     playSound('chapterStart');
 
     try {
@@ -64,26 +65,20 @@ export function BonusWheel({
         localCollectedAccessories
       );
 
-      // Calculate spin: 3-5 full rotations + random final position
-      const spins = 3 + Math.floor(Math.random() * 3);
+      // Calculate spin: 4-6 full rotations + random final position
+      const spins = 4 + Math.floor(Math.random() * 3);
       const segmentIndex = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-      const finalRotation = rotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
+      const newRotation = rotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
 
-      setRotation(finalRotation);
+      setRotation(newRotation);
 
-      // Animate the wheel
-      await wheelControls.start({
-        rotate: finalRotation,
-        transition: {
-          duration: 4,
-          ease: [0.2, 0.8, 0.3, 1], // Custom easing for realistic spin-down
-        },
-      });
+      // Wait for animation to complete (4 seconds)
+      await new Promise(resolve => setTimeout(resolve, 4000));
 
-      // Play tick sound during spin (simulated with delay)
       setCurrentReward(reward);
       setAllRewards(prev => [...prev, reward]);
       setPhase('revealed');
+      setIsAnimating(false);
       playSound('success');
 
       // Update local collected state for subsequent spins
@@ -99,6 +94,7 @@ export function BonusWheel({
 
     } catch (error) {
       console.error('Error generating reward:', error);
+      setIsAnimating(false);
       const fallbackReward: ChestReward = { type: 'points', amount: 5 };
       setCurrentReward(fallbackReward);
       setAllRewards(prev => [...prev, fallbackReward]);
@@ -130,6 +126,55 @@ export function BonusWheel({
   const newItemsEarned = allRewards.filter(
     r => r.type !== 'points' && r.isNew
   ).length;
+
+  // Render the wheel SVG
+  const renderWheel = () => (
+    <svg viewBox="0 0 100 100" className="w-full h-full">
+      {WHEEL_SEGMENTS.map((segment, index) => {
+        const startAngle = index * SEGMENT_ANGLE - 90;
+        const endAngle = startAngle + SEGMENT_ANGLE;
+        const startRad = (startAngle * Math.PI) / 180;
+        const endRad = (endAngle * Math.PI) / 180;
+
+        const x1 = 50 + 45 * Math.cos(startRad);
+        const y1 = 50 + 45 * Math.sin(startRad);
+        const x2 = 50 + 45 * Math.cos(endRad);
+        const y2 = 50 + 45 * Math.sin(endRad);
+
+        const midAngle = ((startAngle + endAngle) / 2 + 90) * (Math.PI / 180);
+        const textX = 50 + 30 * Math.cos(midAngle - Math.PI / 2);
+        const textY = 50 + 30 * Math.sin(midAngle - Math.PI / 2);
+
+        return (
+          <g key={index}>
+            <path
+              d={`M 50 50 L ${x1} ${y1} A 45 45 0 0 1 ${x2} ${y2} Z`}
+              fill={segment.color}
+              stroke="white"
+              strokeWidth="0.5"
+            />
+            <text
+              x={textX}
+              y={textY}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fill="white"
+              fontSize="6"
+              fontWeight="bold"
+              transform={`rotate(${(startAngle + endAngle) / 2 + 90}, ${textX}, ${textY})`}
+            >
+              {segment.emoji}
+            </text>
+          </g>
+        );
+      })}
+      {/* Center circle */}
+      <circle cx="50" cy="50" r="12" fill="white" stroke="#7c3aed" strokeWidth="2" />
+      <text x="50" y="51" textAnchor="middle" dominantBaseline="middle" fontSize="8">
+        🎰
+      </text>
+    </svg>
+  );
 
   return (
     <motion.div
@@ -164,13 +209,13 @@ export function BonusWheel({
       </div>
 
       <AnimatePresence mode="wait">
-        {/* Ready to Spin */}
-        {phase === 'ready' && (
+        {/* Ready / Spinning - Show Wheel */}
+        {(phase === 'ready' || phase === 'spinning') && (
           <motion.div
-            key="ready"
+            key="wheel-view"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            exit={{ opacity: 0, scale: 0.8 }}
             className="flex flex-col items-center"
           >
             {/* Tokens remaining */}
@@ -190,154 +235,43 @@ export function BonusWheel({
                 <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] border-t-white drop-shadow-lg" />
               </div>
 
-              {/* Wheel container */}
+              {/* Wheel container - single element that animates */}
               <motion.div
-                animate={wheelControls}
                 className="relative w-72 h-72 rounded-full shadow-2xl"
-                style={{ rotate: rotation }}
+                animate={{ rotate: rotation }}
+                transition={{
+                  duration: phase === 'spinning' ? 4 : 0,
+                  ease: [0.2, 0.8, 0.3, 1],
+                }}
               >
-                {/* Wheel segments */}
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  {WHEEL_SEGMENTS.map((segment, index) => {
-                    const startAngle = index * SEGMENT_ANGLE - 90;
-                    const endAngle = startAngle + SEGMENT_ANGLE;
-                    const startRad = (startAngle * Math.PI) / 180;
-                    const endRad = (endAngle * Math.PI) / 180;
-
-                    const x1 = 50 + 45 * Math.cos(startRad);
-                    const y1 = 50 + 45 * Math.sin(startRad);
-                    const x2 = 50 + 45 * Math.cos(endRad);
-                    const y2 = 50 + 45 * Math.sin(endRad);
-
-                    const largeArcFlag = SEGMENT_ANGLE > 180 ? 1 : 0;
-
-                    const colors = [
-                      '#fbbf24', '#f472b6', '#fb923c', '#a78bfa',
-                      '#fcd34d', '#f9a8d4', '#fb7185', '#22d3ee',
-                    ];
-
-                    const midAngle = ((startAngle + endAngle) / 2 + 90) * (Math.PI / 180);
-                    const textX = 50 + 30 * Math.cos(midAngle - Math.PI / 2);
-                    const textY = 50 + 30 * Math.sin(midAngle - Math.PI / 2);
-
-                    return (
-                      <g key={index}>
-                        <path
-                          d={`M 50 50 L ${x1} ${y1} A 45 45 0 ${largeArcFlag} 1 ${x2} ${y2} Z`}
-                          fill={colors[index]}
-                          stroke="white"
-                          strokeWidth="0.5"
-                        />
-                        <text
-                          x={textX}
-                          y={textY}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          fill="white"
-                          fontSize="5"
-                          fontWeight="bold"
-                          transform={`rotate(${(startAngle + endAngle) / 2 + 90}, ${textX}, ${textY})`}
-                        >
-                          {segment.emoji}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Center circle */}
-                  <circle cx="50" cy="50" r="12" fill="white" stroke="#7c3aed" strokeWidth="2" />
-                  <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" fontSize="8">
-                    🎰
-                  </text>
-                </svg>
+                {renderWheel()}
               </motion.div>
             </div>
 
-            {/* Spin button */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleSpin}
-              className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-lg"
-            >
-              Tap to Spin!
-            </motion.button>
-
-            <p className="text-white/60 text-sm mt-4">
-              {spinCountRef.current > 0 ? `Spin ${spinCountRef.current + 1} of ${tokensAvailable}` : 'Use your tokens!'}
-            </p>
-          </motion.div>
-        )}
-
-        {/* Spinning */}
-        {phase === 'spinning' && (
-          <motion.div
-            key="spinning"
-            className="flex flex-col items-center"
-          >
-            <p className="text-white text-xl font-bold mb-4 animate-pulse">Spinning...</p>
-
-            {/* Wheel (same as ready, just showing the spin animation) */}
-            <div className="relative mb-8">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 z-20">
-                <div className="w-0 h-0 border-l-[16px] border-l-transparent border-r-[16px] border-r-transparent border-t-[24px] border-t-white drop-shadow-lg" />
-              </div>
-
-              <motion.div
-                animate={wheelControls}
-                className="relative w-72 h-72 rounded-full shadow-2xl"
+            {/* Spin button or spinning text */}
+            {phase === 'ready' ? (
+              <>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSpin}
+                  className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-4 px-12 rounded-full text-2xl shadow-lg"
+                >
+                  Tap to Spin!
+                </motion.button>
+                <p className="text-white/60 text-sm mt-4">
+                  {spinCountRef.current > 0 ? `Spin ${spinCountRef.current + 1} of ${tokensAvailable}` : 'Use your tokens!'}
+                </p>
+              </>
+            ) : (
+              <motion.p
+                animate={{ opacity: [0.5, 1, 0.5] }}
+                transition={{ duration: 0.8, repeat: Infinity }}
+                className="text-white text-xl font-bold"
               >
-                <svg viewBox="0 0 100 100" className="w-full h-full">
-                  {WHEEL_SEGMENTS.map((segment, index) => {
-                    const startAngle = index * SEGMENT_ANGLE - 90;
-                    const endAngle = startAngle + SEGMENT_ANGLE;
-                    const startRad = (startAngle * Math.PI) / 180;
-                    const endRad = (endAngle * Math.PI) / 180;
-
-                    const x1 = 50 + 45 * Math.cos(startRad);
-                    const y1 = 50 + 45 * Math.sin(startRad);
-                    const x2 = 50 + 45 * Math.cos(endRad);
-                    const y2 = 50 + 45 * Math.sin(endRad);
-
-                    const colors = [
-                      '#fbbf24', '#f472b6', '#fb923c', '#a78bfa',
-                      '#fcd34d', '#f9a8d4', '#fb7185', '#22d3ee',
-                    ];
-
-                    const midAngle = ((startAngle + endAngle) / 2 + 90) * (Math.PI / 180);
-                    const textX = 50 + 30 * Math.cos(midAngle - Math.PI / 2);
-                    const textY = 50 + 30 * Math.sin(midAngle - Math.PI / 2);
-
-                    return (
-                      <g key={index}>
-                        <path
-                          d={`M 50 50 L ${x1} ${y1} A 45 45 0 0 1 ${x2} ${y2} Z`}
-                          fill={colors[index]}
-                          stroke="white"
-                          strokeWidth="0.5"
-                        />
-                        <text
-                          x={textX}
-                          y={textY}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          fill="white"
-                          fontSize="5"
-                          fontWeight="bold"
-                          transform={`rotate(${(startAngle + endAngle) / 2 + 90}, ${textX}, ${textY})`}
-                        >
-                          {segment.emoji}
-                        </text>
-                      </g>
-                    );
-                  })}
-                  <circle cx="50" cy="50" r="12" fill="white" stroke="#7c3aed" strokeWidth="2" />
-                  <text x="50" y="50" textAnchor="middle" dominantBaseline="middle" fontSize="8">
-                    🎰
-                  </text>
-                </svg>
-              </motion.div>
-            </div>
+                Spinning...
+              </motion.p>
+            )}
           </motion.div>
         )}
 
