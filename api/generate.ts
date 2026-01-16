@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
+import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
@@ -33,10 +34,47 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
   }
 }
 
+// Remove white background from image using threshold detection
+async function removeWhiteBackground(imageBuffer: Buffer): Promise<Buffer> {
+  // Extract raw RGBA pixel data
+  const { data, info } = await sharp(imageBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  // Process pixels - make white pixels transparent
+  const processedData = Buffer.from(data);
+  const whiteThreshold = 240; // RGB values >= 240 considered white
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+
+    if (r >= whiteThreshold && g >= whiteThreshold && b >= whiteThreshold) {
+      // Make white/near-white pixels fully transparent
+      processedData[i + 3] = 0; // Alpha = transparent
+    }
+  }
+
+  // Convert back to PNG with transparency
+  return sharp(processedData, {
+    raw: {
+      width: info.width,
+      height: info.height,
+      channels: 4,
+    },
+  })
+    .png()
+    .toBuffer();
+}
+
 // Helper to call Gemini API and upload result
+// Optional postProcess function to transform the image buffer before upload (e.g., background removal)
 async function generateAndUpload(
   parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>,
-  storageKey: string
+  storageKey: string,
+  postProcess?: (buffer: Buffer) => Promise<Buffer>
 ): Promise<{ url: string; isDataUrl: boolean }> {
   const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
     method: 'POST',
@@ -63,14 +101,19 @@ async function generateAndUpload(
   }
 
   const { mimeType, data: base64Data } = imagePart.inlineData;
+  let imageBuffer = Buffer.from(base64Data, 'base64');
+
+  // Apply post-processing if provided (e.g., background removal for sprites)
+  if (postProcess) {
+    imageBuffer = await postProcess(imageBuffer);
+  }
 
   // Try to upload to Vercel Blob
   if (process.env.BLOB_READ_WRITE_TOKEN) {
     try {
-      const imageBuffer = Buffer.from(base64Data, 'base64');
       const blob = await put(storageKey, imageBuffer, {
         access: 'public',
-        contentType: mimeType || 'image/png',
+        contentType: 'image/png', // Always PNG after processing
         allowOverwrite: true,
       });
       return { url: blob.url, isDataUrl: false };
@@ -80,7 +123,8 @@ async function generateAndUpload(
   }
 
   // Fallback to data URL
-  return { url: `data:${mimeType || 'image/png'};base64,${base64Data}`, isDataUrl: true };
+  const finalBase64 = imageBuffer.toString('base64');
+  return { url: `data:image/png;base64,${finalBase64}`, isDataUrl: true };
 }
 
 // Story image generation
@@ -505,12 +549,12 @@ interface SpriteGenerationRequest {
   posePrompt: string;
 }
 
-// Style prefix for sprite generation (transparent background)
+// Style prefix for sprite generation (white background for removal)
 const SPRITE_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
-TRANSPARENT BACKGROUND (critical - pure transparency, no background at all),
+PURE WHITE #FFFFFF BACKGROUND (critical - solid white background, no gradients or shadows),
 full body character sprite suitable for compositing over scene backgrounds,
 clean sharp edges for easy overlay, Studio Ghibli inspired soft aesthetic,
-no ground shadow, character floating on transparent background,
+no ground shadow, character on plain white background,
 warm inviting colors, friendly approachable character design.`;
 
 async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelResponse) {
@@ -545,10 +589,10 @@ CRITICAL REQUIREMENTS:
   - Clothing and accessories (if visible)
   - Body proportions and size
 - Create a FULL BODY sprite showing the entire character from head to toe
-- The background MUST be completely transparent (PNG with alpha channel)
+- The background MUST be pure white #FFFFFF (solid white, no gradients or shadows)
 - Clean, sharp edges suitable for compositing over other images
 - The pose should be: ${posePrompt}
-- Character should be centered in the frame
+- Character should be centered in the frame with padding
 - Maintain the whimsical children's book illustration style
 - No text, labels, or watermarks`;
 
@@ -558,7 +602,8 @@ CRITICAL REQUIREMENTS:
   ];
 
   const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}.png`;
-  const result = await generateAndUpload(parts, storageKey);
+  // Apply white background removal after generation
+  const result = await generateAndUpload(parts, storageKey, removeWhiteBackground);
 
   return res.status(200).json({
     spriteUrl: result.url,
