@@ -64,9 +64,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const storyPetId = child?.activePetId;
   useEffect(() => {
     if (storyPetId) {
-      getPetAudioUrl(storyPetId).then(setPetNameAudioUrl);
+      // Pet audio is stored by pet name (e.g., 'sparkle'), not by UUID
+      // So we need to look up the pet and use its name for the audio lookup
+      const pet = getPetById(storyPetId);
+      const audioLookupKey = pet?.name ?? storyPetId;
+      console.log('[Audio] Fetching pet audio for:', { storyPetId, petName: pet?.name, audioLookupKey });
+      getPetAudioUrl(audioLookupKey).then(setPetNameAudioUrl);
     }
-  }, [storyPetId]);
+  }, [storyPetId, getPetById]);
 
   // Get or create story arc, and refresh content from latest template data
   const storyRefreshed = useRef(false);
