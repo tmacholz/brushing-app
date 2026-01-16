@@ -251,6 +251,11 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const [generating, setGenerating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
+  // Debug: log when segment.image_url changes
+  useEffect(() => {
+    console.log('[SegmentImageEditor] segment.image_url changed:', segment.id, segment.image_url);
+  }, [segment.id, segment.image_url]);
+
   const hasImage = !!segment.image_url;
   const hasPrompt = !!segment.image_prompt;
 
@@ -336,7 +341,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
       }
 
       console.log('[ImageGen] Database save successful, updating UI state');
+      console.log('[ImageGen] Calling onUpdate with:', segment.id, data.imageUrl);
       onUpdate(segment.id, { image_url: data.imageUrl });
+      console.log('[ImageGen] onUpdate called');
     } catch (error) {
       console.error('[ImageGen] Failed to generate image:', error);
       alert('Failed to generate image. Check console for details.');
@@ -1104,8 +1111,13 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   // Update a segment in local state after audio/image changes
   const handleSegmentUpdate = useCallback((segmentId: string, updates: Partial<Segment>) => {
+    console.log('[handleSegmentUpdate] Called with:', segmentId, updates);
     setStory((prev) => {
-      if (!prev) return prev;
+      if (!prev) {
+        console.log('[handleSegmentUpdate] No prev story, returning');
+        return prev;
+      }
+      console.log('[handleSegmentUpdate] Updating story state');
       return {
         ...prev,
         chapters: prev.chapters.map((chapter) => ({
