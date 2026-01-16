@@ -13,11 +13,14 @@ import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
+import { TaskCheckIn } from '../components/TaskCheckIn';
+import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
-import type { CharacterPosition, ChestReward } from '../types';
+import type { CharacterPosition, ChestReward, TaskCheckInResult } from '../types';
+import { DEFAULT_TASKS } from '../types';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -44,6 +47,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   const [chestReward, setChestReward] = useState<ChestReward | null>(null);
+  // New task bonus flow state
+  const [showTaskCheckIn, setShowTaskCheckIn] = useState(false);
+  const [showBonusWheel, setShowBonusWheel] = useState(false);
+  const [tokensEarned, setTokensEarned] = useState(0);
+  const [allWheelRewards, setAllWheelRewards] = useState<ChestReward[]>([]);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -179,8 +187,17 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Mark chapter as complete
     await completeChapter(chapterIndex);
 
-    // Show mystery chest before completion screen
-    setShowMysteryChest(true);
+    // Check if task bonus feature is enabled
+    const taskConfig = child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
+    const enabledTasks = taskConfig.tasks.filter(t => t.enabled);
+
+    if (taskConfig.enabled && enabledTasks.length > 0) {
+      // Show task check-in flow
+      setShowTaskCheckIn(true);
+    } else {
+      // Fall back to mystery chest (legacy flow)
+      setShowMysteryChest(true);
+    }
   };
 
   const handleChestRewardClaimed = async (reward: ChestReward) => {
@@ -195,6 +212,30 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
+    onComplete(pointsEarned);
+  };
+
+  // Task check-in completion handler
+  const handleTaskCheckInComplete = (_results: TaskCheckInResult[], tokens: number) => {
+    setTokensEarned(tokens);
+    setShowTaskCheckIn(false);
+    setShowBonusWheel(true);
+  };
+
+  // Bonus wheel reward handler
+  const handleWheelRewardClaimed = async (reward: ChestReward) => {
+    setAllWheelRewards(prev => [...prev, reward]);
+    await claimChestReward(reward);
+
+    // Add bonus points from wheel if applicable
+    if (reward.type === 'points') {
+      setPointsEarned(prev => prev + reward.amount);
+    }
+  };
+
+  // Bonus wheel complete handler
+  const handleWheelComplete = () => {
+    setShowBonusWheel(false);
     onComplete(pointsEarned);
   };
 
@@ -521,7 +562,33 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
-  // Render mystery chest overlay
+  // Render task check-in overlay
+  if (isComplete && showTaskCheckIn) {
+    const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
+    return (
+      <TaskCheckIn
+        tasks={taskConfig.tasks}
+        pet={pet ?? null}
+        onComplete={handleTaskCheckInComplete}
+      />
+    );
+  }
+
+  // Render bonus wheel overlay
+  if (isComplete && showBonusWheel) {
+    return (
+      <BonusWheel
+        tokensAvailable={tokensEarned}
+        worldId={child?.activeWorldId}
+        collectedStickers={child?.collectedStickers ?? []}
+        collectedAccessories={child?.collectedAccessories ?? []}
+        onRewardClaimed={handleWheelRewardClaimed}
+        onComplete={handleWheelComplete}
+      />
+    );
+  }
+
+  // Render mystery chest overlay (legacy fallback when task bonus is disabled)
   if (isComplete && showMysteryChest) {
     return (
       <MysteryChest
@@ -534,8 +601,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
-  // Render completion screen (after mystery chest)
-  if (isComplete && !showMysteryChest) {
+  // Render completion screen (after mystery chest or bonus wheel)
+  if (isComplete && !showMysteryChest && !showTaskCheckIn && !showBonusWheel) {
+    // Determine rewards to show - from wheel or chest
+    const rewardsToShow = allWheelRewards.length > 0 ? allWheelRewards : (chestReward ? [chestReward] : []);
+    const newCollectibles = rewardsToShow.filter(r => r.type !== 'points' && r.isNew);
+
     return (
       <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
         <motion.div
@@ -556,25 +627,32 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             You earned {pointsEarned} points!
           </p>
 
-          {/* Show what reward was found */}
-          {chestReward && chestReward.type !== 'points' && chestReward.isNew && (
+          {/* Show collectibles found (from wheel or chest) */}
+          {newCollectibles.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               className="bg-white/20 rounded-2xl p-4 mb-6 max-w-md"
             >
-              <p className="text-white/80 text-sm mb-1">You found:</p>
-              <div className="flex items-center justify-center gap-3">
-                {chestReward.collectible.imageUrl && (
-                  <img
-                    src={chestReward.collectible.imageUrl}
-                    alt={chestReward.collectible.displayName}
-                    className="w-12 h-12 rounded-lg object-cover"
-                  />
-                )}
-                <span className="text-white font-bold">
-                  {chestReward.collectible.displayName}
-                </span>
+              <p className="text-white/80 text-sm mb-2">You found:</p>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                {newCollectibles.map((reward, idx) => {
+                  if (reward.type === 'points') return null;
+                  return (
+                    <div key={idx} className="flex items-center gap-2">
+                      {reward.collectible.imageUrl && (
+                        <img
+                          src={reward.collectible.imageUrl}
+                          alt={reward.collectible.displayName}
+                          className="w-12 h-12 rounded-lg object-cover"
+                        />
+                      )}
+                      <span className="text-white font-bold text-sm">
+                        {reward.collectible.displayName}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           )}

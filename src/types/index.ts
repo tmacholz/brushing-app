@@ -22,7 +22,43 @@ export interface Child {
   collectedStickers: string[]; // Array of collectible IDs
   collectedAccessories: string[]; // Array of collectible IDs
   equippedAccessories: EquippedAccessories; // Pet ID -> array of accessory IDs
+  // Task bonus feature
+  taskConfig: TaskConfig; // Parent-configured tasks for check-in
 }
+
+// =====================================================
+// Task Bonus System Types
+// =====================================================
+
+export interface TaskConfig {
+  enabled: boolean;
+  tasks: TaskDefinition[];
+}
+
+export interface TaskDefinition {
+  id: string;
+  question: string; // e.g., "Did you go potty today?"
+  shortLabel: string; // e.g., "Potty"
+  emoji: string; // e.g., "🚽"
+  enabled: boolean;
+}
+
+// Default tasks available for parents to configure
+export const DEFAULT_TASKS: TaskDefinition[] = [
+  { id: 'potty', question: 'Did you go potty?', shortLabel: 'Potty', emoji: '🚽', enabled: true },
+  { id: 'toys', question: 'Did you clean up your toys?', shortLabel: 'Toys', emoji: '🧸', enabled: true },
+  { id: 'hands', question: 'Did you wash your hands?', shortLabel: 'Hands', emoji: '🧼', enabled: false },
+  { id: 'dressed', question: 'Did you get dressed?', shortLabel: 'Dressed', emoji: '👕', enabled: false },
+  { id: 'polite', question: 'Did you say please and thank you?', shortLabel: 'Polite', emoji: '🙏', enabled: false },
+];
+
+export interface TaskCheckInResult {
+  taskId: string;
+  completed: boolean;
+}
+
+// Result from bonus wheel spin (same structure as ChestReward for compatibility)
+export type WheelReward = ChestReward;
 
 export interface Pet {
   id: string;
