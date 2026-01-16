@@ -223,6 +223,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     if (phase === 'story' && currentSegment?.narrationSequence && currentSegment.narrationSequence.length > 0) {
       // Only play if this is a new segment
       if (currentSegment.id !== lastSplicedSegmentRef.current) {
+        console.log('[Audio] Using pre-recorded audio for segment:', currentSegment.id);
         lastSplicedSegmentRef.current = currentSegment.id;
         lastSpokenTextRef.current = null; // Reset TTS ref so we don't duplicate
         playSplicedAudio(currentSegment.narrationSequence);
@@ -231,6 +232,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
 
     // Fall back to TTS for segments without pre-recorded audio
+    if (phase === 'story') {
+      console.log('[Audio] No narrationSequence, falling back to TTS for segment:', currentSegment?.id, {
+        hasNarrationSequence: !!currentSegment?.narrationSequence,
+        narrationLength: currentSegment?.narrationSequence?.length,
+      });
+    }
     let textToSpeak: string | null = null;
 
     switch (phase) {
