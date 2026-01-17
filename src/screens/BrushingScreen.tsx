@@ -52,6 +52,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [showBonusWheel, setShowBonusWheel] = useState(false);
   const [tokensEarned, setTokensEarned] = useState(0);
   const [hasBonusFlow, setHasBonusFlow] = useState(false); // Track if bonus flow is enabled
+  const [hasExited, setHasExited] = useState(false); // Prevent rendering after exit
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -223,6 +224,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
+    setHasExited(true);
     onComplete(pointsEarned);
   };
 
@@ -246,6 +248,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Bonus wheel complete handler
   const handleWheelComplete = () => {
     setShowBonusWheel(false);
+    setHasExited(true);
     onComplete(pointsEarned);
   };
 
@@ -522,6 +525,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     return () => clearInterval(timer);
   }, [showCountdown, start, playSound]);
+
+  // Prevent any rendering after exit to avoid flashing back to story
+  if (hasExited) {
+    return null;
+  }
 
   // Render error if no story is available
   if (!currentChapter) {

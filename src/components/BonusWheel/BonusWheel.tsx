@@ -74,9 +74,12 @@ export function BonusWheel({
       );
 
       // Calculate spin: 4-6 full rotations + random final position
+      // Use consistent rotation delta for all spins (not cumulative)
+      // Each spin starts from a normalized base of (spinCount * small offset) to avoid visual reset
       const spins = 4 + Math.floor(Math.random() * 3);
       const segmentIndex = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-      const newRotation = rotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
+      const baseRotation = spinCountRef.current * 360; // Small offset per spin to avoid visual jump
+      const newRotation = baseRotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
 
       setRotation(newRotation);
 
@@ -109,7 +112,7 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, rotation, playSound, onRewardClaimed]);
+  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed]);
 
   const handleSpin = () => {
     if (phase !== 'ready') return;
