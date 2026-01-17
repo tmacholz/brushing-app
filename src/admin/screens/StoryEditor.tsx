@@ -33,6 +33,11 @@ type NarrationSequenceItem =
   | { type: 'audio'; url: string }
   | { type: 'name'; placeholder: 'CHILD' | 'PET' };
 
+interface ImageHistoryItem {
+  url: string;
+  created_at: string;
+}
+
 interface Segment {
   id: string;
   segment_order: number;
@@ -42,6 +47,7 @@ interface Segment {
   brushing_prompt: string | null;
   image_prompt: string | null;
   image_url: string | null;
+  image_history: ImageHistoryItem[] | null;
   narration_sequence: NarrationSequenceItem[] | null;
 }
 
@@ -249,15 +255,13 @@ interface SegmentImageEditorProps {
 
 function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, references, onUpdate }: SegmentImageEditorProps) {
   const [generating, setGenerating] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-
-  // Debug: log when segment.image_url changes
-  useEffect(() => {
-    console.log('[SegmentImageEditor] segment.image_url changed:', segment.id, segment.image_url);
-  }, [segment.id, segment.image_url]);
+  const [showGallery, setShowGallery] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
   const hasPrompt = !!segment.image_prompt;
+  const imageHistory = segment.image_history || [];
+  const hasHistory = imageHistory.length > 1;
 
   // Find relevant visual references for this segment
   const findRelevantReferences = () => {
@@ -324,7 +328,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
       const data = await res.json();
       console.log('[ImageGen] Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
 
-      // Save to database
+      // Save to database (API will append to history)
       console.log('[ImageGen] Saving to database...');
       const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
@@ -340,10 +344,11 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
         throw new Error(`Failed to save: ${saveData.details || saveData.error}`);
       }
 
-      console.log('[ImageGen] Database save successful, updating UI state');
-      console.log('[ImageGen] Calling onUpdate with:', segment.id, data.imageUrl);
-      onUpdate(segment.id, { image_url: data.imageUrl });
-      console.log('[ImageGen] onUpdate called');
+      // Update local state with new image and history from response
+      onUpdate(segment.id, {
+        image_url: saveData.segment.image_url,
+        image_history: saveData.segment.image_history
+      });
     } catch (error) {
       console.error('[ImageGen] Failed to generate image:', error);
       alert('Failed to generate image. Check console for details.');
@@ -352,59 +357,189 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
     }
   };
 
+  const handleSelectImage = async (imageUrl: string) => {
+    if (imageUrl === segment.image_url) return;
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectImageFromHistory: imageUrl }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to select image');
+      }
+
+      const data = await res.json();
+      onUpdate(segment.id, { image_url: data.segment.image_url });
+    } catch (error) {
+      console.error('Failed to select image:', error);
+      alert('Failed to select image');
+    }
+  };
+
+  const handleDeleteImage = async (imageUrl: string) => {
+    if (!confirm('Delete this image? This cannot be undone.')) return;
+
+    setDeleting(imageUrl);
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete image');
+      }
+
+      const data = await res.json();
+      onUpdate(segment.id, {
+        image_url: data.segment.image_url,
+        image_history: data.segment.image_history
+      });
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+      alert('Failed to delete image');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   if (!hasPrompt) {
     return null;
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2 flex-wrap">
-      {/* Generate/Regenerate Image Button */}
-      <button
-        onClick={handleGenerateImage}
-        disabled={generating}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
-      >
-        {generating ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : hasImage ? (
-          <RefreshCw className="w-3.5 h-3.5" />
-        ) : (
-          <Image className="w-3.5 h-3.5" />
-        )}
-        {hasImage ? 'Regenerate Image' : 'Generate Image'}
-      </button>
-
-      {/* Preview Button */}
-      {hasImage && (
+    <div className="mt-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Generate/Regenerate Image Button */}
         <button
-          onClick={() => setShowPreview(!showPreview)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+          onClick={handleGenerateImage}
+          disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
         >
-          <Eye className="w-3.5 h-3.5" />
-          {showPreview ? 'Hide' : 'Preview'}
+          {generating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : hasImage ? (
+            <RefreshCw className="w-3.5 h-3.5" />
+          ) : (
+            <Image className="w-3.5 h-3.5" />
+          )}
+          {hasImage ? 'Regenerate' : 'Generate Image'}
         </button>
-      )}
 
-      {/* Image status indicator */}
-      {hasImage && (
-        <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Image ready
-        </span>
-      )}
+        {/* Gallery Button */}
+        {hasImage && (
+          <button
+            onClick={() => setShowGallery(!showGallery)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            {showGallery ? 'Hide' : 'Gallery'}
+            {hasHistory && <span className="bg-cyan-500/30 px-1.5 rounded">{imageHistory.length}</span>}
+          </button>
+        )}
 
-      {/* Image Preview */}
-      {showPreview && segment.image_url && (
-        <div className="w-full mt-2">
-          <img
-            src={segment.image_url}
-            alt="Scene preview"
-            className="w-full max-w-md rounded-lg border border-slate-600"
-          />
+        {/* Image status indicator */}
+        {hasImage && (
+          <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            Image ready
+          </span>
+        )}
+      </div>
+
+      {/* Image Gallery */}
+      {showGallery && (
+        <div className="mt-3 p-3 bg-slate-800/50 rounded-lg">
+          {imageHistory.length === 0 ? (
+            // No history yet - show just current image
+            segment.image_url && (
+              <div className="relative group">
+                <img
+                  src={segment.image_url}
+                  alt="Current"
+                  className="w-full max-w-md rounded-lg border-2 border-emerald-500"
+                />
+                <div className="absolute top-2 left-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded">
+                  Current
+                </div>
+              </div>
+            )
+          ) : (
+            // Show gallery grid
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {imageHistory.slice().reverse().map((item, idx) => {
+                const isSelected = item.url === segment.image_url;
+                const isDeleting = deleting === item.url;
+                const createdAt = new Date(item.created_at);
+                const timeAgo = getTimeAgo(createdAt);
+
+                return (
+                  <div key={item.url} className="relative group">
+                    <img
+                      src={item.url}
+                      alt={`Version ${imageHistory.length - idx}`}
+                      className={`w-full aspect-video object-cover rounded-lg cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-2 border-emerald-500 ring-2 ring-emerald-500/30'
+                          : 'border border-slate-600 hover:border-slate-400'
+                      } ${isDeleting ? 'opacity-50' : ''}`}
+                      onClick={() => !isDeleting && handleSelectImage(item.url)}
+                    />
+
+                    {/* Selected indicator */}
+                    {isSelected && (
+                      <div className="absolute top-1 left-1 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <CheckCircle className="w-2.5 h-2.5" />
+                        Active
+                      </div>
+                    )}
+
+                    {/* Time ago */}
+                    <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
+                      {timeAgo}
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteImage(item.url);
+                      }}
+                      disabled={isDeleting}
+                      className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      title="Delete this image"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+// Helper to format time ago
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return date.toLocaleDateString();
 }
 
 // Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
