@@ -53,11 +53,19 @@ export function BonusWheel({
   const doSpin = useCallback(async () => {
     if (tokensRemaining <= 0 || isAnimating) return;
 
+    const isSubsequentSpin = spinCountRef.current > 0;
+
     setPhase('spinning');
     setIsAnimating(true);
     playSound('chapterStart');
 
     try {
+      // For subsequent spins, wait for the wheel to animate in before starting rotation
+      // This accounts for AnimatePresence enter animation (~500ms)
+      if (isSubsequentSpin) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       // Generate the reward first so we know what we're landing on
       const reward = await generateChestReward(
         worldId,
