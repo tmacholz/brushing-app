@@ -276,10 +276,10 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   fullPrompt += `SCENE TO ILLUSTRATE:\n${prompt}`;
   parts.push({ text: fullPrompt });
 
-  const result = await generateAndUpload(parts, `story-images/${segmentId}.png`);
-  // Add cache-busting timestamp to force UI update on regeneration
-  const imageUrlWithCacheBust = `${result.url}?t=${Date.now()}`;
-  return res.status(200).json({ imageUrl: imageUrlWithCacheBust, segmentId });
+  // Include timestamp in filename for reliable cache busting (CDN may ignore query params)
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-images/${segmentId}-${timestamp}.png`);
+  return res.status(200).json({ imageUrl: result.url, segmentId });
 }
 
 // User avatar generation
@@ -783,7 +783,9 @@ CRITICAL - NO TEXT except the view labels:
 
   parts.push({ text: fullPrompt });
 
-  const result = await generateAndUpload(parts, `story-references/${referenceId}.png`);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-references/${referenceId}-${timestamp}.png`);
   return res.status(200).json({ imageUrl: result.url, referenceId });
 }
 
@@ -867,7 +869,9 @@ CRITICAL - NO TEXT:
 
   parts.push({ text: fullPrompt });
 
-  const result = await generateAndUpload(parts, `story-covers/${storyId}.png`);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-covers/${storyId}-${timestamp}.png`);
   return res.status(200).json({ coverImageUrl: result.url, storyId });
 }
 
