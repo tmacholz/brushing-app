@@ -1,5 +1,6 @@
 import { createContext, useContext, useCallback, useMemo, useState, useEffect, type ReactNode } from 'react';
-import type { Child, StoryArc, ChestReward, EquippedAccessories } from '../types';
+import type { Child, StoryArc, ChestReward, EquippedAccessories, TaskConfig } from '../types';
+import { DEFAULT_TASKS } from '../types';
 import { usePets } from './PetsContext';
 import { getBrushById } from '../data/brushes';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
@@ -42,6 +43,9 @@ interface ChildContextType {
   claimChestReward: (reward: ChestReward) => Promise<void>;
   equipAccessory: (petId: string, accessoryId: string) => Promise<void>;
   unequipAccessory: (petId: string, accessoryId: string) => Promise<void>;
+
+  // Task bonus system
+  updateTaskConfig: (taskConfig: TaskConfig) => Promise<void>;
 
   // Refresh data from server
   refreshChildren: () => Promise<void>;
@@ -265,6 +269,10 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         unlockedPets: starterPetIds,
         unlockedBrushes: ['star-swirl'],
         unlockedWorlds: ['magical-forest', 'space-station'],
+        taskConfig: {
+          enabled: true,
+          tasks: DEFAULT_TASKS,
+        },
       };
 
       const newChild = await createChildInAPI(childData);
@@ -525,6 +533,11 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     await updateChild({ equippedAccessories: newEquipped });
   }, [child, updateChild]);
 
+  // Update task configuration (for parents)
+  const updateTaskConfig = useCallback(async (taskConfig: TaskConfig) => {
+    await updateChild({ taskConfig });
+  }, [updateChild]);
+
   return (
     <ChildContext.Provider
       value={{
@@ -552,6 +565,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         claimChestReward,
         equipAccessory,
         unequipAccessory,
+        updateTaskConfig,
         refreshChildren,
       }}
     >

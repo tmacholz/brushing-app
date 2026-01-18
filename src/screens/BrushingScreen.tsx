@@ -13,11 +13,14 @@ import { useContent } from '../context/ContentContext';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
+import { TaskCheckIn } from '../components/TaskCheckIn';
+import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
-import type { CharacterPosition, ChestReward } from '../types';
+import type { CharacterPosition, ChestReward, TaskCheckInResult } from '../types';
+import { DEFAULT_TASKS } from '../types';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -43,7 +46,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
-  const [chestReward, setChestReward] = useState<ChestReward | null>(null);
+  // New task bonus flow state
+  const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
+  const [showTaskCheckIn, setShowTaskCheckIn] = useState(false);
+  const [showBonusWheel, setShowBonusWheel] = useState(false);
+  const [tokensEarned, setTokensEarned] = useState(0);
+  const [hasBonusFlow, setHasBonusFlow] = useState(false); // Track if bonus flow is enabled
+  const [hasExited, setHasExited] = useState(false); // Prevent rendering after exit
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
@@ -180,12 +189,32 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Mark chapter as complete
     await completeChapter(chapterIndex);
 
-    // Show mystery chest before completion screen
-    setShowMysteryChest(true);
+    // Check if task bonus feature is enabled
+    const taskConfig = child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
+    const enabledTasks = taskConfig.tasks.filter(t => t.enabled);
+
+    // Track if bonus flow is available
+    const bonusEnabled = taskConfig.enabled && enabledTasks.length > 0;
+    setHasBonusFlow(bonusEnabled);
+
+    // Always show "Amazing job" completion screen first
+    setShowInitialCompletion(true);
+  };
+
+  // Handle continue from initial completion screen
+  const handleInitialCompletionContinue = () => {
+    setShowInitialCompletion(false);
+
+    if (hasBonusFlow) {
+      // Show task check-in flow
+      setShowTaskCheckIn(true);
+    } else {
+      // Fall back to mystery chest (legacy flow)
+      setShowMysteryChest(true);
+    }
   };
 
   const handleChestRewardClaimed = async (reward: ChestReward) => {
-    setChestReward(reward);
     await claimChestReward(reward);
 
     // Add bonus points from chest if applicable
@@ -196,6 +225,31 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
+    setHasExited(true);
+    onComplete(pointsEarned);
+  };
+
+  // Task check-in completion handler
+  const handleTaskCheckInComplete = (_results: TaskCheckInResult[], tokens: number) => {
+    setTokensEarned(tokens);
+    setShowTaskCheckIn(false);
+    setShowBonusWheel(true);
+  };
+
+  // Bonus wheel reward handler
+  const handleWheelRewardClaimed = async (reward: ChestReward) => {
+    await claimChestReward(reward);
+
+    // Add bonus points from wheel if applicable
+    if (reward.type === 'points') {
+      setPointsEarned(prev => prev + reward.amount);
+    }
+  };
+
+  // Bonus wheel complete handler
+  const handleWheelComplete = () => {
+    setShowBonusWheel(false);
+    setHasExited(true);
     onComplete(pointsEarned);
   };
 
@@ -473,6 +527,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return () => clearInterval(timer);
   }, [showCountdown, start, playSound]);
 
+  // Prevent any rendering after exit to avoid flashing back to story
+  if (hasExited) {
+    return null;
+  }
+
   // Render error if no story is available
   if (!currentChapter) {
     return (
@@ -522,21 +581,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
-  // Render mystery chest overlay
-  if (isComplete && showMysteryChest) {
-    return (
-      <MysteryChest
-        worldId={child?.activeWorldId}
-        collectedStickers={child?.collectedStickers ?? []}
-        collectedAccessories={child?.collectedAccessories ?? []}
-        onRewardClaimed={handleChestRewardClaimed}
-        onClose={handleChestClose}
-      />
-    );
-  }
-
-  // Render completion screen (after mystery chest)
-  if (isComplete && !showMysteryChest) {
+  // Render initial completion screen ("Amazing job!" first)
+  if (isComplete && showInitialCompletion) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
         <motion.div
@@ -557,29 +603,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             You earned {pointsEarned} points!
           </p>
 
-          {/* Show what reward was found */}
-          {chestReward && chestReward.type !== 'points' && chestReward.isNew && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/20 rounded-2xl p-4 mb-6 max-w-md"
-            >
-              <p className="text-white/80 text-sm mb-1">You found:</p>
-              <div className="flex items-center justify-center gap-3">
-                {chestReward.collectible.imageUrl && (
-                  <img
-                    src={chestReward.collectible.imageUrl}
-                    alt={chestReward.collectible.displayName}
-                    className="w-12 h-12 rounded-lg object-cover"
-                  />
-                )}
-                <span className="text-white font-bold">
-                  {chestReward.collectible.displayName}
-                </span>
-              </div>
-            </motion.div>
-          )}
-
           {currentChapter && (
             <div className="bg-white/20 rounded-2xl p-6 mb-8 max-w-md">
               <p className="text-white/80 text-sm mb-2">Next time...</p>
@@ -590,13 +613,52 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           )}
 
           <button
-            onClick={onExit}
+            onClick={handleInitialCompletionContinue}
             className="bg-white text-success font-bold py-4 px-12 rounded-full text-xl shadow-lg"
           >
-            Done!
+            Continue
           </button>
         </motion.div>
       </div>
+    );
+  }
+
+  // Render task check-in overlay
+  if (isComplete && showTaskCheckIn) {
+    const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
+    return (
+      <TaskCheckIn
+        tasks={taskConfig.tasks}
+        pet={pet ?? null}
+        onComplete={handleTaskCheckInComplete}
+      />
+    );
+  }
+
+  // Render bonus wheel overlay
+  if (isComplete && showBonusWheel) {
+    return (
+      <BonusWheel
+        tokensAvailable={tokensEarned}
+        worldId={child?.activeWorldId}
+        collectedStickers={child?.collectedStickers ?? []}
+        collectedAccessories={child?.collectedAccessories ?? []}
+        onRewardClaimed={handleWheelRewardClaimed}
+        onComplete={handleWheelComplete}
+      />
+    );
+  }
+
+  // Render mystery chest overlay (legacy fallback when task bonus is disabled)
+  if (isComplete && showMysteryChest) {
+    return (
+      <MysteryChest
+        worldId={child?.activeWorldId}
+        collectedStickers={child?.collectedStickers ?? []}
+        collectedAccessories={child?.collectedAccessories ?? []}
+        onRewardClaimed={handleChestRewardClaimed}
+        onClose={handleChestClose}
+      />
     );
   }
 
