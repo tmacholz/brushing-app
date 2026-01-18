@@ -44,6 +44,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   const [chestReward, setChestReward] = useState<ChestReward | null>(null);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -627,10 +628,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
-            className="text-center"
+            className="text-center max-w-[90%] sm:max-w-lg landscape:max-w-[60%]"
           >
-            <p className="text-white/60 text-sm mb-2">Last time...</p>
-            <p className="text-white text-xl italic leading-relaxed">
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">Last time...</p>
+            <p className="text-white text-sm sm:text-xl landscape:text-xs italic leading-snug sm:leading-relaxed">
               {currentChapter?.recap}
             </p>
           </motion.div>
@@ -644,12 +645,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ type: 'spring', damping: 12 }}
-            className="text-center"
+            className="text-center max-w-[90%] sm:max-w-lg landscape:max-w-[60%]"
           >
-            <p className="text-white/60 text-sm mb-2">
+            <p className="text-white/60 text-xs sm:text-sm mb-1 sm:mb-2">
               Chapter {currentChapter?.chapterNumber}
             </p>
-            <h2 className="text-3xl font-bold text-white">
+            <h2 className="text-xl sm:text-3xl landscape:text-lg font-bold text-white">
               {currentChapter?.title}
             </h2>
           </motion.div>
@@ -662,19 +663,19 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-center flex flex-col items-center justify-end flex-1"
+            className="text-center flex flex-col items-center justify-end flex-1 w-full"
           >
-            <div className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 max-w-lg">
-              <p className="text-white text-xl leading-relaxed mb-2 drop-shadow-lg">
+            <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 max-w-[90%] sm:max-w-lg landscape:max-w-[50%] landscape:p-2">
+              <p className="text-white text-sm sm:text-xl landscape:text-xs leading-snug sm:leading-relaxed mb-1 sm:mb-2 drop-shadow-lg">
                 {currentSegment?.text}
               </p>
               {currentSegment?.brushingPrompt && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-white/20 rounded-xl p-3 mt-2"
+                  className="bg-white/20 rounded-lg sm:rounded-xl p-2 sm:p-3 mt-1 sm:mt-2"
                 >
-                  <p className="text-accent font-bold text-lg drop-shadow">
+                  <p className="text-accent font-bold text-sm sm:text-lg landscape:text-xs drop-shadow">
                     {currentSegment.brushingPrompt}
                   </p>
                 </motion.div>
@@ -690,9 +691,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-center"
+            className="text-center max-w-[90%] sm:max-w-lg landscape:max-w-[60%]"
           >
-            <p className="text-white text-2xl italic leading-relaxed">
+            <p className="text-white text-base sm:text-2xl landscape:text-sm italic leading-snug sm:leading-relaxed">
               {currentChapter?.cliffhanger}
             </p>
           </motion.div>
@@ -705,10 +706,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-center"
+            className="text-center max-w-[90%] sm:max-w-lg landscape:max-w-[60%]"
           >
-            <p className="text-white/60 text-lg mb-2">To be continued...</p>
-            <p className="text-accent text-xl font-medium">
+            <p className="text-white/60 text-sm sm:text-lg landscape:text-xs mb-1 sm:mb-2">To be continued...</p>
+            <p className="text-accent text-base sm:text-xl landscape:text-sm font-medium">
               {currentChapter?.nextChapterTeaser}
             </p>
           </motion.div>
@@ -834,31 +835,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         <AnimatePresence mode="wait">{renderStoryContent()}</AnimatePresence>
       </div>
 
-      {/* Pet companion */}
-      {pet && (
-        <motion.div
-          className="absolute bottom-24 right-6 z-10"
-          animate={{
-            y: [0, -5, 0],
-          }}
-          transition={{
-            duration: 2,
-            repeat: Infinity,
-            ease: 'easeInOut',
-          }}
-        >
-          <div className="bg-white/20 rounded-full p-4">
-            <span className="text-4xl">
-              {pet.id === 'sparkle' && '⭐'}
-              {pet.id === 'bubbles' && '🐠'}
-              {pet.id === 'cosmo' && '🤖'}
-              {pet.id === 'fern' && '🐉'}
-              {pet.id === 'captain-whiskers' && '🐱'}
-            </span>
-          </div>
-        </motion.div>
-      )}
-
       {/* Control buttons */}
       <div className="relative z-10 mt-auto pt-6 flex gap-3">
         <button
@@ -878,13 +854,57 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           )}
         </button>
         <button
-          onClick={onExit}
+          onClick={() => {
+            if (isRunning) pause();
+            setShowExitConfirm(true);
+          }}
           className="bg-white/10 text-white/80 font-medium py-3 px-4 rounded-xl flex items-center justify-center"
           title="Exit"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Exit confirmation dialog */}
+      <AnimatePresence>
+        {showExitConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+            >
+              <h3 className="text-xl font-bold text-gray-800 mb-2">Leave Story?</h3>
+              <p className="text-gray-600 mb-6">
+                Are you sure you want to leave? Your brushing progress won't be saved.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowExitConfirm(false);
+                    resume();
+                  }}
+                  className="flex-1 bg-gray-100 text-gray-700 font-medium py-3 rounded-xl"
+                >
+                  Keep Brushing
+                </button>
+                <button
+                  onClick={onExit}
+                  className="flex-1 bg-red-500 text-white font-medium py-3 rounded-xl"
+                >
+                  Leave
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
