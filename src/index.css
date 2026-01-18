@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Custom variant for landscape orientation on mobile */
+@variant landscape (@media (orientation: landscape) and (max-height: 500px));
+
 @theme {
   /* Kid-Friendly Color Palette */
   --color-primary: #06B6D4;
