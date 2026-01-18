@@ -22,12 +22,23 @@ import {
   Pencil,
   Check,
   X,
+  Users,
+  MapPin,
+  Package,
+  Plus,
+  Maximize2,
+  Tag,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
 type NarrationSequenceItem =
   | { type: 'audio'; url: string }
   | { type: 'name'; placeholder: 'CHILD' | 'PET' };
+
+interface ImageHistoryItem {
+  url: string;
+  created_at: string;
+}
 
 interface Segment {
   id: string;
@@ -38,7 +49,9 @@ interface Segment {
   brushing_prompt: string | null;
   image_prompt: string | null;
   image_url: string | null;
+  image_history: ImageHistoryItem[] | null;
   narration_sequence: NarrationSequenceItem[] | null;
+  reference_ids: string[] | null;
 }
 
 interface Chapter {
@@ -64,6 +77,17 @@ interface StoryBible {
   recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
 }
 
+// Visual reference for consistent imagery
+interface StoryReference {
+  id: string;
+  story_id: string;
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  image_url: string | null;
+  sort_order: number;
+}
+
 interface Story {
   id: string;
   world_id: string;
@@ -76,6 +100,7 @@ interface Story {
   cover_image_url: string | null;
   story_bible: StoryBible | null;
   chapters: Chapter[];
+  references: StoryReference[];
 }
 
 interface StoryEditorProps {
@@ -227,15 +252,38 @@ interface SegmentImageEditorProps {
   storyId: string;
   previousImageUrl?: string | null;
   storyBible?: StoryBible | null;
+  references?: StoryReference[];
   onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
 }
 
-function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, onUpdate }: SegmentImageEditorProps) {
+function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, references, onUpdate }: SegmentImageEditorProps) {
   const [generating, setGenerating] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [showGallery, setShowGallery] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
   const hasPrompt = !!segment.image_prompt;
+  const imageHistory = segment.image_history || [];
+  const hasHistory = imageHistory.length > 1;
+
+  // Get explicitly tagged references for this segment (no auto-detection)
+  const getTaggedReferences = () => {
+    if (!references || references.length === 0) return [];
+    if (!segment.reference_ids || segment.reference_ids.length === 0) return [];
+
+    // Only include explicitly tagged references that have generated images
+    const taggedRefs = references.filter(ref =>
+      segment.reference_ids?.includes(ref.id) && ref.image_url
+    );
+
+    return taggedRefs.map(ref => ({
+      type: ref.type,
+      name: ref.name,
+      description: ref.description,
+      imageUrl: ref.image_url!,
+    }));
+  };
 
   const handleGenerateImage = async () => {
     if (!segment.image_prompt) {
@@ -245,6 +293,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
 
     setGenerating(true);
     try {
+      const visualReferences = getTaggedReferences();
+      console.log('[ImageGen] Using', visualReferences.length, 'tagged references:', visualReferences.map(r => r.name));
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -257,6 +308,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
           includeUser: false,
           includePet: false,
           storyBible: storyBible || undefined,
+          visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
         }),
       });
 
@@ -266,27 +318,84 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
       }
 
       const data = await res.json();
-      console.log('Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
+      console.log('[ImageGen] Image generated:', { segmentId: segment.id, imageUrl: data.imageUrl });
 
-      // Save to database
+      // Save to database (API will append to history)
+      console.log('[ImageGen] Saving to database...');
       const saveRes = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: data.imageUrl }),
       });
 
+      const saveData = await saveRes.json().catch(() => ({ error: 'Failed to parse response' }));
+      console.log('[ImageGen] Database save response:', saveRes.status, saveData);
+
       if (!saveRes.ok) {
-        const saveError = await saveRes.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Failed to save image URL to database:', saveError);
-        throw new Error(`Failed to save: ${saveError.details || saveError.error}`);
+        console.error('[ImageGen] Failed to save image URL to database:', saveData);
+        throw new Error(`Failed to save: ${saveData.details || saveData.error}`);
       }
 
-      onUpdate(segment.id, { image_url: data.imageUrl });
+      // Update local state with new image and history from response
+      onUpdate(segment.id, {
+        image_url: saveData.segment.image_url,
+        image_history: saveData.segment.image_history
+      });
     } catch (error) {
-      console.error('Failed to generate image:', error);
+      console.error('[ImageGen] Failed to generate image:', error);
       alert('Failed to generate image. Check console for details.');
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSelectImage = async (imageUrl: string) => {
+    if (imageUrl === segment.image_url) return;
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selectImageFromHistory: imageUrl }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to select image');
+      }
+
+      const data = await res.json();
+      onUpdate(segment.id, { image_url: data.segment.image_url });
+    } catch (error) {
+      console.error('Failed to select image:', error);
+      alert('Failed to select image');
+    }
+  };
+
+  const handleDeleteImage = async (imageUrl: string) => {
+    if (!confirm('Delete this image? This cannot be undone.')) return;
+
+    setDeleting(imageUrl);
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete image');
+      }
+
+      const data = await res.json();
+      onUpdate(segment.id, {
+        image_url: data.segment.image_url,
+        image_history: data.segment.image_history
+      });
+    } catch (error) {
+      console.error('Failed to delete image:', error);
+      alert('Failed to delete image');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -295,52 +404,323 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, on
   }
 
   return (
-    <div className="mt-2 flex items-center gap-2 flex-wrap">
-      {/* Generate/Regenerate Image Button */}
-      <button
-        onClick={handleGenerateImage}
-        disabled={generating}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
-      >
-        {generating ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : hasImage ? (
-          <RefreshCw className="w-3.5 h-3.5" />
-        ) : (
-          <Image className="w-3.5 h-3.5" />
-        )}
-        {hasImage ? 'Regenerate Image' : 'Generate Image'}
-      </button>
-
-      {/* Preview Button */}
-      {hasImage && (
+    <div className="mt-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Generate/Regenerate Image Button */}
         <button
-          onClick={() => setShowPreview(!showPreview)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+          onClick={handleGenerateImage}
+          disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg transition-colors disabled:opacity-50"
         >
-          <Eye className="w-3.5 h-3.5" />
-          {showPreview ? 'Hide' : 'Preview'}
+          {generating ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : hasImage ? (
+            <RefreshCw className="w-3.5 h-3.5" />
+          ) : (
+            <Image className="w-3.5 h-3.5" />
+          )}
+          {hasImage ? 'Regenerate' : 'Generate Image'}
         </button>
-      )}
 
-      {/* Image status indicator */}
-      {hasImage && (
-        <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
-          <CheckCircle className="w-3 h-3" />
-          Image ready
-        </span>
-      )}
+        {/* Gallery Button */}
+        {hasImage && (
+          <button
+            onClick={() => setShowGallery(!showGallery)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            {showGallery ? 'Hide' : 'Gallery'}
+            {hasHistory && <span className="bg-cyan-500/30 px-1.5 rounded">{imageHistory.length}</span>}
+          </button>
+        )}
 
-      {/* Image Preview */}
-      {showPreview && segment.image_url && (
-        <div className="w-full mt-2">
-          <img
-            src={segment.image_url}
-            alt="Scene preview"
-            className="w-full max-w-md rounded-lg border border-slate-600"
-          />
+        {/* Image status indicator */}
+        {hasImage && (
+          <span className="ml-auto text-xs text-green-400 flex items-center gap-1">
+            <CheckCircle className="w-3 h-3" />
+            Image ready
+          </span>
+        )}
+      </div>
+
+      {/* Image Gallery */}
+      {showGallery && (
+        <div className="mt-3 p-3 bg-slate-800/50 rounded-lg">
+          {imageHistory.length === 0 ? (
+            // No history yet - show just current image
+            segment.image_url && (
+              <div className="relative group">
+                <img
+                  src={segment.image_url}
+                  alt="Current"
+                  className="w-full max-w-md rounded-lg border-2 border-emerald-500"
+                />
+                <div className="absolute top-2 left-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded">
+                  Current
+                </div>
+                {/* Expand button */}
+                <button
+                  onClick={() => setLightboxUrl(segment.image_url)}
+                  className="absolute bottom-2 right-2 bg-black/70 hover:bg-black/90 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="View full size"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+              </div>
+            )
+          ) : (
+            // Show gallery grid
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {imageHistory.slice().reverse().map((item, idx) => {
+                const isSelected = item.url === segment.image_url;
+                const isDeleting = deleting === item.url;
+                const createdAt = new Date(item.created_at);
+                const timeAgo = getTimeAgo(createdAt);
+
+                return (
+                  <div key={item.url} className="relative group">
+                    <img
+                      src={item.url}
+                      alt={`Version ${imageHistory.length - idx}`}
+                      className={`w-full aspect-video object-cover rounded-lg cursor-pointer transition-all ${
+                        isSelected
+                          ? 'border-2 border-emerald-500 ring-2 ring-emerald-500/30'
+                          : 'border border-slate-600 hover:border-slate-400'
+                      } ${isDeleting ? 'opacity-50' : ''}`}
+                      onClick={() => !isDeleting && handleSelectImage(item.url)}
+                    />
+
+                    {/* Selected indicator */}
+                    {isSelected && (
+                      <div className="absolute top-1 left-1 bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <CheckCircle className="w-2.5 h-2.5" />
+                        Active
+                      </div>
+                    )}
+
+                    {/* Time ago */}
+                    <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px] px-1.5 py-0.5 rounded">
+                      {timeAgo}
+                    </div>
+
+                    {/* Expand button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxUrl(item.url);
+                      }}
+                      className="absolute bottom-1 right-8 bg-black/70 hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="View full size"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                    </button>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteImage(item.url);
+                      }}
+                      disabled={isDeleting}
+                      className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-500 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                      title="Delete this image"
+                    >
+                      {isDeleting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3 h-3" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-[90vw] max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={lightboxUrl}
+                alt="Full size preview"
+                className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="absolute -top-3 -right-3 bg-white text-slate-900 p-2 rounded-full shadow-lg hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// Helper to format time ago
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+  return date.toLocaleDateString();
+}
+
+// Component for managing reference tags on a segment
+interface SegmentReferenceTagsProps {
+  segment: Segment;
+  storyId: string;
+  references: StoryReference[];
+  onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
+}
+
+function SegmentReferenceTags({ segment, storyId, references, onUpdate }: SegmentReferenceTagsProps) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const taggedRefs = references.filter(ref =>
+    segment.reference_ids?.includes(ref.id)
+  );
+  const untaggedRefs = references.filter(ref =>
+    !segment.reference_ids?.includes(ref.id)
+  );
+
+  const handleAddRef = async (refId: string) => {
+    setSaving(true);
+    try {
+      const newRefs = [...(segment.reference_ids || []), refId];
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceIds: newRefs }),
+      });
+      if (res.ok) {
+        onUpdate(segment.id, { reference_ids: newRefs });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveRef = async (refId: string) => {
+    setSaving(true);
+    try {
+      const newRefs = (segment.reference_ids || []).filter(id => id !== refId);
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceIds: newRefs }),
+      });
+      if (res.ok) {
+        onUpdate(segment.id, { reference_ids: newRefs });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getRefIcon = (type: string) => {
+    switch (type) {
+      case 'character': return <Users className="w-3 h-3" />;
+      case 'location': return <MapPin className="w-3 h-3" />;
+      case 'object': return <Package className="w-3 h-3" />;
+      default: return <Tag className="w-3 h-3" />;
+    }
+  };
+
+  if (references.length === 0) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-slate-700/50">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-500 flex items-center gap-1">
+          <Tag className="w-3 h-3" />
+          References:
+        </span>
+
+        {/* Tagged references */}
+        {taggedRefs.map(ref => (
+          <button
+            key={ref.id}
+            onClick={() => handleRemoveRef(ref.id)}
+            disabled={saving}
+            className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 rounded-full hover:bg-red-500/30 hover:text-red-300 transition-colors disabled:opacity-50"
+            title={`${ref.name} - Click to remove`}
+          >
+            {getRefIcon(ref.type)}
+            {ref.name}
+            <X className="w-2.5 h-2.5" />
+          </button>
+        ))}
+
+        {/* Add button */}
+        {untaggedRefs.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowPicker(!showPicker)}
+              disabled={saving}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-slate-600/50 text-slate-400 rounded-full hover:bg-slate-600 hover:text-slate-300 transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              Add
+            </button>
+
+            {/* Reference picker dropdown */}
+            {showPicker && (
+              <div className="absolute top-full left-0 mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-xl min-w-[200px] max-h-[200px] overflow-y-auto">
+                {untaggedRefs.map(ref => (
+                  <button
+                    key={ref.id}
+                    onClick={() => {
+                      handleAddRef(ref.id);
+                      setShowPicker(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-700 transition-colors"
+                  >
+                    {ref.image_url ? (
+                      <img src={ref.image_url} alt="" className="w-6 h-6 rounded object-cover" />
+                    ) : (
+                      <div className="w-6 h-6 rounded bg-slate-600 flex items-center justify-center">
+                        {getRefIcon(ref.type)}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-slate-200">{ref.name}</div>
+                      <div className="text-[10px] text-slate-500">{ref.type}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {taggedRefs.length === 0 && untaggedRefs.length > 0 && (
+          <span className="text-[10px] text-slate-500 italic">No references tagged</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -617,6 +997,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [generatingCoverImage, setGeneratingCoverImage] = useState(false);
   const [showCoverPreview, setShowCoverPreview] = useState(false);
 
+  // Reference management state
+  const [generatingRefImages, setGeneratingRefImages] = useState<Set<string>>(new Set());
+  const [generatingAllRefs, setGeneratingAllRefs] = useState(false);
+  const [showAddReference, setShowAddReference] = useState(false);
+  const [newRefType, setNewRefType] = useState<'character' | 'object' | 'location'>('character');
+  const [newRefName, setNewRefName] = useState('');
+  const [newRefDescription, setNewRefDescription] = useState('');
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -813,6 +1201,209 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     }
   };
 
+  // Generate image for a single reference
+  const handleGenerateReferenceImage = async (reference: StoryReference) => {
+    if (!story) return;
+
+    setGeneratingRefImages(prev => new Set(prev).add(reference.id));
+    setError(null);
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'referenceImage',
+          referenceId: reference.id,
+          referenceType: reference.type,
+          name: reference.name,
+          description: reference.description,
+          storyBible: story.story_bible || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate reference image');
+      }
+
+      const data = await res.json();
+
+      // Save image URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?reference=${reference.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.imageUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save reference image URL');
+
+      // Update local state
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.map(r =>
+            r.id === reference.id ? { ...r, image_url: data.imageUrl } : r
+          ),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+    } finally {
+      setGeneratingRefImages(prev => {
+        const next = new Set(prev);
+        next.delete(reference.id);
+        return next;
+      });
+    }
+  };
+
+  // Generate images for all references without images
+  const handleGenerateAllReferenceImages = async () => {
+    if (!story) return;
+
+    const refsWithoutImages = story.references.filter(r => !r.image_url);
+    if (refsWithoutImages.length === 0) {
+      alert('All references already have images');
+      return;
+    }
+
+    setGeneratingAllRefs(true);
+    setError(null);
+
+    try {
+      for (const ref of refsWithoutImages) {
+        await handleGenerateReferenceImage(ref);
+        // Small delay between generations to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } finally {
+      setGeneratingAllRefs(false);
+    }
+  };
+
+  // Delete a reference
+  const handleDeleteReference = async (referenceId: string) => {
+    if (!confirm('Are you sure you want to delete this reference?')) return;
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Failed to delete reference');
+
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.filter(r => r.id !== referenceId),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete reference');
+    }
+  };
+
+  // Add a new reference
+  const handleAddReference = async () => {
+    if (!newRefName.trim() || !newRefDescription.trim()) {
+      alert('Please provide both name and description');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addReference',
+          type: newRefType,
+          name: newRefName.trim(),
+          description: newRefDescription.trim(),
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to add reference');
+
+      const data = await res.json();
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: [...prev.references, data.reference],
+        };
+      });
+
+      // Reset form
+      setNewRefName('');
+      setNewRefDescription('');
+      setShowAddReference(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add reference');
+    }
+  };
+
+  // Re-extract references from story
+  const handleReExtractReferences = async () => {
+    if (!confirm('This will replace all current references with newly extracted ones. Continue?')) return;
+
+    setGeneratingAllRefs(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'extractReferences' }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to extract references');
+      }
+
+      const data = await res.json();
+      setStory(prev => {
+        if (!prev) return prev;
+        return { ...prev, references: data.references };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to extract references');
+    } finally {
+      setGeneratingAllRefs(false);
+    }
+  };
+
+  // Update reference field
+  const handleSaveReferenceField = useCallback(async (
+    referenceId: string,
+    field: 'name' | 'description',
+    value: string
+  ) => {
+    const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.details || error.error);
+    }
+
+    setStory(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        references: prev.references.map(r =>
+          r.id === referenceId ? { ...r, [field]: value } : r
+        ),
+      };
+    });
+  }, [storyId]);
+
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => {
       const next = new Set(prev);
@@ -838,9 +1429,31 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   // Update a segment in local state after audio/image changes
   const handleSegmentUpdate = useCallback((segmentId: string, updates: Partial<Segment>) => {
+    console.log('[handleSegmentUpdate] Called with:', segmentId, updates);
     setStory((prev) => {
-      if (!prev) return prev;
-      return {
+      if (!prev) {
+        console.log('[handleSegmentUpdate] No prev story, returning');
+        return prev;
+      }
+
+      // Debug: check if segment exists and log old vs new
+      let foundSegment = false;
+      for (const ch of prev.chapters) {
+        for (const seg of ch.segments) {
+          if (seg.id === segmentId) {
+            foundSegment = true;
+            console.log('[handleSegmentUpdate] Found segment, old image_url:', seg.image_url);
+            console.log('[handleSegmentUpdate] New image_url:', updates.image_url);
+            console.log('[handleSegmentUpdate] URLs are same?', seg.image_url === updates.image_url);
+          }
+        }
+      }
+      if (!foundSegment) {
+        console.error('[handleSegmentUpdate] SEGMENT NOT FOUND:', segmentId);
+      }
+
+      console.log('[handleSegmentUpdate] Creating new story object');
+      const newStory = {
         ...prev,
         chapters: prev.chapters.map((chapter) => ({
           ...chapter,
@@ -849,6 +1462,8 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           ),
         })),
       };
+      console.log('[handleSegmentUpdate] Returning new story');
+      return newStory;
     });
   }, []);
 
@@ -938,6 +1553,37 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   }, [storyId]);
 
   // Generate all images for a chapter
+  // Helper to find relevant references for a segment using fuzzy matching
+  const findRelevantReferences = useCallback((segment: Segment, allReferences: StoryReference[]) => {
+    if (!allReferences || allReferences.length === 0) return [];
+
+    // Only include references that have generated images
+    const refsWithImages = allReferences.filter(r => r.image_url);
+    if (refsWithImages.length === 0) return [];
+
+    const searchText = `${segment.text} ${segment.image_prompt || ''}`.toLowerCase();
+
+    // Find references whose name appears in the segment text or image prompt
+    const relevantRefs = refsWithImages.filter(ref => {
+      // Extract key words from reference name (remove articles, common words)
+      const nameWords = ref.name.toLowerCase()
+        .replace(/^(the|a|an)\s+/i, '')
+        .split(/\s+/)
+        .filter(w => w.length > 2);
+
+      // Check if any significant word from the reference name appears in the segment
+      return nameWords.some(word => searchText.includes(word));
+    });
+
+    // Return matching refs, formatted for the API
+    return relevantRefs.map(ref => ({
+      type: ref.type,
+      name: ref.name,
+      description: ref.description,
+      imageUrl: ref.image_url!,
+    }));
+  }, []);
+
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
     const segmentsWithPrompts = chapter.segments.filter(s => s.image_prompt);
     if (segmentsWithPrompts.length === 0) {
@@ -954,6 +1600,11 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       const segment = segmentsWithPrompts[i];
       setImageGenProgress({ current: i + 1, total: segmentsWithPrompts.length });
 
+      // Find relevant visual references for this segment
+      const visualReferences = findRelevantReferences(segment, story?.references || []);
+      console.log(`[ImageGen] Segment ${i + 1}: Found ${visualReferences.length} relevant references:`,
+        visualReferences.map(r => r.name));
+
       try {
         const res = await fetch('/api/generate', {
           method: 'POST',
@@ -966,6 +1617,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             includeUser: false,
             includePet: false,
             storyBible: story?.story_bible || undefined,
+            visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
           }),
         });
 
@@ -993,7 +1645,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
     setGeneratingImagesForChapter(null);
     setImageGenProgress(null);
-  }, [storyId, handleSegmentUpdate]);
+  }, [storyId, handleSegmentUpdate, findRelevantReferences, story?.references, story?.story_bible]);
 
   if (loading) {
     return (
@@ -1241,6 +1893,209 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           )}
         </section>
 
+        {/* Visual References Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+              Visual References
+              <span className="text-sm font-normal text-slate-400">
+                ({story.references?.length || 0} items)
+              </span>
+            </h2>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleReExtractReferences}
+                disabled={generatingAllRefs}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors disabled:opacity-50"
+                title="Re-extract references from story"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${generatingAllRefs ? 'animate-spin' : ''}`} />
+                Re-extract
+              </button>
+
+              <button
+                onClick={() => setShowAddReference(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add
+              </button>
+
+              {story.references && story.references.some(r => !r.image_url) && (
+                <button
+                  onClick={handleGenerateAllReferenceImages}
+                  disabled={generatingAllRefs}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {generatingAllRefs ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  Generate All Images
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Add Reference Form */}
+          <AnimatePresence>
+            {showAddReference && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden mb-4"
+              >
+                <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <select
+                      value={newRefType}
+                      onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
+                      className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
+                    >
+                      <option value="character">Character</option>
+                      <option value="object">Object</option>
+                      <option value="location">Location</option>
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Name (e.g., 'the wise owl')"
+                      value={newRefName}
+                      onChange={(e) => setNewRefName(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
+                    />
+                  </div>
+                  <textarea
+                    placeholder="Detailed visual description for image generation..."
+                    value={newRefDescription}
+                    onChange={(e) => setNewRefDescription(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
+                  />
+                  <div className="flex gap-2 justify-end">
+                    <button
+                      onClick={() => setShowAddReference(false)}
+                      className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-300"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleAddReference}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      Add Reference
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* References Grid */}
+          {story.references && story.references.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {story.references.map((ref) => {
+                const isGenerating = generatingRefImages.has(ref.id);
+                const TypeIcon = ref.type === 'character' ? Users : ref.type === 'location' ? MapPin : Package;
+                const typeColor = ref.type === 'character' ? 'text-blue-400' : ref.type === 'location' ? 'text-green-400' : 'text-amber-400';
+
+                return (
+                  <div
+                    key={ref.id}
+                    className="bg-slate-700/30 rounded-lg overflow-hidden"
+                  >
+                    {/* Image Preview */}
+                    <div className="aspect-video bg-slate-800/50 relative">
+                      {ref.image_url ? (
+                        <img
+                          src={ref.image_url}
+                          alt={ref.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center text-slate-500">
+                            <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <span className="text-xs">No image yet</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Overlay buttons */}
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button
+                          onClick={() => handleGenerateReferenceImage(ref)}
+                          disabled={isGenerating}
+                          className="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors disabled:opacity-50"
+                          title={ref.image_url ? 'Regenerate image' : 'Generate image'}
+                        >
+                          {isGenerating ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Wand2 className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteReference(ref.id)}
+                          className="p-1.5 bg-black/50 hover:bg-red-500/70 rounded-lg text-white transition-colors"
+                          title="Delete reference"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Type badge */}
+                      <div className={`absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-xs flex items-center gap-1 ${typeColor}`}>
+                        <TypeIcon className="w-3 h-3" />
+                        {ref.type}
+                      </div>
+                    </div>
+
+                    {/* Details */}
+                    <div className="p-3">
+                      <EditableField
+                        value={ref.name}
+                        onSave={(value) => handleSaveReferenceField(ref.id, 'name', value)}
+                        className="font-medium text-white text-sm mb-1"
+                      />
+                      <details className="text-xs text-slate-400">
+                        <summary className="cursor-pointer hover:text-slate-300">
+                          Description (click to edit)
+                        </summary>
+                        <div className="mt-1">
+                          <EditableField
+                            value={ref.description}
+                            onSave={(value) => handleSaveReferenceField(ref.id, 'description', value)}
+                            multiline
+                            className="text-xs text-slate-400"
+                          />
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500 text-center py-8">
+              No visual references yet. References are automatically extracted when a story is generated,
+              or you can add them manually.
+            </p>
+          )}
+
+          {generatingAllRefs && (
+            <p className="mt-3 text-sm text-slate-400">
+              {generatingRefImages.size > 0
+                ? `Generating reference images... (${generatingRefImages.size} in progress)`
+                : 'Extracting visual references from story...'}
+            </p>
+          )}
+        </section>
+
         {/* Chapters */}
         <section className="space-y-4">
           <h2 className="text-lg font-semibold">Chapters</h2>
@@ -1412,8 +2267,19 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               storyId={storyId}
                               previousImageUrl={idx > 0 ? chapter.segments[idx - 1].image_url : null}
                               storyBible={story?.story_bible}
+                              references={story?.references}
                               onUpdate={handleSegmentUpdate}
                             />
+
+                            {/* Reference Tags */}
+                            {story?.references && story.references.length > 0 && (
+                              <SegmentReferenceTags
+                                segment={segment}
+                                storyId={storyId}
+                                references={story.references}
+                                onUpdate={handleSegmentUpdate}
+                              />
+                            )}
                           </div>
                         ))}
                       </div>

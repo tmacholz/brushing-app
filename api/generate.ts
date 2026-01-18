@@ -3,7 +3,7 @@ import { put } from '@vercel/blob';
 import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
+const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
 
 // ElevenLabs for name audio
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -136,6 +136,14 @@ interface StoryBible {
   recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
 }
 
+// Visual reference for consistent imagery
+interface VisualReference {
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  imageUrl: string;
+}
+
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
@@ -149,10 +157,11 @@ interface StoryImageRequest {
   childName?: string;
   petName?: string;
   storyBible?: StoryBible; // For visual consistency across all images
+  visualReferences?: VisualReference[]; // Reference images for characters/objects/locations
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
-  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible } = req;
+  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible, visualReferences } = req;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
@@ -169,6 +178,23 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
       parts.push({ inlineData: imageData });
       referenceDescriptions.push(`[Image ${imageIndex}] Previous scene - use for style, color palette, and lighting consistency`);
       imageIndex++;
+    }
+  }
+
+  // Add visual references (characters, objects, locations) for consistency
+  // These are the reference sheets we generated - use them for exact appearance matching
+  if (visualReferences && visualReferences.length > 0) {
+    for (const ref of visualReferences) {
+      const imageData = await fetchImageAsBase64(ref.imageUrl);
+      if (imageData) {
+        parts.push({ inlineData: imageData });
+        const typeLabel = ref.type === 'character' ? 'CHARACTER REFERENCE SHEET' :
+                         ref.type === 'location' ? 'LOCATION REFERENCE' : 'OBJECT REFERENCE SHEET';
+        referenceDescriptions.push(
+          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - If this ${ref.type} appears in the scene, match its appearance EXACTLY from this reference`
+        );
+        imageIndex++;
+      }
     }
   }
 
@@ -250,7 +276,9 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   fullPrompt += `SCENE TO ILLUSTRATE:\n${prompt}`;
   parts.push({ text: fullPrompt });
 
-  const result = await generateAndUpload(parts, `story-images/${segmentId}.png`);
+  // Include timestamp in filename for reliable cache busting (CDN may ignore query params)
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-images/${segmentId}-${timestamp}.png`);
   return res.status(200).json({ imageUrl: result.url, segmentId });
 }
 
@@ -648,6 +676,119 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
   }
 }
 
+// Story reference image generation (for visual consistency)
+interface ReferenceImageRequest {
+  type: 'referenceImage';
+  referenceId: string;
+  referenceType: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  storyBible?: StoryBible;
+}
+
+async function handleReferenceImage(req: ReferenceImageRequest, res: VercelResponse) {
+  const { referenceId, referenceType, name, description, storyBible } = req;
+
+  if (!referenceId || !referenceType || !name || !description) {
+    return res.status(400).json({ error: 'Missing required fields: referenceId, referenceType, name, description' });
+  }
+
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
+
+  // Build the prompt based on reference type
+  let fullPrompt = STYLE_PREFIX + '\n\n';
+
+  // Add Story Bible visual guidelines if provided
+  if (storyBible) {
+    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    if (storyBible.colorPalette) {
+      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+    }
+    if (storyBible.lightingStyle) {
+      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+    }
+    if (storyBible.artDirection) {
+      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+    }
+    fullPrompt += '\n';
+  }
+
+  if (referenceType === 'character') {
+    // Generate a character reference sheet with multiple views
+    fullPrompt += `CREATE A CHARACTER REFERENCE SHEET for: "${name}"
+
+CHARACTER DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create a CHARACTER REFERENCE SHEET with FOUR views arranged in a 2x2 grid:
+  - Top left: FRONT view (full body, facing camera)
+  - Top right: SIDE view (full body, profile facing right)
+  - Bottom left: BACK view (full body, facing away)
+  - Bottom right: HEADSHOT (close-up of face/head, showing expression and details)
+- Maintain EXACT consistency in design, colors, proportions, and details across all views
+- The character should be on a simple, clean background (light gray or white gradient)
+- Include subtle labels below/beside each view: "FRONT", "SIDE", "BACK", "HEADSHOT"
+- The style should be suitable for children's book illustration
+- Make the character expressive, friendly, and appealing to children ages 4-8
+- Ensure the design is clear enough to be used as a reference for future illustrations
+
+CRITICAL - NO TEXT except the view labels:
+- Do NOT include the character's name in the image
+- Do NOT include any other text, captions, or watermarks
+- Only include the small view labels (FRONT, SIDE, BACK, HEADSHOT)`;
+  } else if (referenceType === 'location') {
+    // Generate a single establishing shot of the location
+    fullPrompt += `CREATE A LOCATION REFERENCE IMAGE for: "${name}"
+
+LOCATION DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create a beautiful, detailed establishing shot of this location
+- The image should capture the key features, atmosphere, and mood described
+- Use the story's color palette and lighting style for consistency
+- The scene should feel inviting and suitable for a children's adventure story
+- Include enough detail that this image can be used as a reference for scenes set in this location
+- No characters should appear in this image - just the environment
+- The composition should showcase the most distinctive elements of the location
+
+CRITICAL - NO TEXT:
+- Do NOT include ANY text, labels, signs, or writing in the image
+- The image should be PURELY environmental artwork`;
+  } else {
+    // Object reference - multiple views for consistency
+    fullPrompt += `CREATE AN OBJECT REFERENCE SHEET for: "${name}"
+
+OBJECT DESCRIPTION:
+${description}
+
+REQUIREMENTS:
+- Create an OBJECT REFERENCE SHEET with THREE views arranged in a row:
+  - Left: FRONT view (facing camera directly)
+  - Center: SIDE view (profile, facing right)
+  - Right: BACK view (facing away from camera)
+- Maintain EXACT consistency in design, colors, proportions, and details across all views
+- The object should be on a simple, clean background (light gray or white gradient)
+- Include subtle labels below each view: "FRONT", "SIDE", "BACK"
+- The style should match children's book illustration - friendly and appealing
+- Add subtle magical sparkles or glow if the object is magical/enchanted
+- Ensure the design is clear enough to be used as a reference for future illustrations
+
+CRITICAL - NO TEXT except the view labels:
+- Do NOT include the object's name in the image
+- Do NOT include any other text, captions, or watermarks
+- Only include the small view labels (FRONT, SIDE, BACK)`;
+  }
+
+  parts.push({ text: fullPrompt });
+
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-references/${referenceId}-${timestamp}.png`);
+  return res.status(200).json({ imageUrl: result.url, referenceId });
+}
+
 // Cover image generation for stories
 interface CoverImageRequest {
   type: 'coverImage';
@@ -728,7 +869,9 @@ CRITICAL - NO TEXT:
 
   parts.push({ text: fullPrompt });
 
-  const result = await generateAndUpload(parts, `story-covers/${storyId}.png`);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `story-covers/${storyId}-${timestamp}.png`);
   return res.status(200).json({ coverImageUrl: result.url, storyId });
 }
 
@@ -992,8 +1135,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'coverImage':
         if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
         return handleCoverImage(req.body, res);
+      case 'referenceImage':
+        if (!GEMINI_API_KEY) return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+        return handleReferenceImage(req.body, res);
       default:
-        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, chapterAudio, or coverImage' });
+        return res.status(400).json({ error: 'Invalid type. Must be: image, userAvatar, petAvatar, nameAudio, backgroundMusic, worldImage, sprite, segmentAudio, chapterAudio, coverImage, or referenceImage' });
     }
   } catch (error) {
     console.error('Generation error:', error);

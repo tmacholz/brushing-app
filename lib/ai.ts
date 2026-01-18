@@ -439,6 +439,194 @@ Respond with ONLY JSON:
   return chapters;
 }
 
+// =====================================================
+// Story Reference Extraction
+// =====================================================
+
+export interface ExtractedReference {
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string; // Detailed visual description for image generation
+}
+
+export async function extractStoryReferences(
+  storyTitle: string,
+  storyDescription: string,
+  chapters: GeneratedChapter[],
+  storyBible?: StoryBible
+): Promise<ExtractedReference[]> {
+  // Compile all story text and image prompts for analysis
+  const allSegmentTexts = chapters.flatMap(ch =>
+    ch.segments.map(s => s.text)
+  ).join('\n');
+
+  const allImagePrompts = chapters.flatMap(ch =>
+    ch.segments.map(s => s.imagePrompt)
+  ).join('\n');
+
+  const allCliffhangers = chapters
+    .filter(ch => ch.cliffhanger)
+    .map(ch => ch.cliffhanger)
+    .join('\n');
+
+  // Include Story Bible info for richer extraction
+  const bibleContext = storyBible ? `
+STORY BIBLE CONTEXT:
+Key Locations: ${storyBible.keyLocations.map(l => `${l.name} - ${l.visualDescription}`).join('; ')}
+Recurring Characters: ${storyBible.recurringCharacters.map(c => `${c.name} - ${c.visualDescription}`).join('; ')}
+Color Palette: ${storyBible.colorPalette}
+Lighting Style: ${storyBible.lightingStyle}
+` : '';
+
+  const prompt = `Analyze this children's story and extract visual elements that need CONSISTENT reference images for illustration.
+
+STORY: "${storyTitle}" - ${storyDescription}
+${bibleContext}
+STORY TEXT:
+${allSegmentTexts}
+
+IMAGE PROMPTS ALREADY IN THE STORY:
+${allImagePrompts}
+
+CLIFFHANGERS:
+${allCliffhangers}
+
+Extract the KEY VISUAL ELEMENTS that need to look consistent across different scenes.
+
+IMPORTANT: Pay special attention to the IMAGE PROMPTS above - these describe exactly what will appear in each illustration. Any characters, creatures, objects, or locations mentioned in the image prompts are HIGH PRIORITY for reference sheets since they will be directly illustrated.
+
+DO NOT INCLUDE:
+- [CHILD] or [PET] - these are the main characters handled separately
+- Generic background elements (sky, grass, trees unless they're special)
+- Single-use throwaway objects that only appear once
+
+DO INCLUDE (up to 8 total, prioritize by frequency in image prompts):
+1. CHARACTERS: NPCs, creatures, allies, or antagonists mentioned in image prompts (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
+2. OBJECTS: Important items that appear in multiple image prompts (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
+3. LOCATIONS: Specific places described in image prompts (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
+
+For CHARACTERS, provide descriptions suitable for generating a CHARACTER REFERENCE SHEET (showing the character from multiple angles).
+
+Respond with ONLY a JSON array (max 8 items, sorted by frequency in image prompts):
+[
+  {
+    "type": "character",
+    "name": "the wise owl",
+    "description": "A large elderly owl with silver-grey feathers, wearing tiny round spectacles perched on its beak. Deep amber eyes that twinkle with wisdom. Slightly ruffled feathers suggesting age. Dignified posture. Soft, fluffy appearance suitable for children's illustration."
+  },
+  {
+    "type": "location",
+    "name": "the crystal cavern",
+    "description": "A magical underground cave with walls covered in glowing purple and blue crystals. Soft bioluminescent light emanates from the crystals. Smooth stone floor with scattered smaller gems. Stalactites hang from the ceiling. Ethereal, mystical atmosphere with gentle sparkles in the air."
+  },
+  {
+    "type": "object",
+    "name": "the enchanted toothbrush",
+    "description": "A magical toothbrush with a handle made of swirling rainbow-colored crystal. Soft golden bristles that emit a gentle glow. Small stars and sparkles float around it when activated. Child-sized, friendly appearance."
+  }
+]
+
+If the story has fewer meaningful visual elements, return fewer items. Quality over quantity.`;
+
+  const text = await callGemini(prompt);
+  const references = extractJson<ExtractedReference[]>(text);
+
+  // Validate and limit to 8 references
+  return references
+    .filter(ref =>
+      ['character', 'object', 'location'].includes(ref.type) &&
+      ref.name &&
+      ref.description
+    )
+    .slice(0, 8);
+}
+
+// =====================================================
+// Reference Tagging for Segments
+// =====================================================
+
+export interface SegmentForTagging {
+  id: string;
+  segmentOrder: number;
+  text: string;
+  imagePrompt: string | null;
+}
+
+export interface ReferenceForTagging {
+  id: string;
+  name: string;
+  type: 'character' | 'object' | 'location';
+  description: string;
+}
+
+export interface SegmentReferenceTags {
+  segmentId: string;
+  referenceIds: string[];
+}
+
+export async function suggestSegmentReferenceTags(
+  segments: SegmentForTagging[],
+  references: ReferenceForTagging[]
+): Promise<SegmentReferenceTags[]> {
+  if (references.length === 0) {
+    return segments.map(s => ({ segmentId: s.id, referenceIds: [] }));
+  }
+
+  // Build reference list for the prompt
+  const referenceList = references.map((ref, idx) =>
+    `${idx + 1}. [${ref.id}] "${ref.name}" (${ref.type}): ${ref.description.slice(0, 100)}...`
+  ).join('\n');
+
+  // Build segment list for the prompt
+  const segmentList = segments.map(seg =>
+    `Segment ${seg.segmentOrder} [${seg.id}]:\n  Text: "${seg.text}"\n  Image Prompt: "${seg.imagePrompt || 'none'}"`
+  ).join('\n\n');
+
+  const prompt = `Analyze which visual references should be included when generating images for each story segment.
+
+AVAILABLE REFERENCES:
+${referenceList}
+
+SEGMENTS TO ANALYZE:
+${segmentList}
+
+For each segment, determine which references (if any) should be included in the image generation.
+A reference should be tagged if:
+- The character/object/location is mentioned in the segment text
+- The character/object/location should appear in the scene based on the image prompt
+- The reference is relevant to what's being illustrated
+
+Be SELECTIVE - only tag references that should VISUALLY APPEAR in that specific segment's illustration.
+
+Respond with ONLY a JSON array mapping segment IDs to reference IDs:
+[
+  {"segmentId": "segment-uuid-1", "referenceIds": ["ref-uuid-1", "ref-uuid-3"]},
+  {"segmentId": "segment-uuid-2", "referenceIds": []},
+  ...
+]
+
+Include ALL segments in the response, even if they have no references (empty array).`;
+
+  const text = await callGemini(prompt);
+  const suggestions = extractJson<SegmentReferenceTags[]>(text);
+
+  // Ensure all segments are represented
+  const segmentIds = new Set(segments.map(s => s.id));
+  const validReferenceIds = new Set(references.map(r => r.id));
+
+  return segments.map(seg => {
+    const suggestion = suggestions.find(s => s.segmentId === seg.id);
+    if (suggestion) {
+      // Filter to only valid reference IDs
+      return {
+        segmentId: seg.id,
+        referenceIds: suggestion.referenceIds.filter(id => validReferenceIds.has(id))
+      };
+    }
+    return { segmentId: seg.id, referenceIds: [] };
+  });
+}
+
 export interface GeneratedPet {
   name: string;
   displayName: string;

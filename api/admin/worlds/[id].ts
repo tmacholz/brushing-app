@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, type ExistingStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, type ExistingStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -186,6 +186,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         await sql`UPDATE stories SET status = 'draft' WHERE id = ${story.id}`;
         await sql`UPDATE story_pitches SET is_used = true WHERE id = ${pitchId}`;
+
+        // Step 4: Extract visual references for consistent image generation
+        console.log('[Story] Extracting visual references for:', pitch.title);
+        try {
+          const references = await extractStoryReferences(pitch.title, pitch.description, chapters, storyBible);
+          console.log('[Story] Extracted', references.length, 'visual references');
+
+          // Save references to database
+          for (let i = 0; i < references.length; i++) {
+            const ref = references[i];
+            await sql`
+              INSERT INTO story_references (story_id, type, name, description, sort_order)
+              VALUES (${story.id}, ${ref.type}, ${ref.name}, ${ref.description}, ${i})
+            `;
+          }
+          console.log('[Story] Saved', references.length, 'references to database');
+        } catch (refError) {
+          // Don't fail the whole story if reference extraction fails
+          console.error('[Story] Reference extraction failed (non-fatal):', refError);
+        }
 
         // Generate background music asynchronously (fire and forget - don't block response)
         const generateMusicAsync = async () => {
