@@ -60,9 +60,9 @@ export function BonusWheel({
     playSound('chapterStart');
 
     try {
-      // For subsequent spins, wait for the wheel to animate in before starting rotation
-      // This accounts for AnimatePresence enter animation (~500ms)
+      // For subsequent spins, reset rotation to 0 and wait for wheel to animate in
       if (isSubsequentSpin) {
+        setRotation(0); // Reset to 0 so each spin has same starting point
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
@@ -74,12 +74,10 @@ export function BonusWheel({
       );
 
       // Calculate spin: 4-6 full rotations + random final position
-      // Use consistent rotation delta for all spins (not cumulative)
-      // Each spin starts from a normalized base of (spinCount * small offset) to avoid visual reset
+      // Always spin the same amount (from 0 to target) for consistent speed
       const spins = 4 + Math.floor(Math.random() * 3);
       const segmentIndex = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-      const baseRotation = spinCountRef.current * 360; // Small offset per spin to avoid visual jump
-      const newRotation = baseRotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
+      const newRotation = (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
 
       setRotation(newRotation);
 
@@ -263,6 +261,7 @@ export function BonusWheel({
               {/* Wheel container - single element that animates */}
               <motion.div
                 className="relative w-72 h-72 rounded-full shadow-2xl"
+                initial={{ rotate: 0 }}
                 animate={{ rotate: rotation }}
                 transition={{
                   duration: phase === 'spinning' ? 4 : 0,
