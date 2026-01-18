@@ -112,9 +112,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // If new imageUrl provided, append to history
         let imageHistoryUpdate = null;
         if (imageUrl) {
-          // Get current history
-          const [current] = await sql`SELECT image_history FROM segments WHERE id = ${segmentId}`;
-          const currentHistory: ImageHistoryItem[] = current?.image_history || [];
+          // Get current history and existing image
+          const [current] = await sql`SELECT image_url, image_history FROM segments WHERE id = ${segmentId}`;
+          let currentHistory: ImageHistoryItem[] = current?.image_history || [];
+
+          // Backfill: if there's an existing image but history is empty, add it first
+          if (current?.image_url && currentHistory.length === 0) {
+            currentHistory = [{
+              url: current.image_url,
+              created_at: new Date(Date.now() - 1000).toISOString() // 1 second before new image
+            }];
+          }
 
           // Add new image to history
           const newHistoryItem: ImageHistoryItem = {
