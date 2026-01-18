@@ -27,6 +27,7 @@ import {
   Package,
   Plus,
   Maximize2,
+  Tag,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -50,6 +51,7 @@ interface Segment {
   image_url: string | null;
   image_history: ImageHistoryItem[] | null;
   narration_sequence: NarrationSequenceItem[] | null;
+  reference_ids: string[] | null;
 }
 
 interface Chapter {
@@ -265,29 +267,17 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const imageHistory = segment.image_history || [];
   const hasHistory = imageHistory.length > 1;
 
-  // Find relevant visual references for this segment
-  const findRelevantReferences = () => {
+  // Get explicitly tagged references for this segment (no auto-detection)
+  const getTaggedReferences = () => {
     if (!references || references.length === 0) return [];
+    if (!segment.reference_ids || segment.reference_ids.length === 0) return [];
 
-    // Only include references that have generated images
-    const refsWithImages = references.filter(r => r.image_url);
-    if (refsWithImages.length === 0) return [];
+    // Only include explicitly tagged references that have generated images
+    const taggedRefs = references.filter(ref =>
+      segment.reference_ids?.includes(ref.id) && ref.image_url
+    );
 
-    const searchText = `${segment.text} ${segment.image_prompt || ''}`.toLowerCase();
-
-    // Find references whose name appears in the segment text or image prompt
-    const relevantRefs = refsWithImages.filter(ref => {
-      // Extract key words from reference name (remove articles, common words)
-      const nameWords = ref.name.toLowerCase()
-        .replace(/^(the|a|an)\s+/i, '')
-        .split(/\s+/)
-        .filter(w => w.length > 2);
-
-      // Check if any significant word from the reference name appears in the segment
-      return nameWords.some(word => searchText.includes(word));
-    });
-
-    return relevantRefs.map(ref => ({
+    return taggedRefs.map(ref => ({
       type: ref.type,
       name: ref.name,
       description: ref.description,
@@ -303,8 +293,8 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
 
     setGenerating(true);
     try {
-      const visualReferences = findRelevantReferences();
-      console.log('[ImageGen] Segment regenerate: Found', visualReferences.length, 'relevant references:', visualReferences.map(r => r.name));
+      const visualReferences = getTaggedReferences();
+      console.log('[ImageGen] Using', visualReferences.length, 'tagged references:', visualReferences.map(r => r.name));
 
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -596,6 +586,143 @@ function getTimeAgo(date: Date): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
   return date.toLocaleDateString();
+}
+
+// Component for managing reference tags on a segment
+interface SegmentReferenceTagsProps {
+  segment: Segment;
+  storyId: string;
+  references: StoryReference[];
+  onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
+}
+
+function SegmentReferenceTags({ segment, storyId, references, onUpdate }: SegmentReferenceTagsProps) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const taggedRefs = references.filter(ref =>
+    segment.reference_ids?.includes(ref.id)
+  );
+  const untaggedRefs = references.filter(ref =>
+    !segment.reference_ids?.includes(ref.id)
+  );
+
+  const handleAddRef = async (refId: string) => {
+    setSaving(true);
+    try {
+      const newRefs = [...(segment.reference_ids || []), refId];
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceIds: newRefs }),
+      });
+      if (res.ok) {
+        onUpdate(segment.id, { reference_ids: newRefs });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRemoveRef = async (refId: string) => {
+    setSaving(true);
+    try {
+      const newRefs = (segment.reference_ids || []).filter(id => id !== refId);
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceIds: newRefs }),
+      });
+      if (res.ok) {
+        onUpdate(segment.id, { reference_ids: newRefs });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const getRefIcon = (type: string) => {
+    switch (type) {
+      case 'character': return <Users className="w-3 h-3" />;
+      case 'location': return <MapPin className="w-3 h-3" />;
+      case 'object': return <Package className="w-3 h-3" />;
+      default: return <Tag className="w-3 h-3" />;
+    }
+  };
+
+  if (references.length === 0) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-slate-700/50">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-slate-500 flex items-center gap-1">
+          <Tag className="w-3 h-3" />
+          References:
+        </span>
+
+        {/* Tagged references */}
+        {taggedRefs.map(ref => (
+          <button
+            key={ref.id}
+            onClick={() => handleRemoveRef(ref.id)}
+            disabled={saving}
+            className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 rounded-full hover:bg-red-500/30 hover:text-red-300 transition-colors disabled:opacity-50"
+            title={`${ref.name} - Click to remove`}
+          >
+            {getRefIcon(ref.type)}
+            {ref.name}
+            <X className="w-2.5 h-2.5" />
+          </button>
+        ))}
+
+        {/* Add button */}
+        {untaggedRefs.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => setShowPicker(!showPicker)}
+              disabled={saving}
+              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-slate-600/50 text-slate-400 rounded-full hover:bg-slate-600 hover:text-slate-300 transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-2.5 h-2.5" />
+              Add
+            </button>
+
+            {/* Reference picker dropdown */}
+            {showPicker && (
+              <div className="absolute top-full left-0 mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-xl min-w-[200px] max-h-[200px] overflow-y-auto">
+                {untaggedRefs.map(ref => (
+                  <button
+                    key={ref.id}
+                    onClick={() => {
+                      handleAddRef(ref.id);
+                      setShowPicker(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-700 transition-colors"
+                  >
+                    {ref.image_url ? (
+                      <img src={ref.image_url} alt="" className="w-6 h-6 rounded object-cover" />
+                    ) : (
+                      <div className="w-6 h-6 rounded bg-slate-600 flex items-center justify-center">
+                        {getRefIcon(ref.type)}
+                      </div>
+                    )}
+                    <div>
+                      <div className="text-slate-200">{ref.name}</div>
+                      <div className="text-[10px] text-slate-500">{ref.type}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {taggedRefs.length === 0 && untaggedRefs.length > 0 && (
+          <span className="text-[10px] text-slate-500 italic">No references tagged</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
@@ -2143,6 +2270,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               references={story?.references}
                               onUpdate={handleSegmentUpdate}
                             />
+
+                            {/* Reference Tags */}
+                            {story?.references && story.references.length > 0 && (
+                              <SegmentReferenceTags
+                                segment={segment}
+                                storyId={storyId}
+                                references={story.references}
+                                onUpdate={handleSegmentUpdate}
+                              />
+                            )}
                           </div>
                         ))}
                       </div>

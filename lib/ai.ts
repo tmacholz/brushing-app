@@ -541,6 +541,92 @@ If the story has fewer meaningful visual elements, return fewer items. Quality o
     .slice(0, 8);
 }
 
+// =====================================================
+// Reference Tagging for Segments
+// =====================================================
+
+export interface SegmentForTagging {
+  id: string;
+  segmentOrder: number;
+  text: string;
+  imagePrompt: string | null;
+}
+
+export interface ReferenceForTagging {
+  id: string;
+  name: string;
+  type: 'character' | 'object' | 'location';
+  description: string;
+}
+
+export interface SegmentReferenceTags {
+  segmentId: string;
+  referenceIds: string[];
+}
+
+export async function suggestSegmentReferenceTags(
+  segments: SegmentForTagging[],
+  references: ReferenceForTagging[]
+): Promise<SegmentReferenceTags[]> {
+  if (references.length === 0) {
+    return segments.map(s => ({ segmentId: s.id, referenceIds: [] }));
+  }
+
+  // Build reference list for the prompt
+  const referenceList = references.map((ref, idx) =>
+    `${idx + 1}. [${ref.id}] "${ref.name}" (${ref.type}): ${ref.description.slice(0, 100)}...`
+  ).join('\n');
+
+  // Build segment list for the prompt
+  const segmentList = segments.map(seg =>
+    `Segment ${seg.segmentOrder} [${seg.id}]:\n  Text: "${seg.text}"\n  Image Prompt: "${seg.imagePrompt || 'none'}"`
+  ).join('\n\n');
+
+  const prompt = `Analyze which visual references should be included when generating images for each story segment.
+
+AVAILABLE REFERENCES:
+${referenceList}
+
+SEGMENTS TO ANALYZE:
+${segmentList}
+
+For each segment, determine which references (if any) should be included in the image generation.
+A reference should be tagged if:
+- The character/object/location is mentioned in the segment text
+- The character/object/location should appear in the scene based on the image prompt
+- The reference is relevant to what's being illustrated
+
+Be SELECTIVE - only tag references that should VISUALLY APPEAR in that specific segment's illustration.
+
+Respond with ONLY a JSON array mapping segment IDs to reference IDs:
+[
+  {"segmentId": "segment-uuid-1", "referenceIds": ["ref-uuid-1", "ref-uuid-3"]},
+  {"segmentId": "segment-uuid-2", "referenceIds": []},
+  ...
+]
+
+Include ALL segments in the response, even if they have no references (empty array).`;
+
+  const text = await callGemini(prompt);
+  const suggestions = extractJson<SegmentReferenceTags[]>(text);
+
+  // Ensure all segments are represented
+  const segmentIds = new Set(segments.map(s => s.id));
+  const validReferenceIds = new Set(references.map(r => r.id));
+
+  return segments.map(seg => {
+    const suggestion = suggestions.find(s => s.segmentId === seg.id);
+    if (suggestion) {
+      // Filter to only valid reference IDs
+      return {
+        segmentId: seg.id,
+        referenceIds: suggestion.referenceIds.filter(id => validReferenceIds.has(id))
+      };
+    }
+    return { segmentId: seg.id, referenceIds: [] };
+  });
+}
+
 export interface GeneratedPet {
   name: string;
   displayName: string;

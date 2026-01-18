@@ -77,22 +77,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
-    // PUT - Update segment (text, prompts, narration, and/or image)
+    // PUT - Update segment (text, prompts, narration, image, and/or reference tags)
     if (req.method === 'PUT') {
-      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory } = req.body;
+      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
         brushingPrompt: brushingPrompt !== undefined ? 'provided' : 'not provided',
         imagePrompt: imagePrompt !== undefined ? 'provided' : 'not provided',
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided',
-        selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided'
+        selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
+        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided'
       });
 
       try {
         // Check if any field is provided
         const hasUpdate = text !== undefined || brushingPrompt !== undefined || imagePrompt !== undefined ||
-          narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined;
+          narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined ||
+          referenceIds !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -141,7 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             image_prompt = COALESCE(${imagePrompt ?? null}, image_prompt),
             narration_sequence = COALESCE(${narrationSequence ? JSON.stringify(narrationSequence) : null}, narration_sequence),
             image_url = COALESCE(${imageUrl ?? null}, image_url),
-            image_history = COALESCE(${imageHistoryUpdate}, image_history)
+            image_history = COALESCE(${imageHistoryUpdate}, image_history),
+            reference_ids = COALESCE(${referenceIds ?? null}, reference_ids)
           WHERE id = ${segmentId} RETURNING *
         `;
 
@@ -378,18 +381,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Re-extract references from story
     if (action === 'extractReferences') {
       try {
-        // Import the extraction function
-        const { extractStoryReferences } = await import('../../../lib/ai.js');
+        // Import the extraction and tagging functions
+        const { extractStoryReferences, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
 
         // Get story with bible
         const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
         if (!story) return res.status(404).json({ error: 'Story not found' });
 
-        // Get all chapters with segments
+        // Get all chapters with segments (including segment IDs for tagging)
         const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+        const allSegments: { id: string; segment_order: number; text: string; image_prompt: string | null; chapter_id: string }[] = [];
         const chaptersWithSegments = await Promise.all(
           chapters.map(async (ch) => {
             const segments = await sql`SELECT * FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+            allSegments.push(...segments.map(s => ({
+              id: s.id,
+              segment_order: s.segment_order,
+              text: s.text,
+              image_prompt: s.image_prompt,
+              chapter_id: ch.id
+            })));
             return {
               chapterNumber: ch.chapter_number,
               title: ch.title,
@@ -432,6 +443,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             RETURNING *
           `;
           savedRefs.push(saved);
+        }
+
+        // Now suggest reference tags for each segment
+        if (savedRefs.length > 0) {
+          console.log('[extractReferences] Suggesting reference tags for segments...');
+          const segmentsForTagging = allSegments.map(s => ({
+            id: s.id,
+            segmentOrder: s.segment_order,
+            text: s.text,
+            imagePrompt: s.image_prompt
+          }));
+          const refsForTagging = savedRefs.map(r => ({
+            id: r.id,
+            name: r.name,
+            type: r.type as 'character' | 'object' | 'location',
+            description: r.description
+          }));
+
+          const tagSuggestions = await suggestSegmentReferenceTags(segmentsForTagging, refsForTagging);
+
+          // Update segments with suggested reference tags
+          for (const suggestion of tagSuggestions) {
+            if (suggestion.referenceIds.length > 0) {
+              await sql`
+                UPDATE segments
+                SET reference_ids = ${suggestion.referenceIds}
+                WHERE id = ${suggestion.segmentId}
+              `;
+            }
+          }
+          console.log('[extractReferences] Updated segment reference tags');
         }
 
         return res.status(200).json({ references: savedRefs });

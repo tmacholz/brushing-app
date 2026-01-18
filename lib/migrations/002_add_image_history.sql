@@ -8,3 +8,7 @@ ALTER TABLE story_references ADD COLUMN IF NOT EXISTS image_history JSONB DEFAUL
 
 -- Add cover_image_history to stories
 ALTER TABLE stories ADD COLUMN IF NOT EXISTS cover_image_history JSONB DEFAULT '[]';
+
+-- Add reference_ids to segments for explicit reference tagging
+-- Stores array of reference UUIDs that should be used for this segment's image generation
+ALTER TABLE segments ADD COLUMN IF NOT EXISTS reference_ids UUID[] DEFAULT '{}';
