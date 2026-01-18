@@ -26,6 +26,7 @@ import {
   MapPin,
   Package,
   Plus,
+  Maximize2,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -257,6 +258,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const [generating, setGenerating] = useState(false);
   const [showGallery, setShowGallery] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
   const hasPrompt = !!segment.image_prompt;
@@ -466,6 +468,14 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
                 <div className="absolute top-2 left-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded">
                   Current
                 </div>
+                {/* Expand button */}
+                <button
+                  onClick={() => setLightboxUrl(segment.image_url)}
+                  className="absolute bottom-2 right-2 bg-black/70 hover:bg-black/90 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="View full size"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
               </div>
             )
           ) : (
@@ -503,6 +513,18 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
                       {timeAgo}
                     </div>
 
+                    {/* Expand button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightboxUrl(item.url);
+                      }}
+                      className="absolute bottom-1 right-8 bg-black/70 hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="View full size"
+                    >
+                      <Maximize2 className="w-3 h-3" />
+                    </button>
+
                     {/* Delete button */}
                     <button
                       onClick={(e) => {
@@ -526,6 +548,40 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           )}
         </div>
       )}
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative max-w-[90vw] max-h-[90vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={lightboxUrl}
+                alt="Full size preview"
+                className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setLightboxUrl(null)}
+                className="absolute -top-3 -right-3 bg-white text-slate-900 p-2 rounded-full shadow-lg hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
