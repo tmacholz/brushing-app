@@ -53,11 +53,19 @@ export function BonusWheel({
   const doSpin = useCallback(async () => {
     if (tokensRemaining <= 0 || isAnimating) return;
 
+    const isSubsequentSpin = spinCountRef.current > 0;
+
     setPhase('spinning');
     setIsAnimating(true);
     playSound('chapterStart');
 
     try {
+      // For subsequent spins, reset rotation to 0 and wait for wheel to animate in
+      if (isSubsequentSpin) {
+        setRotation(0); // Reset to 0 so each spin has same starting point
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       // Generate the reward first so we know what we're landing on
       const reward = await generateChestReward(
         worldId,
@@ -66,9 +74,10 @@ export function BonusWheel({
       );
 
       // Calculate spin: 4-6 full rotations + random final position
+      // Always spin the same amount (from 0 to target) for consistent speed
       const spins = 4 + Math.floor(Math.random() * 3);
       const segmentIndex = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-      const newRotation = rotation + (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
+      const newRotation = (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
 
       setRotation(newRotation);
 
@@ -101,7 +110,7 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, rotation, playSound, onRewardClaimed]);
+  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed]);
 
   const handleSpin = () => {
     if (phase !== 'ready') return;
@@ -252,6 +261,7 @@ export function BonusWheel({
               {/* Wheel container - single element that animates */}
               <motion.div
                 className="relative w-72 h-72 rounded-full shadow-2xl"
+                initial={{ rotate: 0 }}
                 animate={{ rotate: rotation }}
                 transition={{
                   duration: phase === 'spinning' ? 4 : 0,

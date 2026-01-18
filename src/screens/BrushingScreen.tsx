@@ -46,13 +46,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
-  const [chestReward, setChestReward] = useState<ChestReward | null>(null);
   // New task bonus flow state
+  const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
   const [showTaskCheckIn, setShowTaskCheckIn] = useState(false);
   const [showBonusWheel, setShowBonusWheel] = useState(false);
   const [tokensEarned, setTokensEarned] = useState(0);
-  const [allWheelRewards, setAllWheelRewards] = useState<ChestReward[]>([]);
-  const [showFinalCompletion, setShowFinalCompletion] = useState(false); // Gate for completion screen
+  const [hasBonusFlow, setHasBonusFlow] = useState(false); // Track if bonus flow is enabled
+  const [hasExited, setHasExited] = useState(false); // Prevent rendering after exit
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -192,7 +192,19 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     const taskConfig = child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
     const enabledTasks = taskConfig.tasks.filter(t => t.enabled);
 
-    if (taskConfig.enabled && enabledTasks.length > 0) {
+    // Track if bonus flow is available
+    const bonusEnabled = taskConfig.enabled && enabledTasks.length > 0;
+    setHasBonusFlow(bonusEnabled);
+
+    // Always show "Amazing job" completion screen first
+    setShowInitialCompletion(true);
+  };
+
+  // Handle continue from initial completion screen
+  const handleInitialCompletionContinue = () => {
+    setShowInitialCompletion(false);
+
+    if (hasBonusFlow) {
       // Show task check-in flow
       setShowTaskCheckIn(true);
     } else {
@@ -202,7 +214,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   };
 
   const handleChestRewardClaimed = async (reward: ChestReward) => {
-    setChestReward(reward);
     await claimChestReward(reward);
 
     // Add bonus points from chest if applicable
@@ -213,7 +224,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
-    setShowFinalCompletion(true);
+    setHasExited(true);
     onComplete(pointsEarned);
   };
 
@@ -226,7 +237,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Bonus wheel reward handler
   const handleWheelRewardClaimed = async (reward: ChestReward) => {
-    setAllWheelRewards(prev => [...prev, reward]);
     await claimChestReward(reward);
 
     // Add bonus points from wheel if applicable
@@ -238,7 +248,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Bonus wheel complete handler
   const handleWheelComplete = () => {
     setShowBonusWheel(false);
-    setShowFinalCompletion(true);
+    setHasExited(true);
     onComplete(pointsEarned);
   };
 
@@ -516,6 +526,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return () => clearInterval(timer);
   }, [showCountdown, start, playSound]);
 
+  // Prevent any rendering after exit to avoid flashing back to story
+  if (hasExited) {
+    return null;
+  }
+
   // Render error if no story is available
   if (!currentChapter) {
     return (
@@ -565,6 +580,48 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     );
   }
 
+  // Render initial completion screen ("Amazing job!" first)
+  if (isComplete && showInitialCompletion) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', damping: 10 }}
+          className="text-center"
+        >
+          <motion.div
+            animate={{ rotate: [0, -10, 10, -10, 10, 0] }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="text-8xl mb-6"
+          >
+            🎉
+          </motion.div>
+          <h1 className="text-4xl font-bold text-white mb-4">Amazing job!</h1>
+          <p className="text-white/90 text-xl mb-8">
+            You earned {pointsEarned} points!
+          </p>
+
+          {currentChapter && (
+            <div className="bg-white/20 rounded-2xl p-6 mb-8 max-w-md">
+              <p className="text-white/80 text-sm mb-2">Next time...</p>
+              <p className="text-white text-lg italic">
+                {currentChapter.nextChapterTeaser}
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={handleInitialCompletionContinue}
+            className="bg-white text-success font-bold py-4 px-12 rounded-full text-xl shadow-lg"
+          >
+            Continue
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
   // Render task check-in overlay
   if (isComplete && showTaskCheckIn) {
     const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
@@ -601,82 +658,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         onRewardClaimed={handleChestRewardClaimed}
         onClose={handleChestClose}
       />
-    );
-  }
-
-  // Render completion screen (only after explicitly set)
-  if (isComplete && showFinalCompletion) {
-    // Determine rewards to show - from wheel or chest
-    const rewardsToShow = allWheelRewards.length > 0 ? allWheelRewards : (chestReward ? [chestReward] : []);
-    const newCollectibles = rewardsToShow.filter(r => r.type !== 'points' && r.isNew);
-
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 10 }}
-          className="text-center"
-        >
-          <motion.div
-            animate={{ rotate: [0, -10, 10, -10, 10, 0] }}
-            transition={{ duration: 0.5, delay: 0.3 }}
-            className="text-8xl mb-6"
-          >
-            🎉
-          </motion.div>
-          <h1 className="text-4xl font-bold text-white mb-4">Amazing job!</h1>
-          <p className="text-white/90 text-xl mb-8">
-            You earned {pointsEarned} points!
-          </p>
-
-          {/* Show collectibles found (from wheel or chest) */}
-          {newCollectibles.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white/20 rounded-2xl p-4 mb-6 max-w-md"
-            >
-              <p className="text-white/80 text-sm mb-2">You found:</p>
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {newCollectibles.map((reward, idx) => {
-                  if (reward.type === 'points') return null;
-                  return (
-                    <div key={idx} className="flex items-center gap-2">
-                      {reward.collectible.imageUrl && (
-                        <img
-                          src={reward.collectible.imageUrl}
-                          alt={reward.collectible.displayName}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      )}
-                      <span className="text-white font-bold text-sm">
-                        {reward.collectible.displayName}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </motion.div>
-          )}
-
-          {currentChapter && (
-            <div className="bg-white/20 rounded-2xl p-6 mb-8 max-w-md">
-              <p className="text-white/80 text-sm mb-2">Next time...</p>
-              <p className="text-white text-lg italic">
-                {currentChapter.nextChapterTeaser}
-              </p>
-            </div>
-          )}
-
-          <button
-            onClick={onExit}
-            className="bg-white text-success font-bold py-4 px-12 rounded-full text-xl shadow-lg"
-          >
-            Done!
-          </button>
-        </motion.div>
-      </div>
     );
   }
 
