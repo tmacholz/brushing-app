@@ -485,6 +485,113 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Generate storyboard for visual planning
+    if (action === 'generateStoryboard') {
+      try {
+        const { generateStoryboard } = await import('../../../lib/ai.js');
+
+        // Get story with bible
+        const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
+        if (!story) return res.status(404).json({ error: 'Story not found' });
+
+        if (!story.story_bible) {
+          return res.status(400).json({ error: 'Story Bible required. Generate or add a Story Bible first.' });
+        }
+
+        // Get all chapters with segments
+        const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+        const chaptersWithSegments = await Promise.all(
+          chapters.map(async (ch) => {
+            const segments = await sql`SELECT id, segment_order, text, image_prompt FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+            return {
+              chapterNumber: ch.chapter_number,
+              title: ch.title,
+              segments: segments.map(s => ({
+                id: s.id,
+                segmentOrder: s.segment_order,
+                text: s.text,
+                imagePrompt: s.image_prompt,
+              })),
+            };
+          })
+        );
+
+        console.log('[generateStoryboard] Generating storyboard for', chaptersWithSegments.length, 'chapters');
+
+        // Generate storyboard
+        const storyboard = await generateStoryboard({
+          storyTitle: story.title,
+          storyDescription: story.description,
+          storyBible: story.story_bible,
+          chapters: chaptersWithSegments,
+        });
+
+        console.log('[generateStoryboard] Generated', storyboard.length, 'segment entries');
+
+        // Update segments with storyboard data
+        let updatedCount = 0;
+        for (const entry of storyboard) {
+          const result = await sql`
+            UPDATE segments SET
+              storyboard_location = ${entry.location},
+              storyboard_characters = ${entry.characters},
+              storyboard_shot_type = ${entry.shotType},
+              storyboard_camera_angle = ${entry.cameraAngle},
+              storyboard_focus = ${entry.visualFocus},
+              storyboard_continuity = ${entry.continuityNote}
+            WHERE id = ${entry.segmentId}
+          `;
+          if (result.count > 0) updatedCount++;
+        }
+
+        console.log('[generateStoryboard] Updated', updatedCount, 'segments');
+
+        // Auto-tag references based on storyboard characters and locations
+        const references = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${id}`;
+        if (references.length > 0) {
+          console.log('[generateStoryboard] Auto-tagging references based on storyboard');
+          for (const entry of storyboard) {
+            const matchingRefIds: string[] = [];
+
+            // Match characters
+            for (const charName of entry.characters || []) {
+              const matchingRef = references.find(r =>
+                r.type === 'character' &&
+                r.name.toLowerCase().includes(charName.toLowerCase())
+              );
+              if (matchingRef) matchingRefIds.push(matchingRef.id);
+            }
+
+            // Match location
+            if (entry.location) {
+              const matchingRef = references.find(r =>
+                r.type === 'location' &&
+                r.name.toLowerCase().includes(entry.location!.toLowerCase())
+              );
+              if (matchingRef) matchingRefIds.push(matchingRef.id);
+            }
+
+            if (matchingRefIds.length > 0) {
+              await sql`
+                UPDATE segments SET reference_ids = ${matchingRefIds}
+                WHERE id = ${entry.segmentId}
+              `;
+            }
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          storyboard,
+          updatedSegments: updatedCount
+        });
+      } catch (error) {
+        console.error('Error generating storyboard:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to generate storyboard', details: message });
+      }
+    }
+
     // Default: Publish/unpublish
     try {
       const [story] = await sql`

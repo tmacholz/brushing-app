@@ -627,6 +627,142 @@ Include ALL segments in the response, even if they have no references (empty arr
   });
 }
 
+// =====================================================
+// Storyboard Generation
+// =====================================================
+
+export interface StoryboardSegment {
+  segmentId: string;
+  segmentOrder: number;
+  chapterNumber: number;
+  location: string | null;           // References Story Bible keyLocations.name
+  characters: string[];              // NPC names from Story Bible recurringCharacters
+  shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-shoulder';
+  cameraAngle: 'eye-level' | 'low-angle' | 'high-angle' | 'birds-eye' | 'worms-eye' | 'dutch-angle';
+  visualFocus: string;               // What to emphasize visually
+  continuityNote: string;            // How this connects to adjacent segments
+}
+
+export interface FullStoryboardInput {
+  storyTitle: string;
+  storyDescription: string;
+  storyBible: StoryBible;
+  chapters: {
+    chapterNumber: number;
+    title: string;
+    segments: {
+      id: string;
+      segmentOrder: number;
+      text: string;
+      imagePrompt: string | null;
+    }[];
+  }[];
+}
+
+export async function generateStoryboard(input: FullStoryboardInput): Promise<StoryboardSegment[]> {
+  const { storyTitle, storyDescription, storyBible, chapters } = input;
+
+  // Build location list from Story Bible
+  const locationList = storyBible.keyLocations?.length
+    ? storyBible.keyLocations.map(l => `- "${l.name}": ${l.visualDescription} (mood: ${l.mood})`).join('\n')
+    : 'No specific locations defined';
+
+  // Build character list from Story Bible
+  const characterList = storyBible.recurringCharacters?.length
+    ? storyBible.recurringCharacters.map(c => `- "${c.name}": ${c.visualDescription} (${c.personality}, ${c.role})`).join('\n')
+    : 'No recurring NPCs defined';
+
+  // Build full story structure for analysis
+  const storyStructure = chapters.map(ch => {
+    const segmentLines = ch.segments.map(s =>
+      `  Segment ${s.segmentOrder} [${s.id}]:\n    Text: "${s.text}"\n    Current Image Prompt: "${s.imagePrompt || 'none'}"`
+    ).join('\n');
+    return `Chapter ${ch.chapterNumber}: "${ch.title}"\n${segmentLines}`;
+  }).join('\n\n');
+
+  const prompt = `You are a storyboard artist for a children's animated story. Analyze the entire story and create a VISUAL STORYBOARD that plans camera work, locations, and character appearances for each segment.
+
+STORY: "${storyTitle}"
+${storyDescription}
+
+VISUAL STYLE (from Story Bible):
+- Color Palette: ${storyBible.colorPalette || 'Not specified'}
+- Lighting: ${storyBible.lightingStyle || 'Not specified'}
+- Art Direction: ${storyBible.artDirection || 'Not specified'}
+
+AVAILABLE LOCATIONS (use these exact names when applicable):
+${locationList}
+
+AVAILABLE NPCs (use these exact names when they appear):
+${characterList}
+
+MAIN CHARACTERS:
+- [CHILD]: The player's child (always available)
+- [PET]: The magical pet companion (always available)
+
+STORY STRUCTURE:
+${storyStructure}
+
+Create a storyboard that:
+1. VARIES camera shots and angles - avoid repetition between adjacent segments
+2. Uses LOCATIONS from the Story Bible when the scene matches (use exact name or null if no match)
+3. Only includes NPCs when they are ACTUALLY in that segment's text/scene
+4. Creates visual FLOW - establishing shots for new locations, then closer shots for action/dialogue
+5. Uses camera angles meaningfully (low-angle for heroic moments, high-angle for vulnerability, etc.)
+
+SHOT TYPES:
+- "wide": Full scene, shows environment and multiple characters
+- "medium": Characters from waist up, good for dialogue and action
+- "close-up": Face/upper body, emotional moments
+- "extreme-close-up": Specific detail (object, expression)
+- "over-shoulder": POV from behind one character looking at another/scene
+
+CAMERA ANGLES:
+- "eye-level": Neutral, standard view
+- "low-angle": Looking up, makes subjects appear powerful/heroic
+- "high-angle": Looking down, makes subjects appear small/vulnerable
+- "birds-eye": Directly above, shows layout/geography
+- "worms-eye": From ground looking up, dramatic
+- "dutch-angle": Tilted, creates unease or dynamic action
+
+Respond with ONLY a JSON array containing ALL segments:
+[
+  {
+    "segmentId": "uuid-here",
+    "segmentOrder": 1,
+    "chapterNumber": 1,
+    "location": "the crystal cavern" or null,
+    "characters": ["the wise owl"] or [],
+    "shotType": "wide",
+    "cameraAngle": "eye-level",
+    "visualFocus": "The glowing crystals illuminating the cavern entrance",
+    "continuityNote": "Establishing shot of new location"
+  },
+  ...
+]
+
+IMPORTANT:
+- Include EVERY segment from the story
+- Use EXACT location/character names from the Story Bible
+- Vary shots between adjacent segments (don't use same shot type twice in a row)
+- "characters" should ONLY include NPCs that APPEAR in that segment, not [CHILD] or [PET]`;
+
+  const text = await callGemini(prompt);
+  const storyboard = extractJson<StoryboardSegment[]>(text);
+
+  // Validate shot types and camera angles
+  const validShotTypes = ['wide', 'medium', 'close-up', 'extreme-close-up', 'over-shoulder'];
+  const validCameraAngles = ['eye-level', 'low-angle', 'high-angle', 'birds-eye', 'worms-eye', 'dutch-angle'];
+
+  return storyboard.map(segment => ({
+    ...segment,
+    shotType: validShotTypes.includes(segment.shotType) ? segment.shotType : 'medium',
+    cameraAngle: validCameraAngles.includes(segment.cameraAngle) ? segment.cameraAngle : 'eye-level',
+    characters: Array.isArray(segment.characters) ? segment.characters : [],
+    location: segment.location || null,
+  })) as StoryboardSegment[];
+}
+
 export interface GeneratedPet {
   name: string;
   displayName: string;

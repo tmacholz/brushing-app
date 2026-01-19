@@ -158,21 +158,33 @@ interface StoryImageRequest {
   petName?: string;
   storyBible?: StoryBible; // For visual consistency across all images
   visualReferences?: VisualReference[]; // Reference images for characters/objects/locations
+  // Storyboard fields for intentional visual planning
+  storyboardLocation?: string | null;      // Exact location name from Story Bible
+  storyboardCharacters?: string[] | null;  // Specific NPCs to include
+  storyboardShotType?: string | null;      // 'wide', 'medium', 'close-up', etc.
+  storyboardCameraAngle?: string | null;   // 'eye-level', 'low-angle', etc.
+  storyboardFocus?: string | null;         // What to emphasize visually
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
-  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible, visualReferences } = req;
+  const {
+    prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
+    includeUser, includePet, childName, petName, storyBible, visualReferences,
+    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus
+  } = req;
 
   if (!prompt || !segmentId) {
     return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
   }
 
+  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle;
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   const referenceDescriptions: string[] = [];
   let imageIndex = 1;
 
-  // Add previous scene reference
-  if (referenceImageUrl) {
+  // Only add previous scene reference if NO storyboard data (legacy behavior)
+  // With storyboard, we rely on Story Bible and references for consistency instead
+  if (referenceImageUrl && !hasStoryboard) {
     const imageData = await fetchImageAsBase64(referenceImageUrl);
     if (imageData) {
       parts.push({ inlineData: imageData });
@@ -191,7 +203,7 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
         const typeLabel = ref.type === 'character' ? 'CHARACTER REFERENCE SHEET' :
                          ref.type === 'location' ? 'LOCATION REFERENCE' : 'OBJECT REFERENCE SHEET';
         referenceDescriptions.push(
-          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - If this ${ref.type} appears in the scene, match its appearance EXACTLY from this reference`
+          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - Match this ${ref.type}'s appearance EXACTLY`
         );
         imageIndex++;
       }
@@ -225,55 +237,110 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   // Build the complete prompt
   let fullPrompt = STYLE_PREFIX + '\n\n';
 
-  // Add Story Bible visual guidelines if provided
+  // Add storyboard camera/composition instructions if provided
+  if (hasStoryboard) {
+    fullPrompt += '=== STORYBOARD DIRECTION ===\n';
+
+    if (storyboardShotType) {
+      const shotDescriptions: Record<string, string> = {
+        'wide': 'WIDE SHOT - Show the full environment with characters small in frame. Establish the setting.',
+        'medium': 'MEDIUM SHOT - Characters from waist up. Good balance of character and environment.',
+        'close-up': 'CLOSE-UP - Focus on character face/upper body. Emotional, intimate framing.',
+        'extreme-close-up': 'EXTREME CLOSE-UP - Tight focus on a specific detail (object, expression, hands).',
+        'over-shoulder': 'OVER-SHOULDER SHOT - From behind one character, looking at another or at the scene.',
+      };
+      fullPrompt += `SHOT: ${shotDescriptions[storyboardShotType] || storyboardShotType}\n`;
+    }
+
+    if (storyboardCameraAngle) {
+      const angleDescriptions: Record<string, string> = {
+        'eye-level': 'EYE-LEVEL - Camera at subject height. Neutral, relatable perspective.',
+        'low-angle': 'LOW-ANGLE - Camera looking UP at subject. Makes them appear powerful, heroic, larger.',
+        'high-angle': 'HIGH-ANGLE - Camera looking DOWN at subject. Makes them appear small, vulnerable.',
+        'birds-eye': 'BIRD\'S EYE - Directly from above. Shows geography, layout, patterns.',
+        'worms-eye': 'WORM\'S EYE - From ground looking up. Dramatic, emphasizes scale.',
+        'dutch-angle': 'DUTCH ANGLE - Tilted frame. Creates unease, tension, or dynamic action.',
+      };
+      fullPrompt += `ANGLE: ${angleDescriptions[storyboardCameraAngle] || storyboardCameraAngle}\n`;
+    }
+
+    if (storyboardFocus) {
+      fullPrompt += `VISUAL FOCUS: ${storyboardFocus}\n`;
+    }
+
+    fullPrompt += '\n';
+  }
+
+  // Add Story Bible visual style (always include if provided)
   if (storyBible) {
-    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    fullPrompt += '=== VISUAL STYLE GUIDE ===\n';
     if (storyBible.colorPalette) {
-      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+      fullPrompt += `Color Palette: ${storyBible.colorPalette}\n`;
     }
     if (storyBible.lightingStyle) {
-      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+      fullPrompt += `Lighting: ${storyBible.lightingStyle}\n`;
     }
     if (storyBible.artDirection) {
-      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+      fullPrompt += `Art Direction: ${storyBible.artDirection}\n`;
+    }
+    fullPrompt += '\n';
+
+    // If storyboard specifies a location, only include that one from Story Bible
+    if (storyboardLocation && storyBible.keyLocations && storyBible.keyLocations.length > 0) {
+      const matchingLocation = storyBible.keyLocations.find(
+        loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase()
+      );
+      if (matchingLocation) {
+        fullPrompt += `=== LOCATION: ${matchingLocation.name} ===\n`;
+        fullPrompt += `${matchingLocation.visualDescription}\n`;
+        fullPrompt += `Mood: ${matchingLocation.mood}\n\n`;
+      }
     }
 
-    // Add relevant location descriptions if any match the prompt
-    if (storyBible.keyLocations && storyBible.keyLocations.length > 0) {
-      fullPrompt += '\nKEY LOCATIONS (use these visual descriptions if the scene is in one of these places):\n';
-      storyBible.keyLocations.forEach(loc => {
-        fullPrompt += `- ${loc.name}: ${loc.visualDescription} (mood: ${loc.mood})\n`;
-      });
-    }
+    // If storyboard specifies characters, only include those from Story Bible
+    if (storyboardCharacters && storyboardCharacters.length > 0 && storyBible.recurringCharacters) {
+      const charactersToInclude = storyBible.recurringCharacters.filter(char =>
+        storyboardCharacters.some(name =>
+          char.name.toLowerCase().includes(name.toLowerCase()) ||
+          name.toLowerCase().includes(char.name.toLowerCase())
+        )
+      );
 
-    // Add recurring character appearances for consistency
-    if (storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
-      fullPrompt += '\nRECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
+      if (charactersToInclude.length > 0) {
+        fullPrompt += '=== CHARACTERS IN THIS SCENE ===\n';
+        charactersToInclude.forEach(char => {
+          fullPrompt += `${char.name}: ${char.visualDescription}\n`;
+        });
+        fullPrompt += '\n';
+      }
+    } else if (!hasStoryboard && storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
+      // Legacy behavior: include all characters if no storyboard
+      fullPrompt += 'RECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
       storyBible.recurringCharacters.forEach(char => {
         fullPrompt += `- ${char.name}: ${char.visualDescription}\n`;
       });
+      fullPrompt += '\n';
+    }
+  }
+
+  if (referenceDescriptions.length > 0) {
+    fullPrompt += '=== REFERENCE IMAGES ===\n' + referenceDescriptions.join('\n') + '\n\n';
+  }
+
+  if (includeUser || includePet) {
+    fullPrompt += '=== MAIN CHARACTERS ===\n';
+    if (includeUser) {
+      fullPrompt += `${childName || 'The child'} MUST be clearly visible. `;
+      fullPrompt += userAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as a friendly child protagonist.\n';
+    }
+    if (includePet) {
+      fullPrompt += `${petName || 'The pet companion'} MUST be clearly visible. `;
+      fullPrompt += petAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as an adorable, friendly companion.\n';
     }
     fullPrompt += '\n';
   }
 
-  if (referenceDescriptions.length > 0) {
-    fullPrompt += 'REFERENCE IMAGES PROVIDED:\n' + referenceDescriptions.join('\n') + '\n\n';
-  }
-
-  if (includeUser || includePet) {
-    fullPrompt += 'CHARACTER REQUIREMENTS:\n';
-    if (includeUser) {
-      fullPrompt += `- ${childName || 'The child'} MUST be clearly visible in this scene. `;
-      fullPrompt += userAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as a friendly child protagonist.\n';
-    }
-    if (includePet) {
-      fullPrompt += `- ${petName || 'The pet companion'} MUST be clearly visible in this scene. `;
-      fullPrompt += petAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as an adorable, friendly companion.\n';
-    }
-    fullPrompt += '- Characters should be interacting with the scene appropriately.\n\n';
-  }
-
-  fullPrompt += `SCENE TO ILLUSTRATE:\n${prompt}`;
+  fullPrompt += `=== SCENE DESCRIPTION ===\n${prompt}`;
   parts.push({ text: fullPrompt });
 
   // Include timestamp in filename for reliable cache busting (CDN may ignore query params)

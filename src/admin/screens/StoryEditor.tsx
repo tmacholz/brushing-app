@@ -29,6 +29,9 @@ import {
   Maximize2,
   Tag,
   BookOpen,
+  Clapperboard,
+  Camera,
+  Video,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -53,6 +56,13 @@ interface Segment {
   image_history: ImageHistoryItem[] | null;
   narration_sequence: NarrationSequenceItem[] | null;
   reference_ids: string[] | null;
+  // Storyboard fields
+  storyboard_location: string | null;
+  storyboard_characters: string[] | null;
+  storyboard_shot_type: string | null;
+  storyboard_camera_angle: string | null;
+  storyboard_focus: string | null;
+  storyboard_continuity: string | null;
 }
 
 interface Chapter {
@@ -324,6 +334,12 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           includePet: false,
           storyBible: storyBible || undefined,
           visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
+          // Storyboard fields for intentional visual planning
+          storyboardLocation: segment.storyboard_location || undefined,
+          storyboardCharacters: segment.storyboard_characters || undefined,
+          storyboardShotType: segment.storyboard_shot_type || undefined,
+          storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
+          storyboardFocus: segment.storyboard_focus || undefined,
         }),
       });
 
@@ -1026,6 +1042,9 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [storyBibleDraft, setStoryBibleDraft] = useState<StoryBible | null>(null);
   const [savingStoryBible, setSavingStoryBible] = useState(false);
 
+  // Storyboard generation state
+  const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -1116,6 +1135,36 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
     setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
+  };
+
+  const handleGenerateStoryboard = async () => {
+    if (!story?.story_bible) {
+      setError('Story Bible required. Add or generate a Story Bible first.');
+      return;
+    }
+
+    setGeneratingStoryboard(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateStoryboard' }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to generate storyboard');
+      }
+
+      // Refresh story to get updated segment storyboard data
+      await fetchStory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
+    } finally {
+      setGeneratingStoryboard(false);
+    }
   };
 
   const handlePublish = async (publish: boolean) => {
@@ -1676,6 +1725,12 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             includePet: false,
             storyBible: story?.story_bible || undefined,
             visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
+            // Storyboard fields for intentional visual planning
+            storyboardLocation: segment.storyboard_location || undefined,
+            storyboardCharacters: segment.storyboard_characters || undefined,
+            storyboardShotType: segment.storyboard_shot_type || undefined,
+            storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
+            storyboardFocus: segment.storyboard_focus || undefined,
           }),
         });
 
@@ -1852,13 +1907,24 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             </button>
 
             {showStoryBible && !editingStoryBible && story.story_bible && (
-              <button
-                onClick={startEditingStoryBible}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-                Edit
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGenerateStoryboard}
+                  disabled={generatingStoryboard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
+                  title="Generate visual storyboard from Story Bible"
+                >
+                  {generatingStoryboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />}
+                  {generatingStoryboard ? 'Generating...' : 'Generate Storyboard'}
+                </button>
+                <button
+                  onClick={startEditingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </button>
+              </div>
             )}
 
             {showStoryBible && editingStoryBible && (
@@ -2631,6 +2697,52 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                     multiline
                                     className="text-xs text-slate-400"
                                   />
+                                </div>
+                              </details>
+                            )}
+
+                            {/* Storyboard Info */}
+                            {(segment.storyboard_shot_type || segment.storyboard_location) && (
+                              <details className="mt-2">
+                                <summary className="text-xs text-cyan-500 cursor-pointer hover:text-cyan-400 flex items-center gap-1">
+                                  <Clapperboard className="w-3 h-3" />
+                                  Storyboard
+                                </summary>
+                                <div className="mt-1 pl-3 border-l border-cyan-600/50 space-y-1">
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    {segment.storyboard_shot_type && (
+                                      <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex items-center gap-1">
+                                        <Camera className="w-3 h-3" />
+                                        {segment.storyboard_shot_type}
+                                      </span>
+                                    )}
+                                    {segment.storyboard_camera_angle && (
+                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded flex items-center gap-1">
+                                        <Video className="w-3 h-3" />
+                                        {segment.storyboard_camera_angle}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {segment.storyboard_location && (
+                                    <div className="text-xs text-slate-400">
+                                      <span className="text-slate-500">Location:</span> {segment.storyboard_location}
+                                    </div>
+                                  )}
+                                  {segment.storyboard_characters && segment.storyboard_characters.length > 0 && (
+                                    <div className="text-xs text-slate-400">
+                                      <span className="text-slate-500">NPCs:</span> {segment.storyboard_characters.join(', ')}
+                                    </div>
+                                  )}
+                                  {segment.storyboard_focus && (
+                                    <div className="text-xs text-slate-400">
+                                      <span className="text-slate-500">Focus:</span> {segment.storyboard_focus}
+                                    </div>
+                                  )}
+                                  {segment.storyboard_continuity && (
+                                    <div className="text-xs text-slate-400 italic">
+                                      {segment.storyboard_continuity}
+                                    </div>
+                                  )}
                                 </div>
                               </details>
                             )}
