@@ -1,10 +1,12 @@
 import { motion } from 'framer-motion';
-import { Flame, Star, Sparkles, ChevronDown, Check } from 'lucide-react';
+import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
+import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
-import type { ScreenName } from '../types';
+import { personalizeStory } from '../utils/storyGenerator';
+import type { ScreenName, StoryTemplate } from '../types';
 
 interface HomeScreenProps {
   onNavigate: (screen: ScreenName) => void;
@@ -35,11 +37,54 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren } = useChild();
+  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
+  const { getWorldById, getStoriesForWorld } = useContent();
 
   if (!child) return null;
+
+  // Get the next unfinished story in a world (excludes completed stories)
+  const getNextStoryInWorld = (worldId: string): StoryTemplate | null => {
+    const stories = getStoriesForWorld(worldId);
+    const unfinishedStory = stories.find(
+      (story) => !child.completedStoryArcs.includes(story.id)
+    );
+    return unfinishedStory ?? null;
+  };
+
+  // Check if there's a just-completed story to show a prompt for
+  const completedStoryInfo = child.lastCompletedStoryInfo;
+  const completedWorld = completedStoryInfo ? getWorldById(completedStoryInfo.worldId) : null;
+  const nextStoryInWorld = completedStoryInfo ? getNextStoryInWorld(completedStoryInfo.worldId) : null;
+
+  const handleStartNextStory = () => {
+    if (!nextStoryInWorld || !completedStoryInfo) return;
+    playSound('success');
+
+    const activePet = getPetById(child.activePetId);
+
+    // Update active world and clear the completed story info
+    updateChild({ activeWorldId: completedStoryInfo.worldId });
+
+    // Create new story arc from the story template
+    const newStoryArc = personalizeStory(
+      nextStoryInWorld,
+      child.name,
+      child.activePetId,
+      activePet?.displayName ?? 'Friend'
+    );
+
+    setCurrentStoryArc(newStoryArc);
+    clearLastCompletedStoryInfo();
+    onNavigate('brushing');
+  };
+
+  const handlePickNewStory = () => {
+    playSound('tap');
+    clearLastCompletedStoryInfo();
+    onNavigate('story-world-select');
+  };
 
   const handleNavigate = (screen: ScreenName) => {
     playSound('tap');
@@ -327,8 +372,70 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </motion.div>
       )}
 
-      {/* No story prompt */}
-      {!hasStoryInProgress && (
+      {/* Story completion prompt - shows after finishing a story */}
+      {!hasStoryInProgress && completedStoryInfo && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-gradient-to-br from-accent/10 to-primary/10 rounded-2xl p-5 mb-6"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+              <PartyPopper className="w-5 h-5 text-accent" />
+            </div>
+            <div>
+              <p className="text-text font-bold">Story Complete!</p>
+              <p className="text-text/60 text-sm">
+                You finished "{completedStoryInfo.title}"
+              </p>
+            </div>
+          </div>
+
+          <p className="text-text/70 text-sm mb-4">
+            What would you like to do next?
+          </p>
+
+          <div className="flex flex-col gap-3">
+            {/* Next story in same world button - only if there's another story */}
+            {nextStoryInWorld && (
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleStartNextStory}
+                className="flex items-center gap-3 bg-primary text-white p-4 rounded-xl"
+              >
+                <BookOpen className="w-5 h-5" />
+                <div className="text-left flex-1">
+                  <p className="font-medium">Next Story</p>
+                  <p className="text-sm text-white/70">
+                    {nextStoryInWorld.title} in {completedWorld?.displayName}
+                  </p>
+                </div>
+              </motion.button>
+            )}
+
+            {/* Pick new world/story button */}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handlePickNewStory}
+              className="flex items-center gap-3 bg-white border-2 border-primary/20 text-text p-4 rounded-xl"
+            >
+              <Globe className="w-5 h-5 text-primary" />
+              <div className="text-left flex-1">
+                <p className="font-medium">Pick a New Story</p>
+                <p className="text-sm text-text/60">
+                  Explore other worlds
+                </p>
+              </div>
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* No story prompt - only when no story in progress and no just-completed story */}
+      {!hasStoryInProgress && !completedStoryInfo && (
         <motion.button
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -346,28 +453,32 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       {/* Spacer to push button down */}
       <div className="flex-1" />
 
-      {/* Start Brushing Button */}
-      <motion.button
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        onClick={handleStartBrushing}
-        className="w-full bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg"
-      >
-        {hasStoryInProgress ? 'CONTINUE STORY' : 'START BRUSHING'}
-      </motion.button>
+      {/* Start Brushing Button - hide when showing completion prompt */}
+      {!completedStoryInfo && (
+        <>
+          <motion.button
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={handleStartBrushing}
+            className="w-full bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg"
+          >
+            {hasStoryInProgress ? 'CONTINUE STORY' : 'START BRUSHING'}
+          </motion.button>
 
-      {/* Bottom hint */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="text-center text-text/40 text-sm mt-4"
-      >
-        2 minutes of fun awaits!
-      </motion.p>
+          {/* Bottom hint */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center text-text/40 text-sm mt-4"
+          >
+            2 minutes of fun awaits!
+          </motion.p>
+        </>
+      )}
     </div>
   );
 }

@@ -1,16 +1,123 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { characters, getCharacterById } from '../data/characters';
+import { DEFAULT_TASKS } from '../types';
+import type { TaskConfig } from '../types';
 
 interface SettingsScreenProps {
   onBack: () => void;
 }
 
+// Task Bonus Settings Component
+function TaskBonusSettings({
+  taskConfig,
+  onUpdate,
+}: {
+  taskConfig: TaskConfig;
+  onUpdate: (config: TaskConfig) => void;
+}) {
+  const handleToggleFeature = () => {
+    onUpdate({
+      ...taskConfig,
+      enabled: !taskConfig.enabled,
+    });
+  };
+
+  const handleToggleTask = (taskId: string) => {
+    const updatedTasks = taskConfig.tasks.map((t) =>
+      t.id === taskId ? { ...t, enabled: !t.enabled } : t
+    );
+    onUpdate({
+      ...taskConfig,
+      tasks: updatedTasks,
+    });
+  };
+
+  return (
+    <section className="bg-white rounded-2xl p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-text">Task Bonus</h2>
+          <p className="text-sm text-text/60">
+            Ask questions after brushing to earn bonus spins
+          </p>
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={handleToggleFeature}
+          className={`p-1 rounded-full ${
+            taskConfig.enabled ? 'text-primary' : 'text-gray-400'
+          }`}
+        >
+          {taskConfig.enabled ? (
+            <ToggleRight className="w-10 h-10" />
+          ) : (
+            <ToggleLeft className="w-10 h-10" />
+          )}
+        </motion.button>
+      </div>
+
+      {taskConfig.enabled && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="space-y-3"
+        >
+          <p className="text-sm text-text/70 mb-3">
+            Select which tasks to ask about:
+          </p>
+
+          {taskConfig.tasks.map((task) => (
+            <motion.button
+              key={task.id}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => handleToggleTask(task.id)}
+              className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
+                task.enabled
+                  ? 'border-primary bg-primary/5'
+                  : 'border-gray-200 bg-gray-50'
+              }`}
+            >
+              <span className="text-2xl">{task.emoji}</span>
+              <div className="flex-1 text-left">
+                <p className={`font-medium ${
+                  task.enabled ? 'text-text' : 'text-text/50'
+                }`}>
+                  {task.shortLabel}
+                </p>
+                <p className="text-xs text-text/60">{task.question}</p>
+              </div>
+              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                task.enabled
+                  ? 'border-primary bg-primary'
+                  : 'border-gray-300'
+              }`}>
+                {task.enabled && <Check className="w-4 h-4 text-white" />}
+              </div>
+            </motion.button>
+          ))}
+
+          <p className="text-xs text-text/50 text-center mt-4">
+            Each completed task earns 1 bonus spin on the wheel!
+          </p>
+        </motion.div>
+      )}
+
+      {!taskConfig.enabled && (
+        <p className="text-sm text-text/50 italic">
+          When disabled, the classic mystery chest appears after brushing.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { child, updateCharacter, resetChild, resetAllData, allChildren } = useChild();
+  const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig } = useChild();
   const { playSound } = useAudio();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -160,6 +267,15 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             </div>
           </div>
         </section>
+
+        {/* Task Bonus Settings */}
+        <TaskBonusSettings
+          taskConfig={child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS }}
+          onUpdate={(config) => {
+            playSound('tap');
+            updateTaskConfig(config);
+          }}
+        />
 
         {/* Danger Zone */}
         <section className="bg-white rounded-2xl p-6 shadow-sm">

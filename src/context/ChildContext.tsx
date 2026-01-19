@@ -1,5 +1,6 @@
 import { createContext, useContext, useCallback, useMemo, useState, useEffect, type ReactNode } from 'react';
-import type { Child, StoryArc, ChestReward, EquippedAccessories } from '../types';
+import type { Child, StoryArc, ChestReward, EquippedAccessories, TaskConfig, CompletedStoryInfo } from '../types';
+import { DEFAULT_TASKS } from '../types';
 import { usePets } from './PetsContext';
 import { getBrushById } from '../data/brushes';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
@@ -35,6 +36,7 @@ interface ChildContextType {
   unlockBrush: (brushId: string) => Promise<boolean>;
   unlockWorld: (worldId: string, unlockCost: number) => Promise<boolean>;
   updateCharacter: (characterId: string) => Promise<void>;
+  clearLastCompletedStoryInfo: () => Promise<void>;
   resetChild: () => Promise<void>;
   resetAllData: () => Promise<void>;
 
@@ -42,6 +44,9 @@ interface ChildContextType {
   claimChestReward: (reward: ChestReward) => Promise<void>;
   equipAccessory: (petId: string, accessoryId: string) => Promise<void>;
   unequipAccessory: (petId: string, accessoryId: string) => Promise<void>;
+
+  // Task bonus system
+  updateTaskConfig: (taskConfig: TaskConfig) => Promise<void>;
 
   // Refresh data from server
   refreshChildren: () => Promise<void>;
@@ -265,6 +270,10 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         unlockedPets: starterPetIds,
         unlockedBrushes: ['star-swirl'],
         unlockedWorlds: ['magical-forest', 'space-station'],
+        taskConfig: {
+          enabled: true,
+          tasks: DEFAULT_TASKS,
+        },
       };
 
       const newChild = await createChildInAPI(childData);
@@ -379,11 +388,22 @@ export function ChildProvider({ children }: { children: ReactNode }) {
       isComplete,
     };
 
+    // Store completed story info for prompting next action on home screen
+    const completedStoryInfo: CompletedStoryInfo | null = isComplete
+      ? {
+          storyTemplateId: child.currentStoryArc.storyTemplateId,
+          worldId: child.currentStoryArc.worldId,
+          title: child.currentStoryArc.title,
+          completedAt: new Date().toISOString(),
+        }
+      : null;
+
     await updateChild({
       currentStoryArc: isComplete ? null : updatedStoryArc,
       completedStoryArcs: isComplete
         ? [...child.completedStoryArcs, child.currentStoryArc.id]
         : child.completedStoryArcs,
+      lastCompletedStoryInfo: isComplete ? completedStoryInfo : child.lastCompletedStoryInfo,
     });
   }, [child, updateChild]);
 
@@ -460,6 +480,10 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     await updateChild({ characterId });
   }, [updateChild]);
 
+  const clearLastCompletedStoryInfo = useCallback(async () => {
+    await updateChild({ lastCompletedStoryInfo: null });
+  }, [updateChild]);
+
   const resetChild = useCallback(async () => {
     if (!child) return;
     await deleteChild(child.id);
@@ -525,6 +549,11 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     await updateChild({ equippedAccessories: newEquipped });
   }, [child, updateChild]);
 
+  // Update task configuration (for parents)
+  const updateTaskConfig = useCallback(async (taskConfig: TaskConfig) => {
+    await updateChild({ taskConfig });
+  }, [updateChild]);
+
   return (
     <ChildContext.Provider
       value={{
@@ -547,11 +576,13 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         unlockBrush,
         unlockWorld,
         updateCharacter,
+        clearLastCompletedStoryInfo,
         resetChild,
         resetAllData,
         claimChestReward,
         equipAccessory,
         unequipAccessory,
+        updateTaskConfig,
         refreshChildren,
       }}
     >

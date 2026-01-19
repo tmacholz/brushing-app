@@ -516,7 +516,8 @@ function AppContent() {
   }
 
   const handleBrushingComplete = (_pointsEarned: number) => {
-    // The completion screen is handled within BrushingScreen
+    // Navigate back to home after completion
+    setCurrentScreen('home');
   };
 
   const handleBrushingExit = () => {
