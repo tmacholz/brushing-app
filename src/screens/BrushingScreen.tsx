@@ -481,10 +481,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       }
       console.log('[BrushingScreen] Creating audio element for:', musicUrl);
       const audio = new Audio(musicUrl);
-      // Set playsInline for iOS compatibility
-      audio.playsInline = true;
-      audio.setAttribute('playsinline', '');
-      audio.setAttribute('webkit-playsinline', '');
       audio.loop = true;
       audio.volume = 0.15; // Low volume so narration is clear
       backgroundMusicRef.current = audio;

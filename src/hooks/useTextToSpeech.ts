@@ -64,10 +64,6 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
       }
 
       const audio = new Audio(audioUrl);
-      // Set playsInline for iOS compatibility
-      audio.playsInline = true;
-      audio.setAttribute('playsinline', '');
-      audio.setAttribute('webkit-playsinline', '');
       audioRef.current = audio;
 
       audio.onplay = () => {

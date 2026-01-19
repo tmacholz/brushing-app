@@ -76,7 +76,6 @@ export async function unlockAudio(): Promise<void> {
 
     const audio = new Audio(silentDataUri);
     audio.volume = 0.01; // Very quiet
-    audio.playsInline = true;
     await audio.play();
     audio.pause();
   } catch {
