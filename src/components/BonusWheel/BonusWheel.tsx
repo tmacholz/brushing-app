@@ -1,7 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ChestReward } from '../../types';
-import { generateChestReward, getRewardDisplayInfo } from '../../services/rewardGenerator';
+import {
+  generateSpecificReward,
+  getRewardDisplayInfo,
+  getRewardAvailability,
+  type RewardAvailability,
+} from '../../services/rewardGenerator';
 import { useAudio } from '../../context/AudioContext';
 
 interface BonusWheelProps {
@@ -13,21 +18,87 @@ interface BonusWheelProps {
   onComplete: () => void;
 }
 
-// Wheel segments configuration
-const WHEEL_SEGMENTS = [
-  { label: '5 pts', emoji: '⭐', color: '#fbbf24' },
-  { label: 'Sticker', emoji: '🎨', color: '#f472b6' },
-  { label: '10 pts', emoji: '⭐', color: '#fb923c' },
-  { label: 'Rare!', emoji: '✨', color: '#a78bfa' },
-  { label: '15 pts', emoji: '⭐', color: '#fcd34d' },
-  { label: 'Sticker', emoji: '🎨', color: '#f9a8d4' },
-  { label: '25 pts', emoji: '🌟', color: '#fb7185' },
-  { label: 'Bonus!', emoji: '🎁', color: '#22d3ee' },
+// Segment type definition
+interface WheelSegment {
+  id: string;
+  label: string;
+  emoji: string;
+  color: string;
+  rewardType: 'points' | 'sticker' | 'accessory';
+  pointAmount?: number;
+}
+
+// Base segments that are always available (points)
+const POINT_SEGMENTS: WheelSegment[] = [
+  { id: 'pts-5', label: '5 pts', emoji: '⭐', color: '#fbbf24', rewardType: 'points', pointAmount: 5 },
+  { id: 'pts-10', label: '10 pts', emoji: '⭐', color: '#fb923c', rewardType: 'points', pointAmount: 10 },
+  { id: 'pts-15', label: '15 pts', emoji: '⭐', color: '#fcd34d', rewardType: 'points', pointAmount: 15 },
+  { id: 'pts-25', label: '25 pts', emoji: '🌟', color: '#fb7185', rewardType: 'points', pointAmount: 25 },
 ];
 
-const SEGMENT_ANGLE = 360 / WHEEL_SEGMENTS.length;
+// Sticker segments (only shown if stickers are available)
+const STICKER_SEGMENTS: WheelSegment[] = [
+  { id: 'sticker-1', label: 'Sticker', emoji: '🎨', color: '#f472b6', rewardType: 'sticker' },
+  { id: 'sticker-2', label: 'Sticker', emoji: '🎨', color: '#f9a8d4', rewardType: 'sticker' },
+];
 
-type WheelPhase = 'ready' | 'spinning' | 'revealed' | 'complete';
+// Accessory segment (only shown if accessories are available)
+const ACCESSORY_SEGMENT: WheelSegment = {
+  id: 'accessory', label: 'Rare!', emoji: '✨', color: '#a78bfa', rewardType: 'accessory',
+};
+
+// Bonus segment (extra points, always available)
+const BONUS_SEGMENT: WheelSegment = {
+  id: 'bonus', label: 'Bonus!', emoji: '🎁', color: '#22d3ee', rewardType: 'points', pointAmount: 20,
+};
+
+/**
+ * Build wheel segments based on what rewards are available
+ */
+function buildWheelSegments(availability: RewardAvailability): WheelSegment[] {
+  const segments: WheelSegment[] = [];
+
+  // Always include point segments
+  segments.push(POINT_SEGMENTS[0]); // 5 pts
+
+  // Add sticker if available
+  if (availability.stickersAvailable) {
+    segments.push(STICKER_SEGMENTS[0]);
+  }
+
+  segments.push(POINT_SEGMENTS[1]); // 10 pts
+
+  // Add accessory or bonus depending on availability
+  if (availability.accessoriesAvailable) {
+    segments.push(ACCESSORY_SEGMENT);
+  } else {
+    segments.push(BONUS_SEGMENT);
+  }
+
+  segments.push(POINT_SEGMENTS[2]); // 15 pts
+
+  // Add second sticker if available
+  if (availability.stickersAvailable) {
+    segments.push(STICKER_SEGMENTS[1]);
+  }
+
+  segments.push(POINT_SEGMENTS[3]); // 25 pts
+
+  // Add bonus segment if we haven't already (when accessories were available)
+  if (availability.accessoriesAvailable) {
+    segments.push(BONUS_SEGMENT);
+  } else if (!availability.stickersAvailable) {
+    // If no stickers and no accessories, add more point variety
+    segments.push({ id: 'pts-10b', label: '10 pts', emoji: '⭐', color: '#fdba74', rewardType: 'points', pointAmount: 10 });
+  } else {
+    // Add extra bonus for variety
+    segments.push({ id: 'bonus-2', label: 'Bonus!', emoji: '🎁', color: '#67e8f9', rewardType: 'points', pointAmount: 15 });
+  }
+
+  return segments;
+}
+
+type WheelPhase = 'loading' | 'ready' | 'spinning' | 'revealed' | 'complete';
 
 export function BonusWheel({
   tokensAvailable,
@@ -38,7 +109,7 @@ export function BonusWheel({
   onComplete,
 }: BonusWheelProps) {
   const { playSound } = useAudio();
-  const [phase, setPhase] = useState<WheelPhase>('ready');
+  const [phase, setPhase] = useState<WheelPhase>('loading');
   const [tokensRemaining, setTokensRemaining] = useState(tokensAvailable);
   const [currentReward, setCurrentReward] = useState<ChestReward | null>(null);
   const [allRewards, setAllRewards] = useState<ChestReward[]>([]);
@@ -50,8 +121,30 @@ export function BonusWheel({
   const [localCollectedStickers, setLocalCollectedStickers] = useState(collectedStickers);
   const [localCollectedAccessories, setLocalCollectedAccessories] = useState(collectedAccessories);
 
+  // Track reward availability for dynamic wheel segments
+  const [availability, setAvailability] = useState<RewardAvailability>({
+    stickersAvailable: true,
+    stickerCount: 0,
+    accessoriesAvailable: false,
+    accessoryCount: 0,
+  });
+
+  // Build wheel segments based on availability
+  const wheelSegments = useMemo(() => buildWheelSegments(availability), [availability]);
+  const segmentAngle = 360 / wheelSegments.length;
+
+  // Load availability on mount and when collected items change
+  useEffect(() => {
+    async function loadAvailability() {
+      const avail = await getRewardAvailability(worldId, localCollectedStickers, localCollectedAccessories);
+      setAvailability(avail);
+      setPhase('ready');
+    }
+    loadAvailability();
+  }, [worldId, localCollectedStickers, localCollectedAccessories]);
+
   const doSpin = useCallback(async () => {
-    if (tokensRemaining <= 0 || isAnimating) return;
+    if (tokensRemaining <= 0 || isAnimating || phase === 'loading') return;
 
     const isSubsequentSpin = spinCountRef.current > 0;
 
@@ -66,18 +159,26 @@ export function BonusWheel({
         await new Promise(resolve => setTimeout(resolve, 500));
       }
 
-      // Generate the reward first so we know what we're landing on
-      const reward = await generateChestReward(
+      // 1. First, randomly select which segment to land on
+      const segmentIndex = Math.floor(Math.random() * wheelSegments.length);
+      const landingSegment = wheelSegments[segmentIndex];
+
+      // 2. Generate a reward matching the segment type
+      const reward = await generateSpecificReward(
+        landingSegment.rewardType,
+        landingSegment.pointAmount,
         worldId,
         localCollectedStickers,
         localCollectedAccessories
       );
 
-      // Calculate spin: 4-6 full rotations + random final position
-      // Always spin the same amount (from 0 to target) for consistent speed
+      // 3. Calculate spin: 4-6 full rotations + land on the selected segment
+      // The wheel rotates clockwise, pointer is at top
+      // Segment 0 is at 12 o'clock, so we need to offset based on segment index
       const spins = 4 + Math.floor(Math.random() * 3);
-      const segmentIndex = Math.floor(Math.random() * WHEEL_SEGMENTS.length);
-      const newRotation = (spins * 360) + (segmentIndex * SEGMENT_ANGLE) + (SEGMENT_ANGLE / 2);
+      // Add slight randomness within the segment for visual variety
+      const segmentOffset = (Math.random() * 0.6 + 0.2) * segmentAngle; // 20-80% into segment
+      const newRotation = (spins * 360) + (segmentIndex * segmentAngle) + segmentOffset;
 
       setRotation(newRotation);
 
@@ -110,10 +211,10 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, worldId, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed]);
+  }, [tokensRemaining, isAnimating, phase, worldId, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
 
   const handleSpin = () => {
-    if (phase !== 'ready') return;
+    if (phase !== 'ready' || isAnimating) return;
     doSpin();
   };
 
@@ -150,12 +251,12 @@ export function BonusWheel({
     r => r.type !== 'points' && r.isNew
   ).length;
 
-  // Render the wheel SVG
+  // Render the wheel SVG with dynamic segments
   const renderWheel = () => (
     <svg viewBox="0 0 100 100" className="w-full h-full">
-      {WHEEL_SEGMENTS.map((segment, index) => {
-        const startAngle = index * SEGMENT_ANGLE - 90;
-        const endAngle = startAngle + SEGMENT_ANGLE;
+      {wheelSegments.map((segment, index) => {
+        const startAngle = index * segmentAngle - 90;
+        const endAngle = startAngle + segmentAngle;
         const startRad = (startAngle * Math.PI) / 180;
         const endRad = (endAngle * Math.PI) / 180;
 
@@ -168,10 +269,13 @@ export function BonusWheel({
         const textX = 50 + 30 * Math.cos(midAngle - Math.PI / 2);
         const textY = 50 + 30 * Math.sin(midAngle - Math.PI / 2);
 
+        // For larger arcs, use the large arc flag
+        const largeArcFlag = segmentAngle > 180 ? 1 : 0;
+
         return (
-          <g key={index}>
+          <g key={segment.id}>
             <path
-              d={`M 50 50 L ${x1} ${y1} A 45 45 0 0 1 ${x2} ${y2} Z`}
+              d={`M 50 50 L ${x1} ${y1} A 45 45 0 ${largeArcFlag} 1 ${x2} ${y2} Z`}
               fill={segment.color}
               stroke="white"
               strokeWidth="0.5"
@@ -232,6 +336,26 @@ export function BonusWheel({
       </div>
 
       <AnimatePresence mode="wait">
+        {/* Loading state */}
+        {phase === 'loading' && (
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-col items-center"
+          >
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              className="text-6xl mb-4"
+            >
+              🎰
+            </motion.div>
+            <p className="text-white text-xl">Loading prizes...</p>
+          </motion.div>
+        )}
+
         {/* Ready / Spinning - Show Wheel */}
         {(phase === 'ready' || phase === 'spinning') && (
           <motion.div

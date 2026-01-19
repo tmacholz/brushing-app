@@ -13,6 +13,7 @@ import { ProfileSelectScreen } from './screens/ProfileSelectScreen';
 import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
 import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { CollectionScreen } from './screens/CollectionScreen';
 import { BottomNav } from './components/ui/BottomNav';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
@@ -484,7 +485,7 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
 }
 
 // Screens that show the bottom navigation
-const SCREENS_WITH_NAV: ScreenName[] = ['home', 'pet-select', 'shop', 'story-world-select', 'settings'];
+const SCREENS_WITH_NAV: ScreenName[] = ['home', 'pet-select', 'collection', 'story-world-select', 'settings'];
 
 function AppContent() {
   const { child, isNewUser, isLoading } = useChild();
@@ -576,17 +577,14 @@ function AppContent() {
           </motion.div>
         )}
 
-        {currentScreen === 'shop' && (
+        {currentScreen === 'collection' && (
           <motion.div
-            key="shop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="min-h-screen bg-background p-6 pb-24 flex flex-col items-center justify-center"
+            key="collection"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
           >
-            <p className="text-2xl mb-2">🛍️</p>
-            <p className="text-xl font-medium text-text">Shop</p>
-            <p className="text-text/60">Coming soon!</p>
+            <CollectionScreen onBack={() => setCurrentScreen('home')} />
           </motion.div>
         )}
 
