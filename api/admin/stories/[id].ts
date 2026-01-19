@@ -466,6 +466,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               `;
             }
             console.log('[StoryBible] Storyboard generated for', storyboard.length, 'segments');
+
+            // Auto-tag references based on storyboard
+            const savedReferences = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${id}`;
+            if (savedReferences.length > 0) {
+              console.log('[StoryBible] Auto-tagging references based on storyboard...');
+              for (const entry of storyboard) {
+                const matchingRefIds: string[] = [];
+
+                for (const charName of entry.characters || []) {
+                  const matchingRef = savedReferences.find(r =>
+                    r.type === 'character' &&
+                    (r.name.toLowerCase().includes(charName.toLowerCase()) ||
+                     charName.toLowerCase().includes(r.name.toLowerCase()))
+                  );
+                  if (matchingRef) matchingRefIds.push(matchingRef.id);
+                }
+
+                if (entry.location) {
+                  const matchingRef = savedReferences.find(r =>
+                    r.type === 'location' &&
+                    (r.name.toLowerCase().includes(entry.location!.toLowerCase()) ||
+                     entry.location!.toLowerCase().includes(r.name.toLowerCase()))
+                  );
+                  if (matchingRef) matchingRefIds.push(matchingRef.id);
+                }
+
+                if (matchingRefIds.length > 0) {
+                  await sql`
+                    UPDATE segments SET reference_ids = ${matchingRefIds}
+                    WHERE id = ${entry.segmentId}
+                  `;
+                }
+              }
+              console.log('[StoryBible] Reference tags applied');
+            }
           } catch (storyboardError) {
             console.error('[StoryBible] Storyboard generation failed (non-fatal):', storyboardError);
           }

@@ -250,6 +250,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             `;
           }
           console.log('[Story] Storyboard data saved to segments');
+
+          // Step 6: Auto-tag references based on storyboard characters and locations
+          const savedReferences = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${story.id}`;
+          if (savedReferences.length > 0) {
+            console.log('[Story] Auto-tagging references based on storyboard...');
+            for (const entry of storyboard) {
+              const matchingRefIds: string[] = [];
+
+              // Match characters from storyboard to character references
+              for (const charName of entry.characters || []) {
+                const matchingRef = savedReferences.find(r =>
+                  r.type === 'character' &&
+                  (r.name.toLowerCase().includes(charName.toLowerCase()) ||
+                   charName.toLowerCase().includes(r.name.toLowerCase()))
+                );
+                if (matchingRef) matchingRefIds.push(matchingRef.id);
+              }
+
+              // Match location from storyboard to location references
+              if (entry.location) {
+                const matchingRef = savedReferences.find(r =>
+                  r.type === 'location' &&
+                  (r.name.toLowerCase().includes(entry.location!.toLowerCase()) ||
+                   entry.location!.toLowerCase().includes(r.name.toLowerCase()))
+                );
+                if (matchingRef) matchingRefIds.push(matchingRef.id);
+              }
+
+              if (matchingRefIds.length > 0) {
+                await sql`
+                  UPDATE segments SET reference_ids = ${matchingRefIds}
+                  WHERE id = ${entry.segmentId}
+                `;
+              }
+            }
+            console.log('[Story] Reference tags applied to segments');
+          }
         } catch (storyboardError) {
           // Don't fail the whole story if storyboard generation fails
           console.error('[Story] Storyboard generation failed (non-fatal):', storyboardError);
