@@ -19,6 +19,7 @@ import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from 
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
+import { unlockAudio, isAudioUnlocked } from '../utils/iosAudioUnlock';
 import type { CharacterPosition, ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
@@ -479,9 +480,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         backgroundMusicRef.current.pause();
       }
       console.log('[BrushingScreen] Creating audio element for:', musicUrl);
-      backgroundMusicRef.current = new Audio(musicUrl);
-      backgroundMusicRef.current.loop = true;
-      backgroundMusicRef.current.volume = 0.15; // Low volume so narration is clear
+      const audio = new Audio(musicUrl);
+      // Set playsInline for iOS compatibility
+      audio.playsInline = true;
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
+      audio.loop = true;
+      audio.volume = 0.15; // Low volume so narration is clear
+      backgroundMusicRef.current = audio;
     }
 
     return () => {
@@ -497,7 +503,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     if (!backgroundMusicRef.current) return;
 
     if (isRunning && !showCountdown) {
-      backgroundMusicRef.current.play().catch(console.error);
+      // Ensure iOS audio is unlocked before playing
+      const playMusic = async () => {
+        if (!isAudioUnlocked()) {
+          await unlockAudio();
+        }
+        backgroundMusicRef.current?.play().catch(console.error);
+      };
+      playMusic();
     } else {
       backgroundMusicRef.current.pause();
     }

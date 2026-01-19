@@ -7,6 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import {
+  getSharedAudioContext,
+  unlockAudio,
+  isAudioUnlocked,
+} from '../utils/iosAudioUnlock';
 
 type SoundName =
   | 'tap'
@@ -24,6 +29,8 @@ interface AudioContextType {
   setMuted: (muted: boolean) => void;
   isMuted: boolean;
   isReady: boolean;
+  /** Force unlock audio (useful if user reports no sound) */
+  forceUnlock: () => Promise<void>;
 }
 
 const AudioContext = createContext<AudioContextType | undefined>(undefined);
@@ -50,11 +57,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
-    // Initialize audio context on first user interaction
-    const initAudio = () => {
+    // Initialize audio context using shared context (for iOS unlock compatibility)
+    const initAudio = async () => {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+        audioContextRef.current = getSharedAudioContext();
         setIsReady(true);
       }
     };
@@ -66,18 +72,23 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       // Will init on first interaction
     }
 
-    const handleInteraction = () => {
-      initAudio();
+    const handleInteraction = async () => {
+      await initAudio();
+      // Unlock audio for iOS silent mode
+      await unlockAudio();
       if (audioContextRef.current?.state === 'suspended') {
         audioContextRef.current.resume();
       }
     };
 
-    document.addEventListener('touchstart', handleInteraction, { once: true });
+    // Use touchstart, touchend, AND click for better iOS coverage
+    document.addEventListener('touchstart', handleInteraction, { once: true, passive: true });
+    document.addEventListener('touchend', handleInteraction, { once: true, passive: true });
     document.addEventListener('click', handleInteraction, { once: true });
 
     return () => {
       document.removeEventListener('touchstart', handleInteraction);
+      document.removeEventListener('touchend', handleInteraction);
       document.removeEventListener('click', handleInteraction);
     };
   }, []);
@@ -90,6 +101,11 @@ export function AudioProvider({ children }: { children: ReactNode }) {
       if (!config) return;
 
       const ctx = audioContextRef.current;
+
+      // Ensure audio is unlocked for iOS silent mode
+      if (!isAudioUnlocked()) {
+        unlockAudio();
+      }
 
       // Resume context if suspended
       if (ctx.state === 'suspended') {
@@ -125,8 +141,15 @@ export function AudioProvider({ children }: { children: ReactNode }) {
     setIsMuted(muted);
   }, []);
 
+  const forceUnlock = useCallback(async () => {
+    await unlockAudio();
+    if (audioContextRef.current?.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+  }, []);
+
   return (
-    <AudioContext.Provider value={{ playSound, setMuted, isMuted, isReady }}>
+    <AudioContext.Provider value={{ playSound, setMuted, isMuted, isReady, forceUnlock }}>
       {children}
     </AudioContext.Provider>
   );

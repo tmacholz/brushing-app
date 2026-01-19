@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { NarrationSequenceItem } from '../types';
+import { getSharedAudioContext, unlockAudio, isAudioUnlocked } from '../utils/iosAudioUnlock';
 
 interface AudioSplicingOptions {
   childNameAudioUrl: string | null;
@@ -76,9 +77,8 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           // Already stopped
         }
       });
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      // Don't close the shared audio context - it's used by other components
+      // and needs to stay open for iOS unlock to work across the app
     };
   }, []);
 
@@ -119,11 +119,16 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
       setProgress(0);
 
       try {
-        // Create or reuse audio context
+        // Use shared audio context for iOS unlock compatibility
         if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
-          audioContextRef.current = new AudioContext();
+          audioContextRef.current = getSharedAudioContext();
         }
         const ctx = audioContextRef.current;
+
+        // Ensure audio is unlocked for iOS silent mode
+        if (!isAudioUnlocked()) {
+          await unlockAudio();
+        }
 
         // Resume context if suspended (browser autoplay policy)
         if (ctx.state === 'suspended') {

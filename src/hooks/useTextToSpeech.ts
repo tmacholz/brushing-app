@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateSpeech, clearAudioCache, type TTSOptions } from '../services/elevenLabs';
+import { unlockAudio, isAudioUnlocked } from '../utils/iosAudioUnlock';
 
 interface UseTextToSpeechReturn {
   speak: (text: string) => Promise<void>;
@@ -50,6 +51,11 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
     setIsPaused(false);
 
     try {
+      // Ensure audio is unlocked for iOS silent mode
+      if (!isAudioUnlocked()) {
+        await unlockAudio();
+      }
+
       const audioUrl = await generateSpeech(text, options);
 
       // Check if we've been stopped while loading
@@ -58,6 +64,10 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
       }
 
       const audio = new Audio(audioUrl);
+      // Set playsInline for iOS compatibility
+      audio.playsInline = true;
+      audio.setAttribute('playsinline', '');
+      audio.setAttribute('webkit-playsinline', '');
       audioRef.current = audio;
 
       audio.onplay = () => {
