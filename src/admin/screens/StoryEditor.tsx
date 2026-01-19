@@ -290,7 +290,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
-  const hasPrompt = !!segment.image_prompt;
+  const hasStoryboard = !!(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus);
+  const hasPromptOverride = !!segment.image_prompt;
+  const canGenerate = hasStoryboard || hasPromptOverride;
   const imageHistory = segment.image_history || [];
   const hasHistory = imageHistory.length > 1;
 
@@ -313,9 +315,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   };
 
   const handleGenerateImage = async () => {
-    // Can generate if we have storyboard data OR an image prompt override
-    const hasStoryboard = segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus;
-    if (!hasStoryboard && !segment.image_prompt) {
+    if (!canGenerate) {
       alert('No storyboard data or image prompt for this segment. Generate a storyboard first, or add a manual image prompt.');
       return;
     }
@@ -438,7 +438,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
     }
   };
 
-  if (!hasPrompt) {
+  if (!canGenerate) {
     return null;
   }
 
@@ -2699,22 +2699,26 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               </div>
                             )}
 
-                            {/* Editable image prompt */}
-                            {segment.image_prompt && (
-                              <details className="mt-2">
-                                <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
-                                  Image prompt (click to edit)
-                                </summary>
-                                <div className="mt-1 pl-3 border-l border-slate-600">
-                                  <EditableField
-                                    value={segment.image_prompt}
-                                    onSave={(value) => handleSaveSegmentField(segment.id, 'imagePrompt', value)}
-                                    multiline
-                                    className="text-xs text-slate-400"
-                                  />
-                                </div>
-                              </details>
-                            )}
+                            {/* Image prompt override (optional) */}
+                            <details className="mt-2">
+                              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 flex items-center gap-1">
+                                <Image className="w-3 h-3" />
+                                {segment.image_prompt ? 'Image prompt override (active)' : 'Add image prompt override'}
+                              </summary>
+                              <div className="mt-1 pl-3 border-l border-slate-600">
+                                <p className="text-xs text-slate-500 mb-1">
+                                  {segment.image_prompt
+                                    ? 'This overrides storyboard-based generation:'
+                                    : 'Leave empty to use storyboard data, or add a custom prompt:'}
+                                </p>
+                                <EditableField
+                                  value={segment.image_prompt || ''}
+                                  onSave={(value) => handleSaveSegmentField(segment.id, 'imagePrompt', value.trim() || '')}
+                                  multiline
+                                  className={`text-xs ${segment.image_prompt ? 'text-amber-400' : 'text-slate-400'}`}
+                                />
+                              </div>
+                            </details>
 
                             {/* Storyboard Info */}
                             {(segment.storyboard_shot_type || segment.storyboard_location) && (

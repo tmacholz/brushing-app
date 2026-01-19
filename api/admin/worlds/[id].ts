@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, type ExistingStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, generateStoryboard, type ExistingStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -178,8 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           for (const segment of chapter.segments) {
             await sql`
-              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, image_prompt, child_pose, pet_pose, child_position, pet_position)
-              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.imagePrompt}, ${segment.childPose}, ${segment.petPose}, ${segment.childPosition}, ${segment.petPosition})
+              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, child_pose, pet_pose, child_position, pet_position)
+              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.childPose}, ${segment.petPose}, ${segment.childPosition}, ${segment.petPosition})
             `;
           }
         }
@@ -205,6 +205,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (refError) {
           // Don't fail the whole story if reference extraction fails
           console.error('[Story] Reference extraction failed (non-fatal):', refError);
+        }
+
+        // Step 5: Generate storyboard for visual planning
+        console.log('[Story] Generating storyboard for:', pitch.title);
+        try {
+          // Fetch chapters with segments (including segment IDs)
+          const savedChapters = await sql`SELECT * FROM chapters WHERE story_id = ${story.id} ORDER BY chapter_number`;
+          const chaptersForStoryboard = await Promise.all(
+            savedChapters.map(async (ch) => {
+              const segs = await sql`SELECT id, segment_order, text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+              return {
+                chapterNumber: ch.chapter_number,
+                title: ch.title,
+                segments: segs.map(s => ({
+                  id: s.id,
+                  segmentOrder: s.segment_order,
+                  text: s.text,
+                  imagePrompt: null, // No longer used
+                })),
+              };
+            })
+          );
+
+          const storyboard = await generateStoryboard({
+            storyTitle: pitch.title,
+            storyDescription: pitch.description,
+            storyBible,
+            chapters: chaptersForStoryboard,
+          });
+          console.log('[Story] Generated storyboard with', storyboard.length, 'segment entries');
+
+          // Update segments with storyboard data
+          for (const entry of storyboard) {
+            await sql`
+              UPDATE segments SET
+                storyboard_location = ${entry.location},
+                storyboard_characters = ${entry.characters},
+                storyboard_shot_type = ${entry.shotType},
+                storyboard_camera_angle = ${entry.cameraAngle},
+                storyboard_focus = ${entry.visualFocus},
+                storyboard_continuity = ${entry.continuityNote}
+              WHERE id = ${entry.segmentId}
+            `;
+          }
+          console.log('[Story] Storyboard data saved to segments');
+        } catch (storyboardError) {
+          // Don't fail the whole story if storyboard generation fails
+          console.error('[Story] Storyboard generation failed (non-fatal):', storyboardError);
         }
 
         // Generate background music asynchronously (fire and forget - don't block response)
