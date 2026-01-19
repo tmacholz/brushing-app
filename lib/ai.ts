@@ -83,11 +83,68 @@ async function callGemini(prompt: string, maxRetries: number = 5): Promise<strin
 }
 
 function extractJson<T>(text: string): T {
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-  if (!jsonMatch) {
+  // First try to extract from code block
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim()) as T;
+    } catch {
+      // Fall through to other methods
+    }
+  }
+
+  // Try to find balanced JSON object or array
+  const startChar = text.indexOf('{') !== -1 ? '{' : '[';
+  const endChar = startChar === '{' ? '}' : ']';
+  const startIndex = text.indexOf(startChar);
+
+  if (startIndex === -1) {
     throw new Error('No JSON found in response');
   }
-  return JSON.parse(jsonMatch[1].trim()) as T;
+
+  // Find the matching closing brace/bracket by counting
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let endIndex = -1;
+
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === startChar || char === '{' || char === '[') {
+      depth++;
+    } else if (char === endChar || char === '}' || char === ']') {
+      depth--;
+      if (depth === 0) {
+        endIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (endIndex === -1) {
+    throw new Error('No valid JSON found - unbalanced braces');
+  }
+
+  const jsonStr = text.slice(startIndex, endIndex + 1);
+  return JSON.parse(jsonStr) as T;
 }
 
 export interface GeneratedWorld {
