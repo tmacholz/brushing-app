@@ -358,7 +358,6 @@ export interface GeneratedChapter {
     durationSeconds: number;
     brushingZone: string | null;
     brushingPrompt: string | null;
-    imagePrompt: string;
     // Character overlay system fields
     childPose: string | null;
     petPose: string | null;
@@ -430,8 +429,7 @@ ${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : 
 - Makes the reader wonder about the outcome of the current scene`}
 
 IMPORTANT - CHARACTER OVERLAY SYSTEM:
-For each segment, provide:
-- "imagePrompt": A BACKGROUND-ONLY scene description. Do NOT include [CHILD] or [PET] in the image prompt. Other NPCs/recurring characters CAN appear - use their visual descriptions from the Story Bible. Include the color palette and lighting style from the bible. Focus on environment, setting, atmosphere.
+For each segment, provide character poses and positions (images will be generated separately via storyboard):
 - "childPose": The child's expression/pose. Options: "happy", "excited", "surprised", "worried", "walking", or null if child not in scene.
 - "petPose": The pet's expression/pose. Options: "happy", "excited", "alert", "worried", "following", or null if pet not in scene.
 - "childPosition": Where the child appears. Options: "left", "center", "right", or "off-screen".
@@ -440,7 +438,7 @@ For each segment, provide:
 Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
 
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description with Story Bible visual style", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{
@@ -450,7 +448,6 @@ Respond with ONLY JSON:
       segments: {
         segmentOrder: number;
         text: string;
-        imagePrompt: string;
         childPose?: string | null;
         petPose?: string | null;
         childPosition?: string;
@@ -512,13 +509,9 @@ export async function extractStoryReferences(
   chapters: GeneratedChapter[],
   storyBible?: StoryBible
 ): Promise<ExtractedReference[]> {
-  // Compile all story text and image prompts for analysis
+  // Compile all story text for analysis
   const allSegmentTexts = chapters.flatMap(ch =>
     ch.segments.map(s => s.text)
-  ).join('\n');
-
-  const allImagePrompts = chapters.flatMap(ch =>
-    ch.segments.map(s => s.imagePrompt)
   ).join('\n');
 
   const allCliffhangers = chapters
@@ -542,29 +535,24 @@ ${bibleContext}
 STORY TEXT:
 ${allSegmentTexts}
 
-IMAGE PROMPTS ALREADY IN THE STORY:
-${allImagePrompts}
-
 CLIFFHANGERS:
 ${allCliffhangers}
 
 Extract the KEY VISUAL ELEMENTS that need to look consistent across different scenes.
-
-IMPORTANT: Pay special attention to the IMAGE PROMPTS above - these describe exactly what will appear in each illustration. Any characters, creatures, objects, or locations mentioned in the image prompts are HIGH PRIORITY for reference sheets since they will be directly illustrated.
 
 DO NOT INCLUDE:
 - [CHILD] or [PET] - these are the main characters handled separately
 - Generic background elements (sky, grass, trees unless they're special)
 - Single-use throwaway objects that only appear once
 
-DO INCLUDE (up to 8 total, prioritize by frequency in image prompts):
-1. CHARACTERS: NPCs, creatures, allies, or antagonists mentioned in image prompts (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
-2. OBJECTS: Important items that appear in multiple image prompts (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
-3. LOCATIONS: Specific places described in image prompts (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
+DO INCLUDE (up to 8 total, prioritize by frequency in the story):
+1. CHARACTERS: NPCs, creatures, allies, or antagonists that appear multiple times (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
+2. OBJECTS: Important items that appear in multiple scenes (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
+3. LOCATIONS: Specific places that are revisited (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
 
 For CHARACTERS, provide descriptions suitable for generating a CHARACTER REFERENCE SHEET (showing the character from multiple angles).
 
-Respond with ONLY a JSON array (max 8 items, sorted by frequency in image prompts):
+Respond with ONLY a JSON array (max 8 items, sorted by importance to the story):
 [
   {
     "type": "character",
