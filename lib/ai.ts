@@ -753,9 +753,12 @@ ${locationList}
 AVAILABLE NPCs (use these exact names when they appear):
 ${characterList}
 
-MAIN CHARACTERS:
-- [CHILD]: The player's child (always available)
-- [PET]: The magical pet companion (always available)
+IMPORTANT - CHARACTER OVERLAY SYSTEM:
+The [CHILD] and [PET] are rendered as SEPARATE sprite overlays on top of the background image.
+They should NEVER be included in the storyboard planning because they are composited separately.
+- Do NOT include [CHILD] or [PET] in the "characters" array
+- Do NOT focus on [CHILD] or [PET] in the "visualFocus" field
+- The storyboard plans ONLY the background scene and any NPCs
 
 STORY STRUCTURE:
 ${storyStructure}
@@ -802,7 +805,8 @@ IMPORTANT:
 - Include EVERY segment from the story
 - Use EXACT location/character names from the Story Bible
 - Vary shots between adjacent segments (don't use same shot type twice in a row)
-- "characters" should ONLY include NPCs that APPEAR in that segment, not [CHILD] or [PET]`;
+- "characters" = ONLY NPCs from the Story Bible that appear in the scene (NEVER [CHILD] or [PET])
+- "visualFocus" = What the BACKGROUND image should emphasize (NEVER the child or pet - they are overlaid separately)`;
 
   const text = await callGemini(prompt);
   const storyboard = extractJson<StoryboardSegment[]>(text);
