@@ -122,15 +122,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         let sticker;
         let worldDescription: string | undefined;
+        let worldThemeKey: string | undefined;
 
-        // Fetch world description if worldId is provided
+        // Fetch world details if worldId is provided
         if (worldId) {
-          const [world] = await sql`SELECT description FROM worlds WHERE id = ${worldId}`;
+          const [world] = await sql`SELECT name, description FROM worlds WHERE id = ${worldId}`;
           worldDescription = world?.description;
+          worldThemeKey = world?.name; // e.g., 'magical-forest' for theme lookup
         }
 
         if (worldId && worldName) {
-          sticker = await generateWorldSticker(worldId, worldName, worldDescription);
+          sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription);
           sticker = { ...sticker, worldId };
         } else {
           sticker = await generateUniversalSticker();
@@ -158,18 +160,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const results = [];
         let worldDescription: string | undefined;
+        let worldThemeKey: string | undefined;
 
-        // Fetch world description once if worldId is provided
+        // Fetch world details once if worldId is provided
         if (worldId) {
-          const [world] = await sql`SELECT description FROM worlds WHERE id = ${worldId}`;
+          const [world] = await sql`SELECT name, description FROM worlds WHERE id = ${worldId}`;
           worldDescription = world?.description;
+          worldThemeKey = world?.name; // e.g., 'magical-forest' for theme lookup
         }
 
         for (let i = 0; i < count; i++) {
           let sticker;
 
           if (worldId && worldName) {
-            sticker = await generateWorldSticker(worldId, worldName, worldDescription);
+            sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription);
             sticker = { ...sticker, worldId };
           } else {
             sticker = await generateUniversalSticker();
