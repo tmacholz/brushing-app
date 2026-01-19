@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
@@ -6,7 +7,8 @@ import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
-import type { ScreenName, StoryTemplate } from '../types';
+import { BonusWheel } from '../components/BonusWheel/BonusWheel';
+import type { ScreenName, StoryTemplate, ChestReward } from '../types';
 
 interface HomeScreenProps {
   onNavigate: (screen: ScreenName) => void;
@@ -37,12 +39,24 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild } = useChild();
+  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getWorldById, getStoriesForWorld } = useContent();
 
+  // DEV: Test wheel state
+  const [showTestWheel, setShowTestWheel] = useState(false);
+
   if (!child) return null;
+
+  // DEV: Test wheel handlers
+  const handleTestWheelReward = async (reward: ChestReward) => {
+    await claimChestReward(reward);
+  };
+
+  const handleTestWheelComplete = () => {
+    setShowTestWheel(false);
+  };
 
   // Get the next unfinished story in a world (excludes completed stories)
   const getNextStoryInWorld = (worldId: string): StoryTemplate | null => {
@@ -478,6 +492,29 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             2 minutes of fun awaits!
           </motion.p>
         </>
+      )}
+
+      {/* DEV: Test Wheel Button */}
+      <motion.button
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.6 }}
+        onClick={() => setShowTestWheel(true)}
+        className="mt-4 mx-auto px-4 py-2 bg-purple-100 text-purple-600 text-xs font-medium rounded-full border border-purple-200"
+      >
+        🎰 Test Wheel (Dev)
+      </motion.button>
+
+      {/* DEV: Test Wheel Modal */}
+      {showTestWheel && (
+        <BonusWheel
+          tokensAvailable={3}
+          worldId={child.activeWorldId}
+          collectedStickers={child.collectedStickers}
+          collectedAccessories={child.collectedAccessories}
+          onRewardClaimed={handleTestWheelReward}
+          onComplete={handleTestWheelComplete}
+        />
       )}
     </div>
   );
