@@ -509,7 +509,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       {showTestWheel && (
         <BonusWheel
           tokensAvailable={3}
-          worldId={child.activeWorldId}
           collectedStickers={child.collectedStickers}
           collectedAccessories={child.collectedAccessories}
           onRewardClaimed={handleTestWheelReward}

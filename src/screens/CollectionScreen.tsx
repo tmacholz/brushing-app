@@ -21,11 +21,11 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<Collectible | null>(null);
 
-  // Fetch all collectibles on mount
+  // Fetch published collectibles on mount
   useEffect(() => {
     async function fetchCollectibles() {
       try {
-        const response = await fetch('/api/admin/collectibles');
+        const response = await fetch('/api/admin/collectibles?isPublished=true');
         if (response.ok) {
           const data = await response.json();
           setAllCollectibles(data.collectibles || []);

@@ -64,15 +64,15 @@ function generatePointReward(): ChestReward {
 
 /**
  * Fetch available collectibles from the API, filtering out already-collected ones
+ * Only fetches published collectibles
+ * NOTE: Does not filter by worldId - that selection happens locally to allow fallback to universal
  */
 async function fetchCollectibles(
   type: 'sticker' | 'accessory',
-  worldId?: string,
   alreadyCollectedIds: string[] = []
 ): Promise<Collectible[]> {
   try {
-    const params = new URLSearchParams({ type });
-    if (worldId) params.append('worldId', worldId);
+    const params = new URLSearchParams({ type, isPublished: 'true' });
 
     const response = await fetch(`/api/admin/collectibles?${params}`);
     if (!response.ok) return [];
@@ -93,10 +93,9 @@ async function fetchCollectibles(
  * Used by the wheel to determine if sticker segments should be shown
  */
 export async function getAvailableStickersCount(
-  worldId?: string,
   collectedStickers: string[] = []
 ): Promise<number> {
-  const available = await fetchCollectibles('sticker', worldId, collectedStickers);
+  const available = await fetchCollectibles('sticker', collectedStickers);
   return available.length;
 }
 
@@ -106,7 +105,7 @@ export async function getAvailableStickersCount(
 export async function getAvailableAccessoriesCount(
   collectedAccessories: string[] = []
 ): Promise<number> {
-  const available = await fetchCollectibles('accessory', undefined, collectedAccessories);
+  const available = await fetchCollectibles('accessory', collectedAccessories);
   return available.length;
 }
 
@@ -158,8 +157,8 @@ export async function generateChestReward(
 ): Promise<ChestReward> {
   // First, check what collectibles are actually available (not yet collected)
   const [availableStickers, availableAccessories] = await Promise.all([
-    fetchCollectibles('sticker', worldId, collectedStickers),
-    fetchCollectibles('accessory', undefined, collectedAccessories),
+    fetchCollectibles('sticker', collectedStickers),
+    fetchCollectibles('accessory', collectedAccessories),
   ]);
 
   const stickersAvailable = availableStickers.length > 0;
@@ -208,13 +207,12 @@ export interface RewardAvailability {
  * Check what reward types are available for the wheel
  */
 export async function getRewardAvailability(
-  worldId?: string,
   collectedStickers: string[] = [],
   collectedAccessories: string[] = []
 ): Promise<RewardAvailability> {
   const [stickers, accessories] = await Promise.all([
-    fetchCollectibles('sticker', worldId, collectedStickers),
-    fetchCollectibles('accessory', undefined, collectedAccessories),
+    fetchCollectibles('sticker', collectedStickers),
+    fetchCollectibles('accessory', collectedAccessories),
   ]);
 
   return {
@@ -231,7 +229,6 @@ export async function getRewardAvailability(
 export async function generateSpecificReward(
   rewardType: 'points' | 'sticker' | 'accessory',
   pointAmount?: number,
-  worldId?: string,
   collectedStickers: string[] = [],
   collectedAccessories: string[] = []
 ): Promise<ChestReward> {
@@ -246,7 +243,6 @@ export async function generateSpecificReward(
   const alreadyCollected = rewardType === 'sticker' ? collectedStickers : collectedAccessories;
   const collectibles = await fetchCollectibles(
     rewardType,
-    rewardType === 'sticker' ? worldId : undefined,
     alreadyCollected
   );
 
@@ -255,7 +251,7 @@ export async function generateSpecificReward(
     return generatePointReward();
   }
 
-  const selected = selectCollectible(collectibles, worldId);
+  const selected = selectCollectible(collectibles);
 
   if (!selected) {
     return generatePointReward();

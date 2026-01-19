@@ -11,7 +11,6 @@ import { useAudio } from '../../context/AudioContext';
 
 interface BonusWheelProps {
   tokensAvailable: number;
-  worldId?: string;
   collectedStickers?: string[];
   collectedAccessories?: string[];
   onRewardClaimed: (reward: ChestReward) => void;
@@ -102,7 +101,6 @@ type WheelPhase = 'loading' | 'ready' | 'spinning' | 'revealed' | 'complete';
 
 export function BonusWheel({
   tokensAvailable,
-  worldId,
   collectedStickers = [],
   collectedAccessories = [],
   onRewardClaimed,
@@ -136,12 +134,12 @@ export function BonusWheel({
   // Load availability on mount and when collected items change
   useEffect(() => {
     async function loadAvailability() {
-      const avail = await getRewardAvailability(worldId, localCollectedStickers, localCollectedAccessories);
+      const avail = await getRewardAvailability(localCollectedStickers, localCollectedAccessories);
       setAvailability(avail);
       setPhase('ready');
     }
     loadAvailability();
-  }, [worldId, localCollectedStickers, localCollectedAccessories]);
+  }, [localCollectedStickers, localCollectedAccessories]);
 
   const doSpin = useCallback(async () => {
     if (tokensRemaining <= 0 || isAnimating || phase === 'loading') return;
@@ -167,7 +165,6 @@ export function BonusWheel({
       const reward = await generateSpecificReward(
         landingSegment.rewardType,
         landingSegment.pointAmount,
-        worldId,
         localCollectedStickers,
         localCollectedAccessories
       );
@@ -211,7 +208,7 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, phase, worldId, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
+  }, [tokensRemaining, isAnimating, phase, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
 
   const handleSpin = () => {
     if (phase !== 'ready' || isAnimating) return;

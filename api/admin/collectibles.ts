@@ -98,12 +98,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET - List all collectibles
   if (req.method === 'GET') {
     try {
-      const { type, worldId, rarity } = req.query;
+      const { type, worldId, rarity, isPublished } = req.query;
 
       const collectibles = await getCollectibles({
         type: type as 'sticker' | 'accessory' | undefined,
         worldId: worldId as string | undefined,
         rarity: rarity as string | undefined,
+        isPublished: isPublished === 'true' ? true : isPublished === 'false' ? false : undefined,
       });
 
       return res.status(200).json({ collectibles: collectibles.map(formatCollectible) });

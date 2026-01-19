@@ -640,7 +640,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return (
       <BonusWheel
         tokensAvailable={tokensEarned}
-        worldId={child?.activeWorldId}
         collectedStickers={child?.collectedStickers ?? []}
         collectedAccessories={child?.collectedAccessories ?? []}
         onRewardClaimed={handleWheelRewardClaimed}
