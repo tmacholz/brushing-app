@@ -121,9 +121,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'generate') {
       try {
         let sticker;
+        let worldDescription: string | undefined;
+
+        // Fetch world description if worldId is provided
+        if (worldId) {
+          const [world] = await sql`SELECT description FROM worlds WHERE id = ${worldId}`;
+          worldDescription = world?.description;
+        }
 
         if (worldId && worldName) {
-          sticker = await generateWorldSticker(worldId, worldName);
+          sticker = await generateWorldSticker(worldId, worldName, worldDescription);
           sticker = { ...sticker, worldId };
         } else {
           sticker = await generateUniversalSticker();
@@ -150,12 +157,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { count = 3 } = req.body;
       try {
         const results = [];
+        let worldDescription: string | undefined;
+
+        // Fetch world description once if worldId is provided
+        if (worldId) {
+          const [world] = await sql`SELECT description FROM worlds WHERE id = ${worldId}`;
+          worldDescription = world?.description;
+        }
 
         for (let i = 0; i < count; i++) {
           let sticker;
 
           if (worldId && worldName) {
-            sticker = await generateWorldSticker(worldId, worldName);
+            sticker = await generateWorldSticker(worldId, worldName, worldDescription);
             sticker = { ...sticker, worldId };
           } else {
             sticker = await generateUniversalSticker();

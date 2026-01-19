@@ -126,33 +126,69 @@ REQUIREMENTS:
 
 /**
  * Generate a sticker for a specific world theme
+ * Uses the world's description to create themed stickers
  */
-export async function generateWorldSticker(worldId: string, worldName: string): Promise<{
+export async function generateWorldSticker(
+  worldId: string,
+  worldName: string,
+  worldDescription?: string
+): Promise<{
   name: string;
   displayName: string;
   description: string;
   imageUrl: string;
 }> {
-  const themes = worldStickerThemes[worldId] || universalStickers;
-  const theme = themes[Math.floor(Math.random() * themes.length)];
+  // First, try to use hardcoded themes for known worlds
+  const themes = worldStickerThemes[worldId];
 
-  const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
+  if (themes) {
+    // Use hardcoded theme for known worlds
+    const theme = themes[Math.floor(Math.random() * themes.length)];
+    const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
+    const timestamp = Date.now();
+    const stickerId = `${worldId}-sticker-${timestamp}`;
+
+    const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
+
+    const iconName = theme.icon
+      .replace(/^a /i, '')
+      .replace(/^an /i, '')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+    return {
+      name: stickerId,
+      displayName: iconName,
+      description: `A special sticker from ${worldName}`,
+      imageUrl: result.url,
+    };
+  }
+
+  // For custom worlds, generate a themed sticker based on the world description
   const timestamp = Date.now();
-  const stickerId = `${worldId}-sticker-${timestamp}`;
+  const stickerId = `${worldId.substring(0, 8)}-sticker-${timestamp}`;
 
-  const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
+  // Create a prompt based on the world's description
+  const worldContext = worldDescription
+    ? `This sticker is for a world called "${worldName}" which is described as: ${worldDescription}`
+    : `This sticker is for a world called "${worldName}"`;
 
-  // Generate a name from the icon description
-  const iconName = theme.icon
-    .replace(/^a /i, '')
-    .replace(/^an /i, '')
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  const themedPrompt = `A cute collectible item or symbol that would fit in ${worldName}.
+${worldContext}
+
+Create something iconic and recognizable that a child would love to collect.
+Use vibrant colors that match the world's theme.
+Make it feel magical and special.`;
+
+  const result = await generateStickerImage(themedPrompt, `stickers/${stickerId}.png`);
+
+  // Generate a display name based on the world
+  const displayName = `${worldName} Treasure`;
 
   return {
     name: stickerId,
-    displayName: iconName,
+    displayName,
     description: `A special sticker from ${worldName}`,
     imageUrl: result.url,
   };
