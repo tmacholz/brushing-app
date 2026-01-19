@@ -455,24 +455,39 @@ export function BonusWheel({
                 </motion.div>
               ) : (
                 <div className="relative">
-                  {currentReward.collectible.imageUrl ? (
-                    <img
-                      src={currentReward.collectible.imageUrl}
-                      alt={currentReward.collectible.displayName}
-                      className="w-28 h-28 object-contain mx-auto rounded-2xl"
-                    />
-                  ) : (
-                    <div className="text-7xl">{displayInfo.emoji}</div>
-                  )}
-                  {currentReward.isNew && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -top-2 -right-2 bg-green-500 text-white text-xs font-bold px-2 py-1 rounded-full"
-                    >
-                      NEW!
-                    </motion.div>
-                  )}
+                  {/* Celebratory banner for collectibles */}
+                  <motion.div
+                    initial={{ scale: 0, rotate: -10 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: 'spring', delay: 0.1 }}
+                    className="absolute -top-4 left-1/2 -translate-x-1/2 bg-green-500 text-white text-sm font-bold px-4 py-1 rounded-full shadow-lg z-10 whitespace-nowrap"
+                  >
+                    🎉 NEW {currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉
+                  </motion.div>
+
+                  {/* Sticker/Accessory image with bounce animation */}
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: [0, 1.2, 1] }}
+                    transition={{ duration: 0.5, delay: 0.2 }}
+                    className="pt-4"
+                  >
+                    {currentReward.collectible.imageUrl ? (
+                      <img
+                        src={currentReward.collectible.imageUrl}
+                        alt={currentReward.collectible.displayName}
+                        className="w-32 h-32 object-contain mx-auto rounded-2xl bg-white/20 p-2"
+                        onError={(e) => {
+                          // Fallback if image fails to load
+                          (e.target as HTMLImageElement).style.display = 'none';
+                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={`text-7xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
+                      {displayInfo.emoji}
+                    </div>
+                  </motion.div>
                 </div>
               )}
             </motion.div>
