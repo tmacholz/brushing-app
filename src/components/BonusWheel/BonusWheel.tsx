@@ -454,13 +454,13 @@ export function BonusWheel({
                   {displayInfo.emoji}
                 </motion.div>
               ) : (
-                <div className="relative">
+                <div className="flex flex-col items-center">
                   {/* Celebratory banner for collectibles */}
                   <motion.div
                     initial={{ scale: 0, rotate: -10 }}
                     animate={{ scale: 1, rotate: 0 }}
                     transition={{ type: 'spring', delay: 0.1 }}
-                    className="absolute -top-4 left-1/2 -translate-x-1/2 bg-green-500 text-white text-sm font-bold px-4 py-1 rounded-full shadow-lg z-10 whitespace-nowrap"
+                    className="bg-yellow-400 text-yellow-900 text-sm font-bold px-4 py-2 rounded-full shadow-lg mb-4 whitespace-nowrap"
                   >
                     🎉 NEW {currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉
                   </motion.div>
@@ -470,7 +470,6 @@ export function BonusWheel({
                     initial={{ scale: 0 }}
                     animate={{ scale: [0, 1.2, 1] }}
                     transition={{ duration: 0.5, delay: 0.2 }}
-                    className="pt-4"
                   >
                     {currentReward.collectible.imageUrl ? (
                       <img
