@@ -147,7 +147,8 @@ interface VisualReference {
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
-  prompt: string;
+  prompt?: string;                         // Optional manual override for scene description
+  segmentText?: string;                    // The narrative text of the segment (used with storyboard)
   segmentId: string;
   referenceImageUrl?: string;
   userAvatarUrl?: string | null;
@@ -169,16 +170,36 @@ interface StoryImageRequest {
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   const {
-    prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
+    prompt, segmentText, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
     includeUser, includePet, childName, petName, storyBible, visualReferences,
     storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude
   } = req;
 
-  if (!prompt || !segmentId) {
-    return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
+  if (!segmentId) {
+    return res.status(400).json({ error: 'Missing required field: segmentId' });
   }
 
-  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle;
+  // Determine if we have storyboard data to build from
+  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
+
+  // Build scene description: use manual prompt override, or build from storyboard + segment text
+  let sceneDescription: string;
+  if (prompt) {
+    // Manual override takes precedence
+    sceneDescription = prompt;
+  } else if (hasStoryboard && segmentText) {
+    // Build from storyboard data
+    sceneDescription = `Scene context: ${segmentText}`;
+    if (storyboardFocus) {
+      sceneDescription += `\n\nVisual emphasis: ${storyboardFocus}`;
+    }
+  } else if (segmentText) {
+    // Fallback to just segment text
+    sceneDescription = `Illustrate this scene: ${segmentText}`;
+  } else {
+    return res.status(400).json({ error: 'Missing scene data: provide prompt, or segmentText with storyboard data' });
+  }
+
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   const referenceDescriptions: string[] = [];
   let imageIndex = 1;
@@ -351,7 +372,7 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     fullPrompt += '\n';
   }
 
-  fullPrompt += `=== SCENE DESCRIPTION ===\n${prompt}`;
+  fullPrompt += `=== SCENE DESCRIPTION ===\n${sceneDescription}`;
   parts.push({ text: fullPrompt });
 
   // Include timestamp in filename for reliable cache busting (CDN may ignore query params)

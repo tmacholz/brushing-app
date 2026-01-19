@@ -313,8 +313,10 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   };
 
   const handleGenerateImage = async () => {
-    if (!segment.image_prompt) {
-      alert('No image prompt for this segment');
+    // Can generate if we have storyboard data OR an image prompt override
+    const hasStoryboard = segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus;
+    if (!hasStoryboard && !segment.image_prompt) {
+      alert('No storyboard data or image prompt for this segment. Generate a storyboard first, or add a manual image prompt.');
       return;
     }
 
@@ -328,7 +330,10 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'image',
-          prompt: segment.image_prompt,
+          // Only pass prompt if it exists (manual override)
+          prompt: segment.image_prompt || undefined,
+          // Always pass segment text for storyboard-based generation
+          segmentText: segment.text,
           segmentId: segment.id,
           referenceImageUrl: previousImageUrl || undefined,
           // Don't include characters - using overlay system instead
@@ -1695,20 +1700,23 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   }, []);
 
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
-    const segmentsWithPrompts = chapter.segments.filter(s => s.image_prompt);
-    if (segmentsWithPrompts.length === 0) {
-      alert('No segments with image prompts in this chapter');
+    // Segments can be generated if they have storyboard data OR an image prompt
+    const generatableSegments = chapter.segments.filter(s =>
+      s.image_prompt || s.storyboard_shot_type || s.storyboard_location || s.storyboard_focus
+    );
+    if (generatableSegments.length === 0) {
+      alert('No segments with storyboard data or image prompts in this chapter. Generate a storyboard first.');
       return;
     }
 
     setGeneratingImagesForChapter(chapter.id);
-    setImageGenProgress({ current: 0, total: segmentsWithPrompts.length });
+    setImageGenProgress({ current: 0, total: generatableSegments.length });
 
     let previousImageUrl: string | null = null;
 
-    for (let i = 0; i < segmentsWithPrompts.length; i++) {
-      const segment = segmentsWithPrompts[i];
-      setImageGenProgress({ current: i + 1, total: segmentsWithPrompts.length });
+    for (let i = 0; i < generatableSegments.length; i++) {
+      const segment = generatableSegments[i];
+      setImageGenProgress({ current: i + 1, total: generatableSegments.length });
 
       // Find relevant visual references for this segment
       const visualReferences = findRelevantReferences(segment, story?.references || []);
@@ -1721,7 +1729,10 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'image',
-            prompt: segment.image_prompt,
+            // Only pass prompt if it exists (manual override)
+            prompt: segment.image_prompt || undefined,
+            // Always pass segment text for storyboard-based generation
+            segmentText: segment.text,
             segmentId: segment.id,
             referenceImageUrl: previousImageUrl || undefined,
             includeUser: false,
