@@ -79,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (typeof segmentId === 'string') {
     // PUT - Update segment (text, prompts, narration, image, and/or reference tags)
     if (req.method === 'PUT') {
-      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds } = req.body;
+      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds, storyboardExclude } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
         brushingPrompt: brushingPrompt !== undefined ? 'provided' : 'not provided',
@@ -87,14 +87,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided',
         selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
-        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided'
+        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided',
+        storyboardExclude: storyboardExclude !== undefined ? storyboardExclude.length : 'not provided'
       });
 
       try {
         // Check if any field is provided
         const hasUpdate = text !== undefined || brushingPrompt !== undefined || imagePrompt !== undefined ||
           narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined ||
-          referenceIds !== undefined;
+          referenceIds !== undefined || storyboardExclude !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -144,7 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             narration_sequence = COALESCE(${narrationSequence ? JSON.stringify(narrationSequence) : null}, narration_sequence),
             image_url = COALESCE(${imageUrl ?? null}, image_url),
             image_history = COALESCE(${imageHistoryUpdate}, image_history),
-            reference_ids = COALESCE(${referenceIds ?? null}, reference_ids)
+            reference_ids = COALESCE(${referenceIds ?? null}, reference_ids),
+            storyboard_exclude = COALESCE(${storyboardExclude ?? null}, storyboard_exclude)
           WHERE id = ${segmentId} RETURNING *
         `;
 

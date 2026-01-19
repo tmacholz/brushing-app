@@ -164,13 +164,14 @@ interface StoryImageRequest {
   storyboardShotType?: string | null;      // 'wide', 'medium', 'close-up', etc.
   storyboardCameraAngle?: string | null;   // 'eye-level', 'low-angle', etc.
   storyboardFocus?: string | null;         // What to emphasize visually
+  storyboardExclude?: string[] | null;     // Elements to explicitly exclude
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   const {
     prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
     includeUser, includePet, childName, petName, storyBible, visualReferences,
-    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus
+    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude
   } = req;
 
   if (!prompt || !segmentId) {
@@ -337,6 +338,16 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
       fullPrompt += `${petName || 'The pet companion'} MUST be clearly visible. `;
       fullPrompt += petAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as an adorable, friendly companion.\n';
     }
+    fullPrompt += '\n';
+  }
+
+  // Add exclusions (negative prompt)
+  if (storyboardExclude && storyboardExclude.length > 0) {
+    fullPrompt += '=== DO NOT INCLUDE ===\n';
+    fullPrompt += 'The following elements must NOT appear in this image:\n';
+    storyboardExclude.forEach(item => {
+      fullPrompt += `- NO ${item}\n`;
+    });
     fullPrompt += '\n';
   }
 

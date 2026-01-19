@@ -32,6 +32,7 @@ import {
   Clapperboard,
   Camera,
   Video,
+  Ban,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -63,6 +64,7 @@ interface Segment {
   storyboard_camera_angle: string | null;
   storyboard_focus: string | null;
   storyboard_continuity: string | null;
+  storyboard_exclude: string[] | null;
 }
 
 interface Chapter {
@@ -340,6 +342,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           storyboardShotType: segment.storyboard_shot_type || undefined,
           storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
           storyboardFocus: segment.storyboard_focus || undefined,
+          storyboardExclude: segment.storyboard_exclude || undefined,
         }),
       });
 
@@ -1731,6 +1734,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             storyboardShotType: segment.storyboard_shot_type || undefined,
             storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
             storyboardFocus: segment.storyboard_focus || undefined,
+            storyboardExclude: segment.storyboard_exclude || undefined,
           }),
         });
 
@@ -2743,8 +2747,56 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                       {segment.storyboard_continuity}
                                     </div>
                                   )}
+                                  {/* Exclusions */}
+                                  {segment.storyboard_exclude && segment.storyboard_exclude.length > 0 && (
+                                    <div className="text-xs text-red-400 flex items-center gap-1 flex-wrap">
+                                      <Ban className="w-3 h-3" />
+                                      <span className="text-red-500">Exclude:</span>
+                                      {segment.storyboard_exclude.map((item, i) => (
+                                        <span key={i} className="px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded">
+                                          {item}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               </details>
+                            )}
+
+                            {/* Exclusion Editor - always visible if storyboard exists */}
+                            {(segment.storyboard_shot_type || segment.storyboard_location) && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <Ban className="w-3 h-3 text-red-400" />
+                                <input
+                                  type="text"
+                                  placeholder="Add exclusion (e.g., dinosaurs) and press Enter"
+                                  className="flex-1 px-2 py-1 text-xs bg-slate-700/30 border border-slate-600/50 rounded text-white placeholder-slate-500 focus:outline-none focus:border-red-500/50"
+                                  onKeyDown={async (e) => {
+                                    if (e.key === 'Enter') {
+                                      const input = e.target as HTMLInputElement;
+                                      const value = input.value.trim();
+                                      if (!value) return;
+
+                                      const currentExclude = segment.storyboard_exclude || [];
+                                      const newExclude = [...currentExclude, value];
+
+                                      try {
+                                        const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ storyboardExclude: newExclude }),
+                                        });
+                                        if (res.ok) {
+                                          handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude });
+                                          input.value = '';
+                                        }
+                                      } catch (err) {
+                                        console.error('Failed to add exclusion:', err);
+                                      }
+                                    }
+                                  }}
+                                />
+                              </div>
                             )}
 
                             {/* Audio Editor */}

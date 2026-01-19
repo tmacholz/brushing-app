@@ -21,5 +21,8 @@ ALTER TABLE segments ADD COLUMN IF NOT EXISTS storyboard_focus TEXT;
 -- Continuity notes - how this segment visually connects to adjacent segments
 ALTER TABLE segments ADD COLUMN IF NOT EXISTS storyboard_continuity TEXT;
 
+-- Elements to explicitly exclude from the image (negative prompts)
+ALTER TABLE segments ADD COLUMN IF NOT EXISTS storyboard_exclude TEXT[];
+
 -- Index for querying by location
 CREATE INDEX IF NOT EXISTS idx_segments_storyboard_location ON segments(storyboard_location);

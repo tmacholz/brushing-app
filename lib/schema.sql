@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS segments (
   storyboard_shot_type VARCHAR(50),          -- 'wide', 'medium', 'close-up', etc.
   storyboard_camera_angle VARCHAR(50),       -- 'eye-level', 'low-angle', 'high-angle', etc.
   storyboard_focus TEXT,                     -- What to emphasize visually
-  storyboard_continuity TEXT                 -- Notes about visual continuity
+  storyboard_continuity TEXT,                -- Notes about visual continuity
+  storyboard_exclude TEXT[]                  -- Elements to explicitly exclude from image
 );
 
 -- Pre-generated name audio for pets (static, generated once)
