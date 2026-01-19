@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
+import { generateStoryBible, generateStoryboard } from '../../../lib/ai.js';
 
 interface ImageHistoryItem {
   url: string;
@@ -378,6 +379,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (error) {
         console.error('Error adding reference:', error);
         return res.status(500).json({ error: 'Failed to add reference' });
+      }
+    }
+
+    // Generate Story Bible from existing story content (for legacy stories)
+    if (action === 'generateStoryBible') {
+      try {
+        // Get story with world
+        const [story] = await sql`SELECT s.*, w.display_name as world_name, w.description as world_description
+          FROM stories s
+          JOIN worlds w ON s.world_id = w.id
+          WHERE s.id = ${id}`;
+        if (!story) return res.status(404).json({ error: 'Story not found' });
+
+        // Get chapters to build outline
+        const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+
+        // Build outline from existing chapters
+        const outline = await Promise.all(chapters.map(async (ch) => {
+          const segments = await sql`SELECT text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order LIMIT 2`;
+          const summary = segments.map(s => s.text).join(' ').slice(0, 150) + '...';
+          return {
+            chapter: ch.chapter_number,
+            title: ch.title,
+            summary,
+          };
+        }));
+
+        console.log('[StoryBible] Generating Story Bible for legacy story:', story.title);
+        const storyBible = await generateStoryBible(
+          story.world_name,
+          story.world_description,
+          story.title,
+          story.description,
+          outline
+        );
+        console.log('[StoryBible] Generated with', storyBible.keyLocations?.length || 0, 'locations and', storyBible.recurringCharacters?.length || 0, 'characters');
+
+        // Save to database
+        await sql`UPDATE stories SET story_bible = ${JSON.stringify(storyBible)} WHERE id = ${id}`;
+
+        // Also generate storyboard if segments don't have storyboard data
+        const [segmentCheck] = await sql`
+          SELECT COUNT(*) as count FROM segments s
+          JOIN chapters c ON s.chapter_id = c.id
+          WHERE c.story_id = ${id} AND s.storyboard_shot_type IS NOT NULL
+        `;
+
+        if (parseInt(segmentCheck.count) === 0) {
+          console.log('[StoryBible] Also generating storyboard for segments...');
+          try {
+            const chaptersForStoryboard = await Promise.all(
+              chapters.map(async (ch) => {
+                const segs = await sql`SELECT id, segment_order, text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+                return {
+                  chapterNumber: ch.chapter_number,
+                  title: ch.title,
+                  segments: segs.map(s => ({
+                    id: s.id,
+                    segmentOrder: s.segment_order,
+                    text: s.text,
+                    imagePrompt: null,
+                  })),
+                };
+              })
+            );
+
+            const storyboard = await generateStoryboard({
+              storyTitle: story.title,
+              storyDescription: story.description,
+              storyBible,
+              chapters: chaptersForStoryboard,
+            });
+
+            // Update segments with storyboard data
+            for (const entry of storyboard) {
+              await sql`
+                UPDATE segments SET
+                  storyboard_location = ${entry.location},
+                  storyboard_characters = ${entry.characters},
+                  storyboard_shot_type = ${entry.shotType},
+                  storyboard_camera_angle = ${entry.cameraAngle},
+                  storyboard_focus = ${entry.visualFocus},
+                  storyboard_continuity = ${entry.continuityNote}
+                WHERE id = ${entry.segmentId}
+              `;
+            }
+            console.log('[StoryBible] Storyboard generated for', storyboard.length, 'segments');
+          } catch (storyboardError) {
+            console.error('[StoryBible] Storyboard generation failed (non-fatal):', storyboardError);
+          }
+        }
+
+        return res.status(200).json({ storyBible });
+      } catch (error) {
+        console.error('Error generating Story Bible:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to generate Story Bible', details: message });
       }
     }
 

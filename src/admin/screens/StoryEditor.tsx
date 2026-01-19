@@ -1049,6 +1049,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [editingStoryBible, setEditingStoryBible] = useState(false);
   const [storyBibleDraft, setStoryBibleDraft] = useState<StoryBible | null>(null);
   const [savingStoryBible, setSavingStoryBible] = useState(false);
+  const [generatingStoryBible, setGeneratingStoryBible] = useState(false);
 
   // Storyboard generation state
   const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
@@ -1143,6 +1144,31 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
     setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
+  };
+
+  const handleGenerateStoryBible = async () => {
+    setGeneratingStoryBible(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateStoryBible' }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to generate Story Bible');
+      }
+
+      // Refresh story to get updated story bible and storyboard data
+      await fetchStory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate Story Bible');
+    } finally {
+      setGeneratingStoryBible(false);
+    }
   };
 
   const handleGenerateStoryboard = async () => {
@@ -1974,14 +2000,30 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
               >
                 {!story.story_bible && !editingStoryBible ? (
                   <div className="text-center py-8">
-                    <p className="text-slate-400 mb-4">No Story Bible configured. The Story Bible is generated automatically when a story is created.</p>
-                    <button
-                      onClick={startEditingStoryBible}
-                      className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors mx-auto"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create Story Bible
-                    </button>
+                    <p className="text-slate-400 mb-4">No Story Bible configured. Generate one from the existing story content, or create manually.</p>
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={handleGenerateStoryBible}
+                        disabled={generatingStoryBible}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {generatingStoryBible ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                        {generatingStoryBible ? 'Generating...' : 'Auto-Generate'}
+                      </button>
+                      <span className="text-slate-500">or</span>
+                      <button
+                        onClick={startEditingStoryBible}
+                        disabled={generatingStoryBible}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create Manually
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-6">
