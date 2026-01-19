@@ -1,3 +1,11 @@
+// Info about a just-completed story for prompting next action
+export interface CompletedStoryInfo {
+  storyTemplateId: string;
+  worldId: string;
+  title: string;
+  completedAt: string;
+}
+
 export interface Child {
   id: string;
   name: string;
@@ -14,6 +22,7 @@ export interface Child {
   unlockedWorlds: string[];
   currentStoryArc: StoryArc | null;
   completedStoryArcs: string[];
+  lastCompletedStoryInfo: CompletedStoryInfo | null; // Track just-finished story for prompting next action
   lastBrushDate: string | null;
   createdAt: string;
   characterId: string; // Selected character ('boy' or 'girl')
