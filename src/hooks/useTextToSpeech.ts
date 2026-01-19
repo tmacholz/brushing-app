@@ -1,6 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { generateSpeech, clearAudioCache, type TTSOptions } from '../services/elevenLabs';
-import { unlockAudio, isAudioUnlocked } from '../utils/iosAudioUnlock';
+import {
+  playAudioUrl,
+  clearAudioBufferCache,
+  type AudioPlaybackControl,
+} from '../utils/iosAudioUnlock';
 
 interface UseTextToSpeechReturn {
   speak: (text: string) => Promise<void>;
@@ -20,15 +24,16 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
   const [isPaused, setIsPaused] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Use Web Audio API control instead of HTMLAudioElement
+  const playbackRef = useRef<AudioPlaybackControl | null>(null);
   const currentTextRef = useRef<string | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
+      if (playbackRef.current) {
+        playbackRef.current.stop();
+        playbackRef.current = null;
       }
     };
   }, []);
@@ -40,9 +45,9 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
     }
 
     // Stop any current playback
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    if (playbackRef.current) {
+      playbackRef.current.stop();
+      playbackRef.current = null;
     }
 
     currentTextRef.current = text;
@@ -51,11 +56,7 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
     setIsPaused(false);
 
     try {
-      // Ensure audio is unlocked for iOS silent mode
-      if (!isAudioUnlocked()) {
-        await unlockAudio();
-      }
-
+      // Generate the speech audio URL
       const audioUrl = await generateSpeech(text, options);
 
       // Check if we've been stopped while loading
@@ -63,27 +64,19 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
         return;
       }
 
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
+      // Play through Web Audio API (bypasses iOS mute switch)
+      const playback = await playAudioUrl(audioUrl);
+      playbackRef.current = playback;
 
-      audio.onplay = () => {
-        setIsSpeaking(true);
-        setIsLoading(false);
-      };
+      setIsSpeaking(true);
+      setIsLoading(false);
 
-      audio.onended = () => {
+      // Handle playback end
+      playback.onEnded = () => {
         setIsSpeaking(false);
         currentTextRef.current = null;
+        playbackRef.current = null;
       };
-
-      audio.onerror = () => {
-        setError('Failed to play audio');
-        setIsSpeaking(false);
-        setIsLoading(false);
-        currentTextRef.current = null;
-      };
-
-      await audio.play();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate speech');
       setIsLoading(false);
@@ -93,10 +86,9 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
   }, [options, isSpeaking]);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current = null;
+    if (playbackRef.current) {
+      playbackRef.current.stop();
+      playbackRef.current = null;
     }
     currentTextRef.current = null;
     setIsSpeaking(false);
@@ -105,16 +97,16 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
   }, []);
 
   const pause = useCallback(() => {
-    if (audioRef.current && isSpeaking) {
-      audioRef.current.pause();
+    if (playbackRef.current && isSpeaking) {
+      playbackRef.current.pause();
       setIsPaused(true);
       setIsSpeaking(false);
     }
   }, [isSpeaking]);
 
   const resume = useCallback(() => {
-    if (audioRef.current && isPaused) {
-      audioRef.current.play();
+    if (playbackRef.current && isPaused) {
+      playbackRef.current.resume();
       setIsPaused(false);
       setIsSpeaking(true);
     }
@@ -122,6 +114,7 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
 
   const clearCache = useCallback(() => {
     clearAudioCache();
+    clearAudioBufferCache();
   }, []);
 
   return {

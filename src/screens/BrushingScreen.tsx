@@ -19,7 +19,7 @@ import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from 
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
-import { unlockAudio, isAudioUnlocked } from '../utils/iosAudioUnlock';
+import { playAudioUrl, type AudioPlaybackControl } from '../utils/iosAudioUnlock';
 import type { CharacterPosition, ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
@@ -59,7 +59,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
   const lastSplicedSegmentRef = useRef<string | null>(null);
-  const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
+  const backgroundMusicRef = useRef<AudioPlaybackControl | null>(null);
+  const backgroundMusicUrlRef = useRef<string | null>(null);
 
   // Audio splicing hook for pre-recorded narration with name insertion
   const {
@@ -463,32 +464,29 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     : null;
 
   // Background music playback - prefer world music, fallback to story music
+  // Using Web Audio API to bypass iOS mute switch
   useEffect(() => {
     // Prefer world music (shared across all stories in the world)
     // Fall back to story-level music for backwards compatibility
     const musicUrl = currentWorld?.backgroundMusicUrl || child?.currentStoryArc?.backgroundMusicUrl;
     console.log('[BrushingScreen] Background music URL:', musicUrl, '(world:', currentWorld?.backgroundMusicUrl, ', story:', child?.currentStoryArc?.backgroundMusicUrl, ')');
 
+    // Store the URL for comparison
+    backgroundMusicUrlRef.current = musicUrl || null;
+
     if (!musicUrl) {
       console.log('[BrushingScreen] No background music URL found');
-      return;
-    }
-
-    // Create audio element if it doesn't exist or URL changed
-    if (!backgroundMusicRef.current || backgroundMusicRef.current.src !== musicUrl) {
+      // Stop any existing music
       if (backgroundMusicRef.current) {
-        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.stop();
+        backgroundMusicRef.current = null;
       }
-      console.log('[BrushingScreen] Creating audio element for:', musicUrl);
-      const audio = new Audio(musicUrl);
-      audio.loop = true;
-      audio.volume = 0.15; // Low volume so narration is clear
-      backgroundMusicRef.current = audio;
+      return;
     }
 
     return () => {
       if (backgroundMusicRef.current) {
-        backgroundMusicRef.current.pause();
+        backgroundMusicRef.current.stop();
         backgroundMusicRef.current = null;
       }
     };
@@ -496,18 +494,28 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Start/pause background music with brushing
   useEffect(() => {
-    if (!backgroundMusicRef.current) return;
+    const musicUrl = backgroundMusicUrlRef.current;
 
-    if (isRunning && !showCountdown) {
-      // Ensure iOS audio is unlocked before playing
-      const playMusic = async () => {
-        if (!isAudioUnlocked()) {
-          await unlockAudio();
+    if (isRunning && !showCountdown && musicUrl) {
+      // Start music using Web Audio API (bypasses iOS mute switch)
+      const startMusic = async () => {
+        // Stop existing music if URL changed
+        if (backgroundMusicRef.current) {
+          backgroundMusicRef.current.stop();
+          backgroundMusicRef.current = null;
         }
-        backgroundMusicRef.current?.play().catch(console.error);
+
+        try {
+          console.log('[BrushingScreen] Starting background music via Web Audio API');
+          const playback = await playAudioUrl(musicUrl, { loop: true, volume: 0.15 });
+          backgroundMusicRef.current = playback;
+        } catch (err) {
+          console.error('[BrushingScreen] Failed to play background music:', err);
+        }
       };
-      playMusic();
-    } else {
+      startMusic();
+    } else if (backgroundMusicRef.current) {
+      // Pause when not running
       backgroundMusicRef.current.pause();
     }
   }, [isRunning, showCountdown]);

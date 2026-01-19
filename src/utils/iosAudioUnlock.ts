@@ -2,15 +2,19 @@
  * iOS Audio Unlock Utility
  *
  * On iOS, web audio respects the hardware mute/silent switch by default.
- * This utility "unlocks" audio playback by playing a silent buffer during
- * a user interaction, which switches the audio session to a mode that
- * ignores the mute switch.
+ * HTML5 Audio elements ALWAYS respect the mute switch - there's no way around it.
+ * The ONLY way to play audio when muted on iOS is through the Web Audio API.
  *
- * This must be called as a direct result of a user gesture (touchstart, click).
+ * This utility provides:
+ * 1. A shared AudioContext that's unlocked on first user interaction
+ * 2. Helper functions to play audio through Web Audio API (bypasses mute switch)
  */
 
 let audioContext: AudioContext | null = null;
 let isUnlocked = false;
+
+// Cache for decoded audio buffers
+const audioBufferCache = new Map<string, AudioBuffer>();
 
 /**
  * Detects if the current device is running iOS
@@ -47,8 +51,7 @@ export function getSharedAudioContext(): AudioContext {
  * This works by:
  * 1. Creating a short silent audio buffer
  * 2. Playing it through the Web Audio API
- * 3. This triggers iOS to switch the audio session category
- *    from "ambient" (respects mute) to "playback" (ignores mute)
+ * 3. This "unlocks" the AudioContext for future playback
  */
 export async function unlockAudio(): Promise<void> {
   if (isUnlocked) return;
@@ -60,31 +63,16 @@ export async function unlockAudio(): Promise<void> {
     await ctx.resume();
   }
 
-  // Create a short silent buffer (1 sample at sample rate = very short)
+  // Create a short silent buffer and play it
+  // This is the key to unlocking audio on iOS
   const buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.connect(ctx.destination);
   source.start(0);
 
-  // Also unlock HTML5 Audio by creating and playing a data URI
-  // This ensures both Web Audio API and HTML5 Audio are unlocked
-  try {
-    // Minimal valid MP3 file (silent)
-    const silentDataUri =
-      'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwmHAAAAAAD/+1DEAAAGAAGn9AAAIgAANP8AAABM//tQxBgAAADSAAAAAAAAANIAAAAATEFN//tQxCEAAADSAAAAAAAAANIAAAAA//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8=';
-
-    const audio = new Audio(silentDataUri);
-    audio.volume = 0.01; // Very quiet
-    await audio.play();
-    audio.pause();
-  } catch {
-    // HTML5 Audio unlock failed, but Web Audio API unlock may still work
-    console.log('[iOS Audio] HTML5 Audio unlock fallback failed, continuing with Web Audio API');
-  }
-
   isUnlocked = true;
-  console.log('[iOS Audio] Audio unlocked for silent mode playback');
+  console.log('[iOS Audio] Audio context unlocked');
 }
 
 /**
@@ -92,6 +80,182 @@ export async function unlockAudio(): Promise<void> {
  */
 export function isAudioUnlocked(): boolean {
   return isUnlocked;
+}
+
+/**
+ * Fetches and decodes an audio URL into an AudioBuffer.
+ * Results are cached for performance.
+ */
+export async function fetchAudioBuffer(url: string): Promise<AudioBuffer> {
+  // Check cache first
+  const cached = audioBufferCache.get(url);
+  if (cached) {
+    return cached;
+  }
+
+  const ctx = getSharedAudioContext();
+
+  // Fetch the audio file
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch audio: ${response.status}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+
+  // Decode the audio data
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+  // Cache it
+  audioBufferCache.set(url, audioBuffer);
+
+  return audioBuffer;
+}
+
+/**
+ * Control object returned by playAudioBuffer
+ */
+export interface AudioPlaybackControl {
+  stop: () => void;
+  pause: () => void;
+  resume: () => void;
+  readonly isPlaying: boolean;
+  readonly isPaused: boolean;
+  readonly duration: number;
+  onEnded: (() => void) | null;
+}
+
+/**
+ * Plays an AudioBuffer through the Web Audio API.
+ * This bypasses the iOS mute switch.
+ */
+export function playAudioBuffer(
+  buffer: AudioBuffer,
+  options?: { loop?: boolean; volume?: number }
+): AudioPlaybackControl {
+  const ctx = getSharedAudioContext();
+  const { loop = false, volume = 1.0 } = options || {};
+
+  // Resume context if needed
+  if (ctx.state === 'suspended') {
+    ctx.resume();
+  }
+
+  // Create gain node for volume control
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = volume;
+  gainNode.connect(ctx.destination);
+
+  // Create source node
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = loop;
+  source.connect(gainNode);
+
+  let isPlaying = true;
+  let isPaused = false;
+  let startTime = ctx.currentTime;
+  let pauseTime = 0;
+  let currentSource: AudioBufferSourceNode | null = source;
+
+  const control: AudioPlaybackControl = {
+    get isPlaying() {
+      return isPlaying && !isPaused;
+    },
+    get isPaused() {
+      return isPaused;
+    },
+    get duration() {
+      return buffer.duration;
+    },
+    onEnded: null,
+
+    stop() {
+      if (currentSource) {
+        try {
+          currentSource.stop();
+        } catch {
+          // Already stopped
+        }
+        currentSource.disconnect();
+        currentSource = null;
+      }
+      gainNode.disconnect();
+      isPlaying = false;
+      isPaused = false;
+    },
+
+    pause() {
+      if (!isPlaying || isPaused || !currentSource) return;
+
+      pauseTime = ctx.currentTime - startTime;
+      try {
+        currentSource.stop();
+      } catch {
+        // Already stopped
+      }
+      currentSource.disconnect();
+      currentSource = null;
+      isPaused = true;
+    },
+
+    resume() {
+      if (!isPaused) return;
+
+      // Create a new source starting from where we paused
+      const newSource = ctx.createBufferSource();
+      newSource.buffer = buffer;
+      newSource.loop = loop;
+      newSource.connect(gainNode);
+
+      newSource.onended = () => {
+        if (isPlaying && !isPaused && control.onEnded) {
+          isPlaying = false;
+          control.onEnded();
+        }
+      };
+
+      newSource.start(0, pauseTime);
+      startTime = ctx.currentTime - pauseTime;
+      currentSource = newSource;
+      isPaused = false;
+    },
+  };
+
+  source.onended = () => {
+    if (isPlaying && !isPaused && control.onEnded) {
+      isPlaying = false;
+      control.onEnded();
+    }
+  };
+
+  source.start(0);
+
+  return control;
+}
+
+/**
+ * Convenience function to fetch, decode, and play an audio URL.
+ * This is the main function to use for playing audio that bypasses iOS mute.
+ */
+export async function playAudioUrl(
+  url: string,
+  options?: { loop?: boolean; volume?: number }
+): Promise<AudioPlaybackControl> {
+  // Ensure audio is unlocked
+  if (!isUnlocked) {
+    await unlockAudio();
+  }
+
+  const buffer = await fetchAudioBuffer(url);
+  return playAudioBuffer(buffer, options);
+}
+
+/**
+ * Clears the audio buffer cache
+ */
+export function clearAudioBufferCache(): void {
+  audioBufferCache.clear();
 }
 
 /**
@@ -108,7 +272,6 @@ export function setupAutoUnlock(): () => void {
   };
 
   // Use touchstart AND touchend for better iOS coverage
-  // Some iOS versions require touchend for the gesture to be considered "user-initiated"
   document.addEventListener('touchstart', handleInteraction, { passive: true });
   document.addEventListener('touchend', handleInteraction, { passive: true });
   document.addEventListener('click', handleInteraction, { passive: true });
@@ -130,4 +293,5 @@ export function closeSharedAudioContext(): void {
     audioContext = null;
     isUnlocked = false;
   }
+  audioBufferCache.clear();
 }
