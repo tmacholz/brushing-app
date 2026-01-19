@@ -17,14 +17,14 @@ interface Collectible {
   id: string;
   type: 'sticker' | 'accessory';
   name: string;
-  display_name: string;
+  displayName: string;
   description: string | null;
-  image_url: string;
+  imageUrl: string;
   rarity: 'common' | 'uncommon' | 'rare';
-  world_id: string | null;
-  pet_id: string | null;
-  is_published: boolean;
-  created_at: string;
+  worldId: string | null;
+  petId: string | null;
+  isPublished: boolean;
+  createdAt: string;
 }
 
 interface World {
@@ -146,15 +146,15 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
   };
 
   const handleTogglePublish = async (item: Collectible) => {
-    await handleUpdate(item.id, { is_published: !item.is_published });
+    await handleUpdate(item.id, { isPublished: !item.isPublished });
   };
 
   // Filter collectibles
   const filteredCollectibles = collectibles.filter((c) => {
     if (typeFilter !== 'all' && c.type !== typeFilter) return false;
     if (worldFilter !== 'all') {
-      if (worldFilter === 'universal' && c.world_id !== null) return false;
-      if (worldFilter !== 'universal' && c.world_id !== worldFilter) return false;
+      if (worldFilter === 'universal' && c.worldId !== null) return false;
+      if (worldFilter !== 'universal' && c.worldId !== worldFilter) return false;
     }
     return true;
   });
@@ -179,7 +179,7 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
   // Stats
   const stickerCount = collectibles.filter((c) => c.type === 'sticker').length;
   const accessoryCount = collectibles.filter((c) => c.type === 'accessory').length;
-  const publishedCount = collectibles.filter((c) => c.is_published).length;
+  const publishedCount = collectibles.filter((c) => c.isPublished).length;
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -279,15 +279,15 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className={`relative bg-slate-800/50 border rounded-xl overflow-hidden group ${
-                  item.is_published ? 'border-green-500/30' : 'border-slate-700/50'
+                  item.isPublished ? 'border-green-500/30' : 'border-slate-700/50'
                 }`}
               >
                 {/* Image */}
                 <div className="aspect-square bg-slate-700/50 relative">
-                  {item.image_url ? (
+                  {item.imageUrl ? (
                     <img
-                      src={item.image_url}
-                      alt={item.display_name}
+                      src={item.imageUrl}
+                      alt={item.displayName}
                       className="w-full h-full object-cover"
                     />
                   ) : (
@@ -334,19 +334,19 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
 
                 {/* Info */}
                 <div className="p-3">
-                  <h3 className="font-medium text-sm truncate">{item.display_name}</h3>
-                  <p className="text-xs text-slate-400 truncate">{getWorldName(item.world_id)}</p>
+                  <h3 className="font-medium text-sm truncate">{item.displayName}</h3>
+                  <p className="text-xs text-slate-400 truncate">{getWorldName(item.worldId)}</p>
 
                   {/* Publish toggle */}
                   <button
                     onClick={() => handleTogglePublish(item)}
                     className={`mt-2 w-full py-1.5 text-xs rounded-lg transition-colors ${
-                      item.is_published
+                      item.isPublished
                         ? 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                         : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
                     }`}
                   >
-                    {item.is_published ? (
+                    {item.isPublished ? (
                       <>
                         <Check className="w-3 h-3 inline mr-1" />
                         Published
@@ -517,20 +517,20 @@ function EditModal({
   onClose: () => void;
   onSave: (updates: Partial<Collectible>) => void;
 }) {
-  const [displayName, setDisplayName] = useState(item.display_name);
+  const [displayName, setDisplayName] = useState(item.displayName);
   const [description, setDescription] = useState(item.description || '');
   const [rarity, setRarity] = useState(item.rarity);
-  const [worldId, setWorldId] = useState(item.world_id || '');
+  const [worldId, setWorldId] = useState(item.worldId || '');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     await onSave({
-      display_name: displayName,
+      displayName,
       description: description || null,
       rarity,
-      world_id: worldId || null,
+      worldId: worldId || null,
     });
     setSaving(false);
   };
@@ -545,8 +545,8 @@ function EditModal({
       >
         <div className="flex items-start gap-4 mb-4">
           <div className="w-20 h-20 rounded-lg overflow-hidden bg-slate-700 flex-shrink-0">
-            {item.image_url ? (
-              <img src={item.image_url} alt={item.display_name} className="w-full h-full object-cover" />
+            {item.imageUrl ? (
+              <img src={item.imageUrl} alt={item.displayName} className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
                 <Image className="w-8 h-8 text-slate-500" />
