@@ -28,6 +28,7 @@ import {
   Plus,
   Maximize2,
   Tag,
+  BookOpen,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -68,13 +69,27 @@ interface Chapter {
   teaser_narration_sequence: NarrationSequenceItem[] | null;
 }
 
-// Story Bible for visual consistency
+// Story Bible for narrative and visual consistency
 interface StoryBible {
+  // Narrative elements
+  tone?: string;
+  themes?: string[];
+  narrativeStyle?: string;
+  // Character behavior
+  childRole?: string;
+  petRole?: string;
+  characterDynamic?: string;
+  // World and visual consistency
+  keyLocations?: { name: string; visualDescription: string; mood: string }[];
+  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+  // Visual style guide
   colorPalette?: string;
   lightingStyle?: string;
   artDirection?: string;
-  keyLocations?: { name: string; visualDescription: string; mood: string }[];
-  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+  // Story-specific elements
+  magicSystem?: string | null;
+  stakes?: string;
+  resolution?: string;
 }
 
 // Visual reference for consistent imagery
@@ -1005,6 +1020,12 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   const [newRefName, setNewRefName] = useState('');
   const [newRefDescription, setNewRefDescription] = useState('');
 
+  // Story Bible state
+  const [showStoryBible, setShowStoryBible] = useState(false);
+  const [editingStoryBible, setEditingStoryBible] = useState(false);
+  const [storyBibleDraft, setStoryBibleDraft] = useState<StoryBible | null>(null);
+  const [savingStoryBible, setSavingStoryBible] = useState(false);
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -1058,6 +1079,43 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveStoryBible = async () => {
+    if (!storyBibleDraft) return;
+    setSavingStoryBible(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyBible: storyBibleDraft }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save story bible');
+      const data = await res.json();
+      setStory({ ...story!, ...data.story });
+      setEditingStoryBible(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save story bible');
+    } finally {
+      setSavingStoryBible(false);
+    }
+  };
+
+  const startEditingStoryBible = () => {
+    setStoryBibleDraft(story?.story_bible || {});
+    setEditingStoryBible(true);
+  };
+
+  const cancelEditingStoryBible = () => {
+    setStoryBibleDraft(null);
+    setEditingStoryBible(false);
+  };
+
+  const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
+    setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
   };
 
   const handlePublish = async (publish: boolean) => {
@@ -1774,6 +1832,330 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
               />
             </div>
           </div>
+        </section>
+
+        {/* Story Bible Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setShowStoryBible(!showStoryBible)}
+              className="flex items-center gap-2 text-lg font-semibold hover:text-cyan-300 transition-colors"
+            >
+              {showStoryBible ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+              <BookOpen className="w-5 h-5 text-amber-400" />
+              Story Bible
+              {story.story_bible ? (
+                <span className="text-xs font-normal text-green-400 ml-2">(configured)</span>
+              ) : (
+                <span className="text-xs font-normal text-slate-500 ml-2">(not set)</span>
+              )}
+            </button>
+
+            {showStoryBible && !editingStoryBible && story.story_bible && (
+              <button
+                onClick={startEditingStoryBible}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+
+            {showStoryBible && editingStoryBible && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveStoryBible}
+                  disabled={savingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {savingStoryBible ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Save
+                </button>
+                <button
+                  onClick={cancelEditingStoryBible}
+                  disabled={savingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {showStoryBible && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                {!story.story_bible && !editingStoryBible ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 mb-4">No Story Bible configured. The Story Bible is generated automatically when a story is created.</p>
+                    <button
+                      onClick={startEditingStoryBible}
+                      className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors mx-auto"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create Story Bible
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Narrative Elements */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                        Narrative Elements
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Tone</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.tone || ''}
+                              onChange={(e) => updateStoryBibleField('tone', e.target.value)}
+                              placeholder="e.g., Whimsical and heartwarming with gentle humor"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.tone || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Themes</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.themes?.join(', ') || ''}
+                              onChange={(e) => updateStoryBibleField('themes', e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
+                              placeholder="e.g., friendship, bravery, helping others"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.themes?.join(', ') || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Narrative Style</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.narrativeStyle || ''}
+                              onChange={(e) => updateStoryBibleField('narrativeStyle', e.target.value)}
+                              placeholder="e.g., Third person, warm narrator voice, simple sentences"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.narrativeStyle || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Character Behavior */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-cyan-400" />
+                        Character Behavior
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">[CHILD]'s Role</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.childRole || ''}
+                              onChange={(e) => updateStoryBibleField('childRole', e.target.value)}
+                              placeholder="e.g., Curious explorer who asks questions"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.childRole || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">[PET]'s Role</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.petRole || ''}
+                              onChange={(e) => updateStoryBibleField('petRole', e.target.value)}
+                              placeholder="e.g., Loyal sidekick who provides comic relief"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.petRole || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Character Dynamic</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.characterDynamic || ''}
+                              onChange={(e) => updateStoryBibleField('characterDynamic', e.target.value)}
+                              placeholder="e.g., [CHILD] leads, [PET] encourages and helps"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.characterDynamic || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Visual Style */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Image className="w-4 h-4 text-emerald-400" />
+                        Visual Style
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Color Palette</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.colorPalette || ''}
+                              onChange={(e) => updateStoryBibleField('colorPalette', e.target.value)}
+                              placeholder="e.g., Warm golden yellows, soft greens, magical purples"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.colorPalette || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Lighting Style</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.lightingStyle || ''}
+                              onChange={(e) => updateStoryBibleField('lightingStyle', e.target.value)}
+                              placeholder="e.g., Soft dappled sunlight filtering through leaves"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.lightingStyle || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Art Direction</label>
+                          {editingStoryBible ? (
+                            <textarea
+                              value={storyBibleDraft?.artDirection || ''}
+                              onChange={(e) => updateStoryBibleField('artDirection', e.target.value)}
+                              placeholder="Additional visual style notes..."
+                              rows={2}
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 resize-none"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.artDirection || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Story Elements */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-amber-400" />
+                        Story Elements
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Stakes</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.stakes || ''}
+                              onChange={(e) => updateStoryBibleField('stakes', e.target.value)}
+                              placeholder="e.g., The forest animals will lose their home"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.stakes || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Resolution</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.resolution || ''}
+                              onChange={(e) => updateStoryBibleField('resolution', e.target.value)}
+                              placeholder="e.g., The friends work together to save the day"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.resolution || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Magic System</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.magicSystem || ''}
+                              onChange={(e) => updateStoryBibleField('magicSystem', e.target.value || null)}
+                              placeholder="e.g., Magic comes from crystals that glow when touched (optional)"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.magicSystem || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Key Locations */}
+                    {(story.story_bible?.keyLocations?.length || 0) > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                          <MapPin className="w-4 h-4 text-rose-400" />
+                          Key Locations ({story.story_bible?.keyLocations?.length || 0})
+                        </h3>
+                        <div className="space-y-3">
+                          {story.story_bible?.keyLocations?.map((loc, idx) => (
+                            <div key={idx} className="bg-slate-700/30 rounded-lg p-3">
+                              <div className="font-medium text-sm text-white mb-1">{loc.name}</div>
+                              <div className="text-xs text-slate-400 mb-1">{loc.visualDescription}</div>
+                              <div className="text-xs text-slate-500">Mood: {loc.mood}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recurring Characters */}
+                    {(story.story_bible?.recurringCharacters?.length || 0) > 0 && (
+                      <div>
+                        <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                          <Users className="w-4 h-4 text-indigo-400" />
+                          Recurring Characters ({story.story_bible?.recurringCharacters?.length || 0})
+                        </h3>
+                        <div className="space-y-3">
+                          {story.story_bible?.recurringCharacters?.map((char, idx) => (
+                            <div key={idx} className="bg-slate-700/30 rounded-lg p-3">
+                              <div className="font-medium text-sm text-white mb-1">{char.name}</div>
+                              <div className="text-xs text-slate-400 mb-1">{char.visualDescription}</div>
+                              <div className="text-xs text-slate-500">
+                                {char.personality} • {char.role}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </section>
 
         {/* Background Music Section */}

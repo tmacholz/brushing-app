@@ -313,7 +313,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update story metadata
   if (req.method === 'PUT') {
-    const { title, description, status, isPublished, backgroundMusicUrl, coverImageUrl } = req.body;
+    const { title, description, status, isPublished, backgroundMusicUrl, coverImageUrl, storyBible } = req.body;
 
     try {
       const [story] = await sql`
@@ -323,7 +323,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status = COALESCE(${status}, status),
           is_published = COALESCE(${isPublished}, is_published),
           background_music_url = COALESCE(${backgroundMusicUrl}, background_music_url),
-          cover_image_url = COALESCE(${coverImageUrl}, cover_image_url)
+          cover_image_url = COALESCE(${coverImageUrl}, cover_image_url),
+          story_bible = COALESCE(${storyBible ? JSON.stringify(storyBible) : null}, story_bible)
         WHERE id = ${id} RETURNING *
       `;
       if (!story) return res.status(404).json({ error: 'Story not found' });
