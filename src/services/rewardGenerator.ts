@@ -73,15 +73,23 @@ async function fetchCollectibles(
 ): Promise<Collectible[]> {
   try {
     const params = new URLSearchParams({ type, isPublished: 'true' });
+    const url = `/api/admin/collectibles?${params}`;
+    console.log('[RewardGenerator] Fetching collectibles:', url);
 
-    const response = await fetch(`/api/admin/collectibles?${params}`);
-    if (!response.ok) return [];
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.log('[RewardGenerator] Fetch failed:', response.status);
+      return [];
+    }
 
     const data = await response.json();
     const allCollectibles: Collectible[] = data.collectibles || [];
+    console.log('[RewardGenerator] Got collectibles:', allCollectibles.length, 'already collected:', alreadyCollectedIds.length);
 
     // Filter out already-collected items to ensure uniqueness
-    return allCollectibles.filter(c => !alreadyCollectedIds.includes(c.id));
+    const available = allCollectibles.filter(c => !alreadyCollectedIds.includes(c.id));
+    console.log('[RewardGenerator] Available after filtering:', available.length);
+    return available;
   } catch (error) {
     console.error('Error fetching collectibles:', error);
     return [];
@@ -210,17 +218,20 @@ export async function getRewardAvailability(
   collectedStickers: string[] = [],
   collectedAccessories: string[] = []
 ): Promise<RewardAvailability> {
+  console.log('[RewardGenerator] Getting reward availability...');
   const [stickers, accessories] = await Promise.all([
     fetchCollectibles('sticker', collectedStickers),
     fetchCollectibles('accessory', collectedAccessories),
   ]);
 
-  return {
+  const result = {
     stickersAvailable: stickers.length > 0,
     stickerCount: stickers.length,
     accessoriesAvailable: accessories.length > 0,
     accessoryCount: accessories.length,
   };
+  console.log('[RewardGenerator] Availability result:', result);
+  return result;
 }
 
 /**
