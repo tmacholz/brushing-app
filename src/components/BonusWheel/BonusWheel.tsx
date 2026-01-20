@@ -436,22 +436,21 @@ export function BonusWheel({
             transition={{ type: 'spring', damping: 10 }}
             className="text-center"
           >
-            {/* Reward card */}
-            <motion.div
-              initial={{ y: -50 }}
-              animate={{ y: 0 }}
-              transition={{ type: 'spring', damping: 8 }}
-              className={`bg-gradient-to-br ${displayInfo.color} rounded-3xl p-8 shadow-2xl mb-6 relative overflow-hidden`}
-            >
-              {/* Shine effect */}
+            {currentReward.type === 'points' ? (
+              /* Points reward - show in colored card */
               <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                initial={{ x: '-100%' }}
-                animate={{ x: '200%' }}
-                transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
-              />
-
-              {currentReward.type === 'points' ? (
+                initial={{ y: -50 }}
+                animate={{ y: 0 }}
+                transition={{ type: 'spring', damping: 8 }}
+                className={`bg-gradient-to-br ${displayInfo.color} rounded-3xl p-8 shadow-2xl mb-6 relative overflow-hidden`}
+              >
+                {/* Shine effect */}
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '200%' }}
+                  transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
+                />
                 <motion.div
                   animate={{ rotate: [0, 360] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
@@ -459,45 +458,31 @@ export function BonusWheel({
                 >
                   {displayInfo.emoji}
                 </motion.div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  {/* Celebratory banner for collectibles */}
-                  <motion.div
-                    initial={{ scale: 0, rotate: -10 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', delay: 0.1 }}
-                    className="bg-yellow-400 text-yellow-900 text-sm font-bold px-4 py-2 rounded-full shadow-lg mb-4 whitespace-nowrap"
-                  >
-                    {currentReward.isNew
-                      ? `🎉 NEW ${currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉`
-                      : `✨ ${currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! ✨`}
-                  </motion.div>
-
-                  {/* Sticker/Accessory image with bounce animation */}
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: [0, 1.2, 1] }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                  >
-                    {currentReward.collectible.imageUrl ? (
-                      <img
-                        src={currentReward.collectible.imageUrl}
-                        alt={currentReward.collectible.displayName}
-                        className="w-32 h-32 object-contain mx-auto rounded-2xl bg-white/20 p-2"
-                        onError={(e) => {
-                          // Fallback if image fails to load
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <div className={`text-7xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
-                      {displayInfo.emoji}
-                    </div>
-                  </motion.div>
+              </motion.div>
+            ) : (
+              /* Collectible reward - show image directly without box */
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.2, 1] }}
+                transition={{ duration: 0.5, type: 'spring' }}
+                className="mb-6"
+              >
+                {currentReward.collectible.imageUrl ? (
+                  <img
+                    src={currentReward.collectible.imageUrl}
+                    alt={currentReward.collectible.displayName}
+                    className="w-48 h-48 object-contain mx-auto drop-shadow-2xl"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none';
+                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <div className={`text-8xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
+                  {displayInfo.emoji}
                 </div>
-              )}
-            </motion.div>
+              </motion.div>
+            )}
 
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
