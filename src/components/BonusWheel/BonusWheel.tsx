@@ -495,27 +495,42 @@ export function BonusWheel({
                       {displayInfo.emoji}
                     </div>
                   </motion.div>
+
+                  {/* Collectible name inside the card */}
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-white font-bold text-lg mt-3"
+                  >
+                    {currentReward.collectible.displayName}
+                  </motion.p>
                 </div>
               )}
             </motion.div>
 
-            <motion.h2
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="text-3xl font-bold text-white mb-2"
-            >
-              {displayInfo.title}
-            </motion.h2>
+            {/* Only show title/subtitle below card for points rewards */}
+            {currentReward.type === 'points' && (
+              <>
+                <motion.h2
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="text-3xl font-bold text-white mb-2"
+                >
+                  {displayInfo.title}
+                </motion.h2>
 
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-white/80 text-lg mb-6"
-            >
-              {displayInfo.subtitle}
-            </motion.p>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-white/80 text-lg mb-6"
+                >
+                  {displayInfo.subtitle}
+                </motion.p>
+              </>
+            )}
 
             {/* Tokens remaining indicator */}
             {tokensRemaining > 1 && (
@@ -523,7 +538,7 @@ export function BonusWheel({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.5 }}
-                className="text-yellow-300 text-sm mb-4"
+                className={`text-yellow-300 text-sm mb-4 ${currentReward.type !== 'points' ? 'mt-4' : ''}`}
               >
                 🎟️ {tokensRemaining - 1} more {tokensRemaining - 1 === 1 ? 'spin' : 'spins'} remaining!
               </motion.p>
@@ -536,7 +551,7 @@ export function BonusWheel({
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleContinue}
-              className="bg-white text-purple-700 font-bold py-4 px-10 rounded-full text-xl shadow-lg"
+              className={`bg-white text-purple-700 font-bold py-4 px-10 rounded-full text-xl shadow-lg ${currentReward.type !== 'points' && tokensRemaining <= 1 ? 'mt-4' : ''}`}
             >
               {tokensRemaining > 1 ? 'Spin Again!' : 'Awesome!'}
             </motion.button>
