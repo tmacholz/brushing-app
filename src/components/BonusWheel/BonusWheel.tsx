@@ -460,26 +460,35 @@ export function BonusWheel({
                 </motion.div>
               </motion.div>
             ) : (
-              /* Collectible reward - show image directly without box */
+              /* Collectible reward - show image with rounded border and shine effect */
               <motion.div
                 initial={{ scale: 0 }}
                 animate={{ scale: [0, 1.2, 1] }}
                 transition={{ duration: 0.5, type: 'spring' }}
-                className="mb-6"
+                className="mb-6 relative"
               >
-                {currentReward.collectible.imageUrl ? (
-                  <img
-                    src={currentReward.collectible.imageUrl}
-                    alt={currentReward.collectible.displayName}
-                    className="w-48 h-48 object-contain mx-auto drop-shadow-2xl"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none';
-                      (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                    }}
+                <div className="bg-gradient-to-br from-yellow-300 to-amber-400 rounded-2xl p-3 shadow-xl relative overflow-hidden">
+                  {/* Shine effect */}
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
                   />
-                ) : null}
-                <div className={`text-8xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
-                  {displayInfo.emoji}
+                  {currentReward.collectible.imageUrl ? (
+                    <img
+                      src={currentReward.collectible.imageUrl}
+                      alt={currentReward.collectible.displayName}
+                      className="w-40 h-40 object-contain mx-auto rounded-xl bg-white/30 p-2 relative"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`text-8xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
+                    {displayInfo.emoji}
+                  </div>
                 </div>
               </motion.div>
             )}
