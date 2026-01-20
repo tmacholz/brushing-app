@@ -19,7 +19,7 @@ import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from 
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl } from '../services/petAudio';
-import type { CharacterPosition, ChestReward, TaskCheckInResult } from '../types';
+import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
 // Helper to replace any remaining placeholder tokens before TTS
@@ -827,8 +827,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
               backgroundUrl={backgroundImage}
               childSpriteUrl={currentChildSprite}
               petSpriteUrl={currentPetSprite}
-              childPosition={(segmentForCompositing?.childPosition as CharacterPosition) || 'center'}
-              petPosition={(segmentForCompositing?.petPosition as CharacterPosition) || 'right'}
             />
           </motion.div>
         ) : backgroundImage ? (

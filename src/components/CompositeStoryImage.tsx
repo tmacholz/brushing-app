@@ -1,44 +1,32 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import type { CharacterPosition } from '../types';
 
 interface CompositeStoryImageProps {
   backgroundUrl: string | null;
   childSpriteUrl?: string | null;
   petSpriteUrl?: string | null;
-  childPosition?: CharacterPosition;
-  petPosition?: CharacterPosition;
+  // Border color for portrait circles (defaults to white)
+  borderColor?: string;
   className?: string;
 }
 
-// Position styles for character placement
-const positionStyles: Record<CharacterPosition, string> = {
-  'left': 'left-[15%] -translate-x-1/2',
-  'center': 'left-1/2 -translate-x-1/2',
-  'right': 'left-[85%] -translate-x-1/2',
-  'off-screen': 'hidden',
-};
-
-// Animation variants for characters
-const characterVariants = {
+// Animation variants for portrait circles
+const portraitVariants = {
   hidden: {
     opacity: 0,
-    y: 30,
-    scale: 0.9,
+    scale: 0.8,
   },
   visible: {
     opacity: 1,
-    y: 0,
     scale: 1,
     transition: {
       type: 'spring' as const,
-      stiffness: 200,
-      damping: 20,
+      stiffness: 300,
+      damping: 25,
     },
   },
   exit: {
     opacity: 0,
-    y: -20,
-    scale: 0.95,
+    scale: 0.9,
     transition: {
       duration: 0.2,
     },
@@ -49,12 +37,11 @@ export function CompositeStoryImage({
   backgroundUrl,
   childSpriteUrl,
   petSpriteUrl,
-  childPosition = 'center',
-  petPosition = 'right',
+  borderColor = '#ffffff',
   className = '',
 }: CompositeStoryImageProps) {
-  const showChild = childSpriteUrl && childPosition !== 'off-screen';
-  const showPet = petSpriteUrl && petPosition !== 'off-screen';
+  const showChild = !!childSpriteUrl;
+  const showPet = !!petSpriteUrl;
 
   return (
     <div className={`relative w-full h-full overflow-hidden ${className}`}>
@@ -77,42 +64,61 @@ export function CompositeStoryImage({
       {/* Gradient overlay for text readability */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/30 pointer-events-none" />
 
-      {/* Character layer - Child sprite */}
+      {/* Character portraits - Circle overlays in corners */}
+      {/* Child portrait - Bottom left corner */}
       <AnimatePresence mode="wait">
         {showChild && (
-          <motion.img
-            key={`child-${childSpriteUrl}-${childPosition}`}
-            src={childSpriteUrl}
-            alt=""
-            className={`absolute bottom-0 h-[55%] w-auto max-w-[40%] object-contain ${positionStyles[childPosition]}`}
-            variants={characterVariants}
+          <motion.div
+            key={`child-portrait-${childSpriteUrl}`}
+            className="absolute bottom-3 left-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24"
+            variants={portraitVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
-            style={{
-              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
-            }}
-          />
+          >
+            <div
+              className="w-full h-full rounded-full overflow-hidden"
+              style={{
+                border: `3px solid ${borderColor}`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2)',
+              }}
+            >
+              <img
+                src={childSpriteUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Character layer - Pet sprite */}
+      {/* Pet portrait - Bottom right corner */}
       <AnimatePresence mode="wait">
         {showPet && (
-          <motion.img
-            key={`pet-${petSpriteUrl}-${petPosition}`}
-            src={petSpriteUrl}
-            alt=""
-            className={`absolute bottom-0 h-[40%] w-auto max-w-[35%] object-contain ${positionStyles[petPosition]}`}
-            variants={characterVariants}
+          <motion.div
+            key={`pet-portrait-${petSpriteUrl}`}
+            className="absolute bottom-3 right-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24"
+            variants={portraitVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
             transition={{ delay: 0.1 }}
-            style={{
-              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))',
-            }}
-          />
+          >
+            <div
+              className="w-full h-full rounded-full overflow-hidden"
+              style={{
+                border: `3px solid ${borderColor}`,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2)',
+              }}
+            >
+              <img
+                src={petSpriteUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

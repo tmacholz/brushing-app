@@ -68,7 +68,13 @@ interface Segment {
   storyboard_location_id: string | null;
   storyboard_character_ids: string[] | null;
   storyboard_object_ids: string[] | null;
+  // Character expression overlays (circle portraits in corners)
+  child_pose: string | null;  // Expression: happy, sad, surprised, worried, determined, excited
+  pet_pose: string | null;    // Expression: happy, sad, surprised, worried, determined, excited
 }
+
+// Valid expressions for character portraits
+const EXPRESSIONS = ['happy', 'sad', 'surprised', 'worried', 'determined', 'excited'] as const;
 
 interface Chapter {
   id: string;
@@ -2934,6 +2940,64 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                         <option value="high-angle">High-angle</option>
                                         <option value="bird's eye">Bird's eye</option>
                                         <option value="dutch angle">Dutch angle</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Character Expressions Row */}
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-pink-400">👦</span>
+                                      <select
+                                        value={segment.child_pose || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ childPose: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { child_pose: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update child expression:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-pink-500/20 text-pink-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-pink-500"
+                                      >
+                                        <option value="">Child expression...</option>
+                                        {EXPRESSIONS.map(expr => (
+                                          <option key={expr} value={expr}>{expr.charAt(0).toUpperCase() + expr.slice(1)}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-orange-400">🐕</span>
+                                      <select
+                                        value={segment.pet_pose || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ petPose: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { pet_pose: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update pet expression:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                      >
+                                        <option value="">Pet expression...</option>
+                                        {EXPRESSIONS.map(expr => (
+                                          <option key={expr} value={expr}>{expr.charAt(0).toUpperCase() + expr.slice(1)}</option>
+                                        ))}
                                       </select>
                                     </div>
                                   </div>

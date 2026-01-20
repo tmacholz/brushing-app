@@ -452,10 +452,10 @@ function getRandomBrushingPrompt(zone: string): string {
   return prompts[Math.floor(Math.random() * prompts.length)];
 }
 
-// Valid poses for character overlay system
-const CHILD_POSES = ['happy', 'excited', 'surprised', 'worried', 'walking'] as const;
-const PET_POSES = ['happy', 'excited', 'alert', 'worried', 'following'] as const;
-const POSITIONS = ['left', 'center', 'right', 'off-screen'] as const;
+// Valid expressions for character portrait overlay system
+// Unified expressions for both child and pet (circle portrait style)
+const EXPRESSIONS = ['happy', 'sad', 'surprised', 'worried', 'determined', 'excited'] as const;
+export type Expression = typeof EXPRESSIONS[number];
 
 export interface GeneratedChapter {
   chapterNumber: number;
@@ -469,11 +469,9 @@ export interface GeneratedChapter {
     durationSeconds: number;
     brushingZone: string | null;
     brushingPrompt: string | null;
-    // Character overlay system fields
-    childPose: string | null;
-    petPose: string | null;
-    childPosition: string;
-    petPosition: string;
+    // Character expression fields (stored as pose fields for DB compatibility)
+    childPose: string | null;  // Expression: happy, sad, surprised, worried, determined, excited
+    petPose: string | null;    // Expression: happy, sad, surprised, worried, determined, excited
   }[];
 }
 
@@ -547,17 +545,15 @@ ${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : 
 - Creates suspense by leaving an existing situation unresolved
 - Makes the reader wonder about the outcome of the current scene`}
 
-IMPORTANT - CHARACTER OVERLAY SYSTEM:
-For each segment, provide character poses and positions (images will be generated separately via storyboard):
-- "childPose": The child's expression/pose. Options: "happy", "excited", "surprised", "worried", "walking", or null if child not in scene.
-- "petPose": The pet's expression/pose. Options: "happy", "excited", "alert", "worried", "following", or null if pet not in scene.
-- "childPosition": Where the child appears. Options: "left", "center", "right", or "off-screen".
-- "petPosition": Where the pet appears. Options: "left", "center", "right", or "off-screen".
+IMPORTANT - CHARACTER EXPRESSION SYSTEM:
+For each segment, provide character expressions (portrait overlays will be shown in corner circles):
+- "childExpression": The child's facial expression. Options: "happy", "sad", "surprised", "worried", "determined", "excited", or null if child not featured in this segment.
+- "petExpression": The pet's facial expression. Options: "happy", "sad", "surprised", "worried", "determined", "excited", or null if pet not featured in this segment.
 
-Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
+Choose expressions that match the emotional content of each segment.
 
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "childExpression": "happy", "petExpression": "happy"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{
@@ -567,10 +563,8 @@ Respond with ONLY JSON:
       segments: {
         segmentOrder: number;
         text: string;
-        childPose?: string | null;
-        petPose?: string | null;
-        childPosition?: string;
-        petPosition?: string;
+        childExpression?: string | null;
+        petExpression?: string | null;
       }[];
       cliffhanger: string;
       nextChapterTeaser: string;
@@ -580,19 +574,13 @@ Respond with ONLY JSON:
       const zone = BRUSHING_ZONES[idx % BRUSHING_ZONES.length];
       const hasBrushingPrompt = idx === 1 || idx === 3 || idx === 4;
 
-      // Validate and default pose/position values
-      const childPose = segment.childPose && CHILD_POSES.includes(segment.childPose as typeof CHILD_POSES[number])
-        ? segment.childPose
+      // Validate expression values (stored in childPose/petPose fields for DB compatibility)
+      const childPose = segment.childExpression && EXPRESSIONS.includes(segment.childExpression as Expression)
+        ? segment.childExpression
         : 'happy';
-      const petPose = segment.petPose && PET_POSES.includes(segment.petPose as typeof PET_POSES[number])
-        ? segment.petPose
+      const petPose = segment.petExpression && EXPRESSIONS.includes(segment.petExpression as Expression)
+        ? segment.petExpression
         : 'happy';
-      const childPosition = segment.childPosition && POSITIONS.includes(segment.childPosition as typeof POSITIONS[number])
-        ? segment.childPosition
-        : 'center';
-      const petPosition = segment.petPosition && POSITIONS.includes(segment.petPosition as typeof POSITIONS[number])
-        ? segment.petPosition
-        : 'right';
 
       return {
         ...segment,
@@ -601,8 +589,6 @@ Respond with ONLY JSON:
         brushingPrompt: hasBrushingPrompt ? getRandomBrushingPrompt(zone) : null,
         childPose,
         petPose,
-        childPosition,
-        petPosition,
       };
     });
 

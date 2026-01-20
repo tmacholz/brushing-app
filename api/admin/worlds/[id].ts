@@ -178,8 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           for (const segment of chapter.segments) {
             await sql`
-              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, child_pose, pet_pose, child_position, pet_position)
-              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.childPose}, ${segment.petPose}, ${segment.childPosition}, ${segment.petPosition})
+              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, child_pose, pet_pose)
+              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.childPose}, ${segment.petPose})
             `;
           }
         }

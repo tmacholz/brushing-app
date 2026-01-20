@@ -1093,23 +1093,23 @@ CRITICAL - NO TEXT:
   return res.status(200).json({ coverImageUrl: result.url, storyId });
 }
 
-// Character sprite generation (transparent PNG for overlay compositing)
+// Character portrait generation (for circle overlay compositing)
 interface SpriteGenerationRequest {
   type: 'sprite';
   ownerType: 'child' | 'pet';
   ownerId: string;
-  poseKey: string;
+  poseKey: string;  // Now represents expression: happy, sad, surprised, worried, determined, excited
   sourceAvatarUrl: string;
-  posePrompt: string;
+  posePrompt: string;  // Expression description
 }
 
-// Style prefix for sprite generation (white background for removal)
-const SPRITE_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
+// Style prefix for portrait generation (white background for removal, will be circle-masked in UI)
+const PORTRAIT_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
 PURE WHITE #FFFFFF BACKGROUND (critical - solid white background, no gradients or shadows),
-full body character sprite suitable for compositing over scene backgrounds,
-clean sharp edges for easy overlay, Studio Ghibli inspired soft aesthetic,
-no ground shadow, character on plain white background,
-warm inviting colors, friendly approachable character design.`;
+PORTRAIT SHOT - shoulders up, head and upper chest only, NO full body,
+centered face with clear expressive features, Studio Ghibli inspired soft aesthetic,
+warm inviting colors, friendly approachable character design,
+clean sharp edges suitable for circle masking.`;
 
 async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelResponse) {
   const { ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt } = req;
@@ -1126,13 +1126,13 @@ async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelR
     return res.status(400).json({ error: 'Failed to fetch source avatar image' });
   }
 
-  // Build the prompt for sprite generation
-  const prompt = `${SPRITE_STYLE}
+  // Build the prompt for portrait generation
+  const prompt = `${PORTRAIT_STYLE}
 
 REFERENCE CHARACTER IMAGE PROVIDED:
 [Image 1] This is the character's established appearance. You MUST match their features EXACTLY.
 
-POSE TO CREATE:
+EXPRESSION TO CREATE:
 ${posePrompt}
 
 CRITICAL REQUIREMENTS:
@@ -1140,13 +1140,13 @@ CRITICAL REQUIREMENTS:
   - Face shape, features, and expression style
   - Hair color, style, and design
   - Skin tone and overall coloring
-  - Clothing and accessories (if visible)
-  - Body proportions and size
-- Create a FULL BODY sprite showing the entire character from head to toe
-- The background MUST be pure white #FFFFFF (solid white, no gradients or shadows)
-- Clean, sharp edges suitable for compositing over other images
-- The pose should be: ${posePrompt}
-- Character should be centered in the frame with padding
+  - Any distinctive features (ears, horns, etc. for pets)
+- Create a PORTRAIT showing HEAD AND SHOULDERS ONLY (no full body!)
+- The facial expression should clearly convey: ${posePrompt}
+- The background MUST be pure white #FFFFFF (solid white, no gradients)
+- Square composition, character centered
+- Face should be the focal point, expressive and clear
+- Clean edges suitable for circle mask overlay
 - Maintain the whimsical children's book illustration style
 - No text, labels, or watermarks`;
 

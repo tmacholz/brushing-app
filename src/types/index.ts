@@ -154,8 +154,8 @@ export type NarrationSequenceItem =
   | { type: 'audio'; url: string }
   | { type: 'name'; placeholder: 'CHILD' | 'PET' };
 
-// Character position for overlay compositing
-export type CharacterPosition = 'left' | 'center' | 'right' | 'off-screen';
+// Character expression for portrait overlay circles
+export type Expression = 'happy' | 'sad' | 'surprised' | 'worried' | 'determined' | 'excited';
 
 export interface StorySegment {
   id: string;
@@ -167,11 +167,9 @@ export interface StorySegment {
   imagePrompt: string | null; // Prompt used to generate the image
   // Audio narration as a sequence of clips and name placeholders for gapless playback
   narrationSequence: NarrationSequenceItem[] | null;
-  // Character overlay system fields
-  childPose: string | null; // e.g., 'happy', 'excited', 'surprised', 'worried', 'walking'
-  petPose: string | null; // e.g., 'happy', 'excited', 'alert', 'worried', 'following'
-  childPosition: CharacterPosition;
-  petPosition: CharacterPosition;
+  // Character portrait overlay system (circle portraits in fixed corners)
+  childPose: Expression | null; // Child expression: happy, sad, surprised, worried, determined, excited
+  petPose: Expression | null; // Pet expression: happy, sad, surprised, worried, determined, excited
   backgroundPrompt: string | null; // Prompt for background-only image (no main characters)
 }
 

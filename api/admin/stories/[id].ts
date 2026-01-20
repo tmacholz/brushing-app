@@ -86,7 +86,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle,
         storyboardFocus, storyboardContinuity, storyboardExclude,
         // Storyboard ID-based fields (linked to visualAssets)
-        storyboardLocationId, storyboardCharacterIds, storyboardObjectIds
+        storyboardLocationId, storyboardCharacterIds, storyboardObjectIds,
+        // Character expression overlays
+        childPose, petPose
       } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
@@ -109,7 +111,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           referenceIds !== undefined || storyboardLocation !== undefined || storyboardCharacters !== undefined ||
           storyboardShotType !== undefined || storyboardCameraAngle !== undefined || storyboardFocus !== undefined ||
           storyboardContinuity !== undefined || storyboardExclude !== undefined ||
-          storyboardLocationId !== undefined || storyboardCharacterIds !== undefined || storyboardObjectIds !== undefined;
+          storyboardLocationId !== undefined || storyboardCharacterIds !== undefined || storyboardObjectIds !== undefined ||
+          childPose !== undefined || petPose !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -170,7 +173,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             storyboard_exclude = CASE WHEN ${storyboardExclude !== undefined} THEN ${storyboardExclude ?? null} ELSE storyboard_exclude END,
             storyboard_location_id = CASE WHEN ${storyboardLocationId !== undefined} THEN ${storyboardLocationId ?? null} ELSE storyboard_location_id END,
             storyboard_character_ids = CASE WHEN ${storyboardCharacterIds !== undefined} THEN ${storyboardCharacterIds ?? null} ELSE storyboard_character_ids END,
-            storyboard_object_ids = CASE WHEN ${storyboardObjectIds !== undefined} THEN ${storyboardObjectIds ?? null} ELSE storyboard_object_ids END
+            storyboard_object_ids = CASE WHEN ${storyboardObjectIds !== undefined} THEN ${storyboardObjectIds ?? null} ELSE storyboard_object_ids END,
+            child_pose = CASE WHEN ${childPose !== undefined} THEN ${childPose ?? null} ELSE child_pose END,
+            pet_pose = CASE WHEN ${petPose !== undefined} THEN ${petPose ?? null} ELSE pet_pose END
           WHERE id = ${segmentId} RETURNING *
         `;
 
@@ -621,8 +626,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 brushingPrompt: s.brushing_prompt,
                 childPose: s.child_pose,
                 petPose: s.pet_pose,
-                childPosition: s.child_position,
-                petPosition: s.pet_position,
               })),
             };
           })
