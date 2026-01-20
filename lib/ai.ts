@@ -421,6 +421,14 @@ ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger
 
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
 Use [CHILD] and [PET] as placeholders in the story text.
+
+IMPORTANT - [PET] DESCRIPTIONS:
+The pet companion could be ANY type of creature (animal, robot, magical being, fish, etc.).
+- NEVER use species-specific physical descriptions (no "wagged tail", "fuzzy nose", "flapped wings", "purred", etc.)
+- ONLY describe [PET]'s expressions and emotions (smiled, looked excited, seemed worried, bounced happily)
+- Use universal actions: "jumped", "bounced", "nodded", "looked at", "moved closer"
+- AVOID: tail, fur, paws, wings, fins, antenna, or any body part references
+
 ${isFirstChapter ? 'Start with excitement!' : 'Begin with brief recap.'}
 ${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : `End with an exciting cliffhanger that:
 - Poses a QUESTION about what will happen next (e.g., "Will [CHILD] and [PET] reach the cave in time?" or "What could be making that strange sound?")

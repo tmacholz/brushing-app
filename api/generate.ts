@@ -182,20 +182,33 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   // Determine if we have storyboard data to build from
   const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
 
+  // Using overlay system - child and pet will be composited separately
+  const usingOverlaySystem = !includeUser && !includePet;
+
+  // Helper to strip [CHILD] and [PET] placeholders from text (they're overlaid separately)
+  const stripMainCharacters = (text: string): string => {
+    return text
+      .replace(/\[CHILD\]/g, 'the young hero')
+      .replace(/\[PET\]/g, 'the companion');
+  };
+
   // Build scene description: use manual prompt override, or build from storyboard + segment text
   let sceneDescription: string;
   if (prompt) {
     // Manual override takes precedence
-    sceneDescription = prompt;
+    sceneDescription = usingOverlaySystem ? stripMainCharacters(prompt) : prompt;
   } else if (hasStoryboard && segmentText) {
-    // Build from storyboard data
-    sceneDescription = `Scene context: ${segmentText}`;
+    // Build from storyboard data - strip character names for overlay system
+    const cleanText = usingOverlaySystem ? stripMainCharacters(segmentText) : segmentText;
+    sceneDescription = `Scene context: ${cleanText}`;
     if (storyboardFocus) {
-      sceneDescription += `\n\nVisual emphasis: ${storyboardFocus}`;
+      const cleanFocus = usingOverlaySystem ? stripMainCharacters(storyboardFocus) : storyboardFocus;
+      sceneDescription += `\n\nVisual emphasis: ${cleanFocus}`;
     }
   } else if (segmentText) {
     // Fallback to just segment text
-    sceneDescription = `Illustrate this scene: ${segmentText}`;
+    const cleanText = usingOverlaySystem ? stripMainCharacters(segmentText) : segmentText;
+    sceneDescription = `Illustrate this scene: ${cleanText}`;
   } else {
     return res.status(400).json({ error: 'Missing scene data: provide prompt, or segmentText with storyboard data' });
   }
@@ -363,12 +376,23 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   }
 
   // Add exclusions (negative prompt)
-  if (storyboardExclude && storyboardExclude.length > 0) {
+  const hasExclusions = (storyboardExclude && storyboardExclude.length > 0) || usingOverlaySystem;
+  if (hasExclusions) {
     fullPrompt += '=== DO NOT INCLUDE ===\n';
     fullPrompt += 'The following elements must NOT appear in this image:\n';
-    storyboardExclude.forEach(item => {
-      fullPrompt += `- NO ${item}\n`;
-    });
+
+    // When using overlay system, explicitly exclude child and pet characters
+    if (usingOverlaySystem) {
+      fullPrompt += '- NO children or child characters (they will be added as a separate overlay)\n';
+      fullPrompt += '- NO pets, animal companions, or sidekick creatures (they will be added as a separate overlay)\n';
+      fullPrompt += '- This is a BACKGROUND ONLY image - show only the environment, setting, and any NPCs\n';
+    }
+
+    if (storyboardExclude && storyboardExclude.length > 0) {
+      storyboardExclude.forEach(item => {
+        fullPrompt += `- NO ${item}\n`;
+      });
+    }
     fullPrompt += '\n';
   }
 
