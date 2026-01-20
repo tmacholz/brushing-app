@@ -98,12 +98,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // GET - List all collectibles
   if (req.method === 'GET') {
     try {
-      const { type, worldId, rarity } = req.query;
+      const { type, worldId, rarity, isPublished } = req.query;
 
       const collectibles = await getCollectibles({
         type: type as 'sticker' | 'accessory' | undefined,
         worldId: worldId as string | undefined,
         rarity: rarity as string | undefined,
+        isPublished: isPublished === 'true' ? true : isPublished === 'false' ? false : undefined,
       });
 
       return res.status(200).json({ collectibles: collectibles.map(formatCollectible) });
@@ -115,18 +116,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST - Create or generate collectibles
   if (req.method === 'POST') {
-    const { action, worldId, worldName, type, name, displayName, description, imageUrl, rarity, petId } = req.body;
+    const { action, worldId, worldName, type, name, displayName, description, imageUrl, rarity, petId, customPrompt } = req.body;
 
     // Generate sticker with AI
     if (action === 'generate') {
       try {
         let sticker;
+        let worldDescription: string | undefined;
+        let worldThemeKey: string | undefined;
+
+        // Fetch world details if worldId is provided
+        if (worldId) {
+          const [world] = await sql`SELECT name, description FROM worlds WHERE id = ${worldId}`;
+          worldDescription = world?.description;
+          worldThemeKey = world?.name; // e.g., 'magical-forest' for theme lookup
+        }
 
         if (worldId && worldName) {
-          sticker = await generateWorldSticker(worldId, worldName);
+          sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription, customPrompt);
           sticker = { ...sticker, worldId };
         } else {
-          sticker = await generateUniversalSticker();
+          sticker = await generateUniversalSticker(customPrompt);
         }
 
         const saved = await saveSticker({
@@ -135,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           description: sticker.description,
           imageUrl: sticker.imageUrl,
           worldId: (sticker as { worldId?: string }).worldId || null,
-          rarity: 'uncommon',
+          rarity: rarity || 'uncommon',
         });
 
         return res.status(200).json({ collectible: formatCollectible(saved) });
@@ -150,15 +160,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { count = 3 } = req.body;
       try {
         const results = [];
+        let worldDescription: string | undefined;
+        let worldThemeKey: string | undefined;
+
+        // Fetch world details once if worldId is provided
+        if (worldId) {
+          const [world] = await sql`SELECT name, description FROM worlds WHERE id = ${worldId}`;
+          worldDescription = world?.description;
+          worldThemeKey = world?.name; // e.g., 'magical-forest' for theme lookup
+        }
 
         for (let i = 0; i < count; i++) {
           let sticker;
 
           if (worldId && worldName) {
-            sticker = await generateWorldSticker(worldId, worldName);
+            sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription, customPrompt);
             sticker = { ...sticker, worldId };
           } else {
-            sticker = await generateUniversalSticker();
+            sticker = await generateUniversalSticker(customPrompt);
           }
 
           const saved = await saveSticker({
@@ -167,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             description: sticker.description,
             imageUrl: sticker.imageUrl,
             worldId: (sticker as { worldId?: string }).worldId || null,
-            rarity: 'uncommon',
+            rarity: rarity || 'uncommon',
           });
 
           results.push(formatCollectible(saved));

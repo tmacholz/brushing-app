@@ -8,8 +8,9 @@ import { PetAudioManager } from './screens/PetAudioManager';
 import { PetManager } from './screens/PetManager';
 import { PoseEditor } from './screens/PoseEditor';
 import { SpriteManager } from './screens/SpriteManager';
+import { CollectiblesManager } from './screens/CollectiblesManager';
 
-type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'pet-manager' | 'pose-editor' | 'sprite-manager';
+type AdminScreen = 'dashboard' | 'world-editor' | 'story-editor' | 'pet-audio' | 'pet-manager' | 'pose-editor' | 'sprite-manager' | 'collectibles';
 
 interface AdminState {
   screen: AdminScreen;
@@ -137,6 +138,7 @@ export function AdminApp() {
               onPetAudio={() => navigateTo('pet-audio')}
               onPoseEditor={() => navigateTo('pose-editor')}
               onSpriteManager={() => navigateTo('sprite-manager')}
+              onCollectibles={() => navigateTo('collectibles')}
               onLogout={handleLogout}
             />
           </motion.div>
@@ -212,6 +214,17 @@ export function AdminApp() {
             exit={{ opacity: 0, x: -20 }}
           >
             <SpriteManager onBack={() => navigateTo('dashboard')} />
+          </motion.div>
+        )}
+
+        {adminState.screen === 'collectibles' && (
+          <motion.div
+            key="collectibles"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+          >
+            <CollectiblesManager onBack={() => navigateTo('dashboard')} />
           </motion.div>
         )}
       </AnimatePresence>

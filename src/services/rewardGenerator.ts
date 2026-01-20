@@ -1,10 +1,10 @@
 import type { ChestReward, Collectible } from '../types';
 
-// Reward probability distribution
-const REWARD_WEIGHTS = {
-  points: 60,      // 60% chance for bonus points
-  sticker: 35,     // 35% chance for a sticker
-  accessory: 5,    // 5% chance for an accessory (rare!)
+// Base reward probability weights (adjusted dynamically based on availability)
+const BASE_REWARD_WEIGHTS = {
+  points: 60,      // Base chance for bonus points
+  sticker: 35,     // Base chance for a sticker (if available)
+  accessory: 5,    // Base chance for an accessory (rare!)
 };
 
 // Point amounts with their relative weights
@@ -31,14 +31,22 @@ function weightedRandom<T extends { weight: number }>(items: T[]): T {
 }
 
 /**
- * Select reward type based on weights
+ * Select reward type based on weights, considering availability
  */
-function selectRewardType(): 'points' | 'sticker' | 'accessory' {
-  const types = [
-    { type: 'points' as const, weight: REWARD_WEIGHTS.points },
-    { type: 'sticker' as const, weight: REWARD_WEIGHTS.sticker },
-    { type: 'accessory' as const, weight: REWARD_WEIGHTS.accessory },
+function selectRewardType(stickersAvailable: boolean, accessoriesAvailable: boolean): 'points' | 'sticker' | 'accessory' {
+  const types: { type: 'points' | 'sticker' | 'accessory'; weight: number }[] = [
+    { type: 'points', weight: BASE_REWARD_WEIGHTS.points },
   ];
+
+  // Only include sticker if there are uncollected stickers
+  if (stickersAvailable) {
+    types.push({ type: 'sticker', weight: BASE_REWARD_WEIGHTS.sticker });
+  }
+
+  // Only include accessory if there are uncollected accessories
+  if (accessoriesAvailable) {
+    types.push({ type: 'accessory', weight: BASE_REWARD_WEIGHTS.accessory });
+  }
 
   return weightedRandom(types).type;
 }
@@ -55,22 +63,58 @@ function generatePointReward(): ChestReward {
 }
 
 /**
- * Fetch available collectibles from the API
+ * Fetch available collectibles from the API, filtering out already-collected ones
+ * Only fetches published collectibles
+ * NOTE: Does not filter by worldId - that selection happens locally to allow fallback to universal
  */
-async function fetchCollectibles(type: 'sticker' | 'accessory', worldId?: string): Promise<Collectible[]> {
+async function fetchCollectibles(
+  type: 'sticker' | 'accessory',
+  alreadyCollectedIds: string[] = []
+): Promise<Collectible[]> {
   try {
-    const params = new URLSearchParams({ type });
-    if (worldId) params.append('worldId', worldId);
+    const params = new URLSearchParams({ type, isPublished: 'true' });
+    const url = `/api/admin/collectibles?${params}`;
+    console.log('[RewardGenerator] Fetching collectibles:', url);
 
-    const response = await fetch(`/api/admin/collectibles?${params}`);
-    if (!response.ok) return [];
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.log('[RewardGenerator] Fetch failed:', response.status);
+      return [];
+    }
 
     const data = await response.json();
-    return data.collectibles || [];
+    const allCollectibles: Collectible[] = data.collectibles || [];
+    console.log('[RewardGenerator] Got collectibles:', allCollectibles.length, 'already collected:', alreadyCollectedIds.length);
+
+    // Filter out already-collected items to ensure uniqueness
+    const available = allCollectibles.filter(c => !alreadyCollectedIds.includes(c.id));
+    console.log('[RewardGenerator] Available after filtering:', available.length);
+    return available;
   } catch (error) {
     console.error('Error fetching collectibles:', error);
     return [];
   }
+}
+
+/**
+ * Check how many uncollected stickers are available
+ * Used by the wheel to determine if sticker segments should be shown
+ */
+export async function getAvailableStickersCount(
+  collectedStickers: string[] = []
+): Promise<number> {
+  const available = await fetchCollectibles('sticker', collectedStickers);
+  return available.length;
+}
+
+/**
+ * Check how many uncollected accessories are available
+ */
+export async function getAvailableAccessoriesCount(
+  collectedAccessories: string[] = []
+): Promise<number> {
+  const available = await fetchCollectibles('accessory', collectedAccessories);
+  return available.length;
 }
 
 /**
@@ -108,6 +152,7 @@ function selectCollectible(collectibles: Collectible[], worldId?: string): Colle
 
 /**
  * Generate a mystery chest reward
+ * Stickers and accessories are always unique - once collected, they won't appear again.
  *
  * @param worldId - Current world ID (for themed rewards)
  * @param collectedStickers - IDs of stickers the child already has
@@ -118,17 +163,27 @@ export async function generateChestReward(
   collectedStickers: string[] = [],
   collectedAccessories: string[] = []
 ): Promise<ChestReward> {
-  const rewardType = selectRewardType();
+  // First, check what collectibles are actually available (not yet collected)
+  const [availableStickers, availableAccessories] = await Promise.all([
+    fetchCollectibles('sticker', collectedStickers),
+    fetchCollectibles('accessory', collectedAccessories),
+  ]);
+
+  const stickersAvailable = availableStickers.length > 0;
+  const accessoriesAvailable = availableAccessories.length > 0;
+
+  // Select reward type based on what's actually available
+  const rewardType = selectRewardType(stickersAvailable, accessoriesAvailable);
 
   if (rewardType === 'points') {
     return generatePointReward();
   }
 
-  // Try to get a collectible
-  const collectibles = await fetchCollectibles(rewardType, worldId);
+  // Get the appropriate pool of available collectibles
+  const collectibles = rewardType === 'sticker' ? availableStickers : availableAccessories;
 
   if (collectibles.length === 0) {
-    // Fallback to points if no collectibles available
+    // This shouldn't happen since we check availability first, but fallback just in case
     return generatePointReward();
   }
 
@@ -138,16 +193,85 @@ export async function generateChestReward(
     return generatePointReward();
   }
 
-  // Check if the child already has this collectible
-  const alreadyCollected =
-    rewardType === 'sticker'
-      ? collectedStickers.includes(selected.id)
-      : collectedAccessories.includes(selected.id);
+  // All selected collectibles are guaranteed to be new since we filtered out collected ones
+  return {
+    type: rewardType,
+    collectible: selected,
+    isNew: true,
+  };
+}
+
+/**
+ * Reward type availability info for building dynamic wheel segments
+ */
+export interface RewardAvailability {
+  stickersAvailable: boolean;
+  stickerCount: number;
+  accessoriesAvailable: boolean;
+  accessoryCount: number;
+}
+
+/**
+ * Check what reward types are available for the wheel
+ */
+export async function getRewardAvailability(
+  collectedStickers: string[] = [],
+  collectedAccessories: string[] = []
+): Promise<RewardAvailability> {
+  console.log('[RewardGenerator] Getting reward availability...');
+  const [stickers, accessories] = await Promise.all([
+    fetchCollectibles('sticker', collectedStickers),
+    fetchCollectibles('accessory', collectedAccessories),
+  ]);
+
+  const result = {
+    stickersAvailable: stickers.length > 0,
+    stickerCount: stickers.length,
+    accessoriesAvailable: accessories.length > 0,
+    accessoryCount: accessories.length,
+  };
+  console.log('[RewardGenerator] Availability result:', result);
+  return result;
+}
+
+/**
+ * Generate a reward of a specific type (used when wheel lands on a specific segment)
+ */
+export async function generateSpecificReward(
+  rewardType: 'points' | 'sticker' | 'accessory',
+  pointAmount?: number,
+  collectedStickers: string[] = [],
+  collectedAccessories: string[] = []
+): Promise<ChestReward> {
+  if (rewardType === 'points') {
+    // If a specific point amount is requested, use it; otherwise generate random
+    if (pointAmount !== undefined) {
+      return { type: 'points', amount: pointAmount };
+    }
+    return generatePointReward();
+  }
+
+  const alreadyCollected = rewardType === 'sticker' ? collectedStickers : collectedAccessories;
+  const collectibles = await fetchCollectibles(
+    rewardType,
+    alreadyCollected
+  );
+
+  if (collectibles.length === 0) {
+    // Fallback to points if no collectibles available
+    return generatePointReward();
+  }
+
+  const selected = selectCollectible(collectibles);
+
+  if (!selected) {
+    return generatePointReward();
+  }
 
   return {
     type: rewardType,
     collectible: selected,
-    isNew: !alreadyCollected,
+    isNew: true,
   };
 }
 

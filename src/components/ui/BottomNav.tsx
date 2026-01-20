@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Home, PawPrint, ShoppingBag, Globe, Settings } from 'lucide-react';
+import { Home, PawPrint, Sticker, Globe, Settings } from 'lucide-react';
 import { useAudio } from '../../context/AudioContext';
 import type { ScreenName } from '../../types';
 
@@ -17,7 +17,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { screen: 'home', icon: Home, label: 'Home' },
   { screen: 'pet-select', icon: PawPrint, label: 'Pets' },
-  { screen: 'shop', icon: ShoppingBag, label: 'Shop' },
+  { screen: 'collection', icon: Sticker, label: 'Collection' },
   { screen: 'story-world-select', icon: Globe, label: 'Worlds' },
   { screen: 'settings', icon: Settings, label: 'Settings' },
 ];

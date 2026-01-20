@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, PawPrint, User, Image } from 'lucide-react';
+import { Plus, Sparkles, LogOut, Globe, BookOpen, Loader2, Volume2, PawPrint, User, Image, Sticker } from 'lucide-react';
 
 interface World {
   id: string;
@@ -20,10 +20,11 @@ interface AdminDashboardProps {
   onPetAudio: () => void;
   onPoseEditor: () => void;
   onSpriteManager: () => void;
+  onCollectibles: () => void;
   onLogout: () => void;
 }
 
-export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onPoseEditor, onSpriteManager, onLogout }: AdminDashboardProps) {
+export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onPoseEditor, onSpriteManager, onCollectibles, onLogout }: AdminDashboardProps) {
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +136,13 @@ export function AdminDashboard({ onSelectWorld, onManagePets, onPetAudio, onPose
             >
               <Image className="w-5 h-5" />
               <span>Character Sprites</span>
+            </button>
+            <button
+              onClick={onCollectibles}
+              className="flex items-center gap-2 px-4 py-3 bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 rounded-xl transition-colors"
+            >
+              <Sticker className="w-5 h-5" />
+              <span>Stickers & Collectibles</span>
             </button>
           </div>
         </div>

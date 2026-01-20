@@ -61,15 +61,23 @@ const universalStickers = [
 
 async function generateStickerImage(
   prompt: string,
-  storageKey: string
+  storageKey: string,
+  customPrompt?: string
 ): Promise<{ url: string; isDataUrl: boolean }> {
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY not configured');
   }
 
+  // If custom prompt provided, augment it with the base prompt
+  const contentPrompt = customPrompt
+    ? `${prompt}
+
+Additional details from user: ${customPrompt}`
+    : prompt;
+
   const fullPrompt = `${STICKER_STYLE}
 
-Create a collectible sticker featuring: ${prompt}
+Create a collectible sticker featuring: ${contentPrompt}
 
 REQUIREMENTS:
 - Circular or badge-shaped design
@@ -126,33 +134,105 @@ REQUIREMENTS:
 
 /**
  * Generate a sticker for a specific world theme
+ * Uses the world's description to create themed stickers
+ * @param customPrompt - Optional user prompt to augment the generation
  */
-export async function generateWorldSticker(worldId: string, worldName: string): Promise<{
+export async function generateWorldSticker(
+  worldId: string,
+  worldName: string,
+  worldDescription?: string,
+  customPrompt?: string
+): Promise<{
   name: string;
   displayName: string;
   description: string;
   imageUrl: string;
 }> {
-  const themes = worldStickerThemes[worldId] || universalStickers;
-  const theme = themes[Math.floor(Math.random() * themes.length)];
+  // If custom prompt is provided, use it directly with world context
+  if (customPrompt) {
+    const timestamp = Date.now();
+    const stickerId = `${worldId.substring(0, 8)}-sticker-${timestamp}`;
 
-  const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
+    const worldContext = worldDescription
+      ? `This sticker is for a world called "${worldName}" which is described as: ${worldDescription}`
+      : `This sticker is for a world called "${worldName}"`;
+
+    const themedPrompt = `A cute collectible item or symbol that would fit in ${worldName}.
+${worldContext}
+
+User's specific request: ${customPrompt}
+
+Use vibrant colors that match the world's theme.
+Make it feel magical and special.`;
+
+    const result = await generateStickerImage(themedPrompt, `stickers/${stickerId}.png`);
+
+    // Try to derive display name from custom prompt
+    const displayName = customPrompt
+      .split(' ')
+      .slice(0, 4)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
+    return {
+      name: stickerId,
+      displayName,
+      description: `A special sticker from ${worldName}`,
+      imageUrl: result.url,
+    };
+  }
+
+  // First, try to use hardcoded themes for known worlds
+  const themes = worldStickerThemes[worldId];
+
+  if (themes) {
+    // Use hardcoded theme for known worlds
+    const theme = themes[Math.floor(Math.random() * themes.length)];
+    const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
+    const timestamp = Date.now();
+    const stickerId = `${worldId}-sticker-${timestamp}`;
+
+    const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
+
+    const iconName = theme.icon
+      .replace(/^a /i, '')
+      .replace(/^an /i, '')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+
+    return {
+      name: stickerId,
+      displayName: iconName,
+      description: `A special sticker from ${worldName}`,
+      imageUrl: result.url,
+    };
+  }
+
+  // For custom worlds, generate a themed sticker based on the world description
   const timestamp = Date.now();
-  const stickerId = `${worldId}-sticker-${timestamp}`;
+  const stickerId = `${worldId.substring(0, 8)}-sticker-${timestamp}`;
 
-  const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
+  // Create a prompt based on the world's description
+  const worldContext = worldDescription
+    ? `This sticker is for a world called "${worldName}" which is described as: ${worldDescription}`
+    : `This sticker is for a world called "${worldName}"`;
 
-  // Generate a name from the icon description
-  const iconName = theme.icon
-    .replace(/^a /i, '')
-    .replace(/^an /i, '')
-    .split(' ')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  const themedPrompt = `A cute collectible item or symbol that would fit in ${worldName}.
+${worldContext}
+
+Create something iconic and recognizable that a child would love to collect.
+Use vibrant colors that match the world's theme.
+Make it feel magical and special.`;
+
+  const result = await generateStickerImage(themedPrompt, `stickers/${stickerId}.png`);
+
+  // Generate a display name based on the world
+  const displayName = `${worldName} Treasure`;
 
   return {
     name: stickerId,
-    displayName: iconName,
+    displayName,
     description: `A special sticker from ${worldName}`,
     imageUrl: result.url,
   };
@@ -160,18 +240,40 @@ export async function generateWorldSticker(worldId: string, worldName: string): 
 
 /**
  * Generate a universal sticker (not tied to a world)
+ * @param customPrompt - Optional user prompt to augment the generation
  */
-export async function generateUniversalSticker(): Promise<{
+export async function generateUniversalSticker(customPrompt?: string): Promise<{
   name: string;
   displayName: string;
   description: string;
   imageUrl: string;
 }> {
-  const theme = universalStickers[Math.floor(Math.random() * universalStickers.length)];
-
-  const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
   const timestamp = Date.now();
   const stickerId = `universal-sticker-${timestamp}`;
+
+  // If custom prompt is provided, use it
+  if (customPrompt) {
+    const prompt = `${customPrompt}. Make it colorful and appealing to children.`;
+    const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
+
+    // Try to derive display name from custom prompt
+    const displayName = customPrompt
+      .split(' ')
+      .slice(0, 4)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+
+    return {
+      name: stickerId,
+      displayName,
+      description: 'A special reward sticker!',
+      imageUrl: result.url,
+    };
+  }
+
+  // Use default theme
+  const theme = universalStickers[Math.floor(Math.random() * universalStickers.length)];
+  const prompt = `${theme.icon}. Use these colors: ${theme.colors}`;
 
   const result = await generateStickerImage(prompt, `stickers/${stickerId}.png`);
 
