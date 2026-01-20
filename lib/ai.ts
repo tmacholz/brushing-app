@@ -172,6 +172,18 @@ export interface StoryPitch {
 }
 
 // Story Bible - comprehensive reference for consistent storytelling and visuals
+// Visual asset with unique ID for stable referencing
+export interface VisualAsset {
+  id: string;                    // Unique ID (e.g., "loc-abc123", "char-def456", "obj-ghi789")
+  name: string;                  // Display name
+  description: string;           // Visual description for image generation
+  mood?: string;                 // For locations
+  personality?: string;          // For characters
+  role?: string;                 // For characters (e.g., "wise mentor", "comic relief")
+  referenceImageUrl?: string;    // Generated reference image
+  source: 'bible' | 'extracted'; // Where it came from
+}
+
 export interface StoryBible {
   // Narrative elements
   tone: string; // e.g., "whimsical and heartwarming with gentle humor"
@@ -183,19 +195,24 @@ export interface StoryBible {
   petRole: string; // How [PET] acts, e.g., "loyal sidekick who provides comic relief"
   characterDynamic: string; // How they interact, e.g., "[CHILD] leads, [PET] encourages and helps"
 
-  // World and visual consistency
-  keyLocations: {
+  // CONSOLIDATED VISUAL ASSETS (replaces keyLocations + recurringCharacters)
+  visualAssets: {
+    locations: VisualAsset[];
+    characters: VisualAsset[];  // NPCs only (not child/pet)
+    objects: VisualAsset[];     // Important items
+  };
+
+  // DEPRECATED: Keep for backwards compatibility during migration
+  keyLocations?: {
     name: string;
-    visualDescription: string; // Detailed visual for image generation
+    visualDescription: string;
     mood: string;
   }[];
-
-  // Supporting characters (NPCs)
-  recurringCharacters: {
+  recurringCharacters?: {
     name: string;
     visualDescription: string;
     personality: string;
-    role: string; // e.g., "wise mentor", "comic relief", "needs help"
+    role: string;
   }[];
 
   // Visual style guide
@@ -207,6 +224,32 @@ export interface StoryBible {
   magicSystem: string | null; // If applicable, how magic works
   stakes: string; // What's at risk, e.g., "The forest animals will lose their home"
   resolution: string; // How it ends (for consistent buildup)
+}
+
+// Generate a unique ID for visual assets
+function generateAssetId(type: 'loc' | 'char' | 'obj'): string {
+  return `${type}-${Math.random().toString(36).substring(2, 10)}`;
+}
+
+// Raw response from AI before we add IDs
+interface RawStoryBibleResponse {
+  tone: string;
+  themes: string[];
+  narrativeStyle: string;
+  childRole: string;
+  petRole: string;
+  characterDynamic: string;
+  visualAssets: {
+    locations: { name: string; description: string; mood?: string }[];
+    characters: { name: string; description: string; personality?: string; role?: string }[];
+    objects: { name: string; description: string }[];
+  };
+  colorPalette: string;
+  lightingStyle: string;
+  artDirection: string;
+  magicSystem: string | null;
+  stakes: string;
+  resolution: string;
 }
 
 export async function generateStoryBible(
@@ -242,22 +285,29 @@ Respond with ONLY this JSON structure:
   "petRole": "How [PET] behaves and helps in THIS specific story",
   "characterDynamic": "How [CHILD] and [PET] interact and support each other",
 
-  "keyLocations": [
-    {
-      "name": "Location Name",
-      "visualDescription": "Detailed visual description for image generation - colors, lighting, key features, atmosphere",
-      "mood": "emotional quality of this place"
-    }
-  ],
-
-  "recurringCharacters": [
-    {
-      "name": "Character Name",
-      "visualDescription": "Detailed visual appearance for consistent image generation",
-      "personality": "2-3 word personality",
-      "role": "their role in the story"
-    }
-  ],
+  "visualAssets": {
+    "locations": [
+      {
+        "name": "Location Name",
+        "description": "Detailed visual description for image generation - colors, lighting, key features, atmosphere",
+        "mood": "emotional quality of this place"
+      }
+    ],
+    "characters": [
+      {
+        "name": "NPC Character Name (NOT [CHILD] or [PET])",
+        "description": "Detailed visual appearance for consistent image generation",
+        "personality": "2-3 word personality",
+        "role": "their role in the story (e.g., 'wise mentor', 'comic relief', 'needs help')"
+      }
+    ],
+    "objects": [
+      {
+        "name": "Important Object Name",
+        "description": "Detailed visual description of the object - appearance, materials, special features"
+      }
+    ]
+  },
 
   "colorPalette": "The dominant colors that should appear throughout the story's images",
   "lightingStyle": "Consistent lighting approach for all scenes",
@@ -268,10 +318,71 @@ Respond with ONLY this JSON structure:
   "resolution": "Brief description of how the story resolves (for proper buildup)"
 }
 
+IMPORTANT for visualAssets:
+- locations: Include 2-4 key places that appear multiple times
+- characters: Include NPCs (allies, mentors, creatures) that appear multiple times. Do NOT include [CHILD] or [PET].
+- objects: Include 1-3 important items central to the plot (magical items, tools, treasures)
+
 Be specific and detailed - this bible will be the source of truth for the entire story!`;
 
   const text = await callGemini(prompt);
-  return extractJson<StoryBible>(text);
+  const raw = extractJson<RawStoryBibleResponse>(text);
+
+  // Add unique IDs and source tracking to all visual assets
+  const visualAssets: StoryBible['visualAssets'] = {
+    locations: (raw.visualAssets?.locations || []).map(loc => ({
+      id: generateAssetId('loc'),
+      name: loc.name,
+      description: loc.description,
+      mood: loc.mood,
+      source: 'bible' as const,
+    })),
+    characters: (raw.visualAssets?.characters || []).map(char => ({
+      id: generateAssetId('char'),
+      name: char.name,
+      description: char.description,
+      personality: char.personality,
+      role: char.role,
+      source: 'bible' as const,
+    })),
+    objects: (raw.visualAssets?.objects || []).map(obj => ({
+      id: generateAssetId('obj'),
+      name: obj.name,
+      description: obj.description,
+      source: 'bible' as const,
+    })),
+  };
+
+  // Build the full StoryBible with backwards compatibility
+  const storyBible: StoryBible = {
+    tone: raw.tone,
+    themes: raw.themes,
+    narrativeStyle: raw.narrativeStyle,
+    childRole: raw.childRole,
+    petRole: raw.petRole,
+    characterDynamic: raw.characterDynamic,
+    visualAssets,
+    // Backwards compatibility: populate deprecated fields
+    keyLocations: visualAssets.locations.map(loc => ({
+      name: loc.name,
+      visualDescription: loc.description,
+      mood: loc.mood || '',
+    })),
+    recurringCharacters: visualAssets.characters.map(char => ({
+      name: char.name,
+      visualDescription: char.description,
+      personality: char.personality || '',
+      role: char.role || '',
+    })),
+    colorPalette: raw.colorPalette,
+    lightingStyle: raw.lightingStyle,
+    artDirection: raw.artDirection,
+    magicSystem: raw.magicSystem,
+    stakes: raw.stakes,
+    resolution: raw.resolution,
+  };
+
+  return storyBible;
 }
 
 export interface ExistingStory {
@@ -527,14 +638,22 @@ export async function extractStoryReferences(
     .map(ch => ch.cliffhanger)
     .join('\n');
 
-  // Include Story Bible info for richer extraction
-  const bibleContext = storyBible ? `
+  // Include Story Bible info for richer extraction (use new visualAssets or fallback to deprecated fields)
+  let bibleContext = '';
+  if (storyBible) {
+    const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({ name: l.name, description: l.visualDescription })) || [];
+    const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({ name: c.name, description: c.visualDescription })) || [];
+    const objects = storyBible.visualAssets?.objects || [];
+
+    bibleContext = `
 STORY BIBLE CONTEXT:
-Key Locations: ${storyBible.keyLocations.map(l => `${l.name} - ${l.visualDescription}`).join('; ')}
-Recurring Characters: ${storyBible.recurringCharacters.map(c => `${c.name} - ${c.visualDescription}`).join('; ')}
+Locations: ${locations.map(l => `${l.name} - ${l.description}`).join('; ')}
+Characters: ${characters.map(c => `${c.name} - ${c.description}`).join('; ')}
+Objects: ${objects.map(o => `${o.name} - ${o.description}`).join('; ')}
 Color Palette: ${storyBible.colorPalette}
 Lighting Style: ${storyBible.lightingStyle}
-` : '';
+`;
+  }
 
   const prompt = `Analyze this children's story and extract visual elements that need CONSISTENT reference images for illustration.
 
@@ -592,6 +711,91 @@ If the story has fewer meaningful visual elements, return fewer items. Quality o
       ref.description
     )
     .slice(0, 8);
+}
+
+// Helper to check if two names are similar (fuzzy match)
+function namesAreSimilar(name1: string, name2: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]/g, '');
+  const n1 = normalize(name1);
+  const n2 = normalize(name2);
+  return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+}
+
+// Merge extracted references into Story Bible's visualAssets
+export function mergeExtractedReferencesIntoStoryBible(
+  storyBible: StoryBible,
+  extractedRefs: ExtractedReference[]
+): StoryBible {
+  // Initialize visualAssets if not present
+  const visualAssets = storyBible.visualAssets || {
+    locations: [],
+    characters: [],
+    objects: [],
+  };
+
+  // Get existing names for deduplication
+  const existingLocationNames = new Set(visualAssets.locations.map(l => l.name.toLowerCase()));
+  const existingCharacterNames = new Set(visualAssets.characters.map(c => c.name.toLowerCase()));
+  const existingObjectNames = new Set(visualAssets.objects.map(o => o.name.toLowerCase()));
+
+  for (const ref of extractedRefs) {
+    const refNameLower = ref.name.toLowerCase();
+
+    if (ref.type === 'location') {
+      // Check if similar location exists
+      const exists = visualAssets.locations.some(l => namesAreSimilar(l.name, ref.name)) ||
+                     existingLocationNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.locations.push({
+          id: generateAssetId('loc'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    } else if (ref.type === 'character') {
+      const exists = visualAssets.characters.some(c => namesAreSimilar(c.name, ref.name)) ||
+                     existingCharacterNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.characters.push({
+          id: generateAssetId('char'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    } else if (ref.type === 'object') {
+      const exists = visualAssets.objects.some(o => namesAreSimilar(o.name, ref.name)) ||
+                     existingObjectNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.objects.push({
+          id: generateAssetId('obj'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    }
+  }
+
+  // Update deprecated fields for backwards compatibility
+  const updatedBible: StoryBible = {
+    ...storyBible,
+    visualAssets,
+    keyLocations: visualAssets.locations.map(loc => ({
+      name: loc.name,
+      visualDescription: loc.description,
+      mood: loc.mood || '',
+    })),
+    recurringCharacters: visualAssets.characters.map(char => ({
+      name: char.name,
+      visualDescription: char.description,
+      personality: char.personality || '',
+      role: char.role || '',
+    })),
+  };
+
+  return updatedBible;
 }
 
 // =====================================================
@@ -688,8 +892,10 @@ export interface StoryboardSegment {
   segmentId: string;
   segmentOrder: number;
   chapterNumber: number;
-  location: string | null;           // References Story Bible keyLocations.name
-  characters: string[];              // NPC names from Story Bible recurringCharacters
+  location: string | null;           // Location name (for display)
+  characters: string[];              // NPC names (for display)
+  locationId: string | null;         // Story Bible visualAssets.locations[].id
+  characterIds: string[];            // Story Bible visualAssets.characters[].id
   shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-shoulder';
   cameraAngle: 'eye-level' | 'low-angle' | 'high-angle' | 'birds-eye' | 'worms-eye' | 'dutch-angle';
   visualFocus: string;               // What to emphasize visually
@@ -715,14 +921,33 @@ export interface FullStoryboardInput {
 export async function generateStoryboard(input: FullStoryboardInput): Promise<StoryboardSegment[]> {
   const { storyTitle, storyDescription, storyBible, chapters } = input;
 
+  // Get locations from visualAssets (preferred) or fallback to deprecated keyLocations
+  const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({
+    id: generateAssetId('loc'),
+    name: l.name,
+    description: l.visualDescription,
+    mood: l.mood,
+    source: 'bible' as const,
+  })) || [];
+
+  // Get characters from visualAssets (preferred) or fallback to deprecated recurringCharacters
+  const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({
+    id: generateAssetId('char'),
+    name: c.name,
+    description: c.visualDescription,
+    personality: c.personality,
+    role: c.role,
+    source: 'bible' as const,
+  })) || [];
+
   // Build location list from Story Bible
-  const locationList = storyBible.keyLocations?.length
-    ? storyBible.keyLocations.map(l => `- "${l.name}": ${l.visualDescription} (mood: ${l.mood})`).join('\n')
+  const locationList = locations.length
+    ? locations.map(l => `- "${l.name}": ${l.description} (mood: ${l.mood || 'unspecified'})`).join('\n')
     : 'No specific locations defined';
 
   // Build character list from Story Bible
-  const characterList = storyBible.recurringCharacters?.length
-    ? storyBible.recurringCharacters.map(c => `- "${c.name}": ${c.visualDescription} (${c.personality}, ${c.role})`).join('\n')
+  const characterList = characters.length
+    ? characters.map(c => `- "${c.name}": ${c.description} (${c.personality || 'unspecified'}, ${c.role || 'unspecified'})`).join('\n')
     : 'No recurring NPCs defined';
 
   // Build full story structure for analysis
@@ -805,18 +1030,46 @@ IMPORTANT:
 - "visualFocus" = What the BACKGROUND image should emphasize (NEVER the child or pet - they are overlaid separately)`;
 
   const text = await callGemini(prompt);
-  const storyboard = extractJson<StoryboardSegment[]>(text);
+  const rawStoryboard = extractJson<Omit<StoryboardSegment, 'locationId' | 'characterIds'>[]>(text);
 
   // Validate shot types and camera angles
   const validShotTypes = ['wide', 'medium', 'close-up', 'extreme-close-up', 'over-shoulder'];
   const validCameraAngles = ['eye-level', 'low-angle', 'high-angle', 'birds-eye', 'worms-eye', 'dutch-angle'];
 
-  return storyboard.map(segment => ({
+  // Helper to find location ID by name (fuzzy match)
+  const findLocationId = (name: string | null): string | null => {
+    if (!name) return null;
+    const normalized = name.toLowerCase().replace(/^the\s+/, '');
+    const match = locations.find(l =>
+      l.name.toLowerCase().replace(/^the\s+/, '') === normalized ||
+      l.name.toLowerCase().includes(normalized) ||
+      normalized.includes(l.name.toLowerCase())
+    );
+    return match?.id || null;
+  };
+
+  // Helper to find character IDs by names (fuzzy match)
+  const findCharacterIds = (names: string[]): string[] => {
+    return names.map(name => {
+      const normalized = name.toLowerCase().replace(/^the\s+/, '');
+      const match = characters.find(c =>
+        c.name.toLowerCase().replace(/^the\s+/, '') === normalized ||
+        c.name.toLowerCase().includes(normalized) ||
+        normalized.includes(c.name.toLowerCase())
+      );
+      return match?.id;
+    }).filter((id): id is string => !!id);
+  };
+
+  return rawStoryboard.map(segment => ({
     ...segment,
     shotType: validShotTypes.includes(segment.shotType) ? segment.shotType : 'medium',
     cameraAngle: validCameraAngles.includes(segment.cameraAngle) ? segment.cameraAngle : 'eye-level',
     characters: Array.isArray(segment.characters) ? segment.characters : [],
     location: segment.location || null,
+    // Add ID-based references
+    locationId: findLocationId(segment.location),
+    characterIds: findCharacterIds(Array.isArray(segment.characters) ? segment.characters : []),
   })) as StoryboardSegment[];
 }
 

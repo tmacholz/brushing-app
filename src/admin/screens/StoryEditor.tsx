@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -65,6 +65,9 @@ interface Segment {
   storyboard_focus: string | null;
   storyboard_continuity: string | null;
   storyboard_exclude: string[] | null;
+  // ID-based references to Story Bible visualAssets
+  storyboard_location_id: string | null;
+  storyboard_character_ids: string[] | null;
 }
 
 interface Chapter {
@@ -81,6 +84,18 @@ interface Chapter {
   teaser_narration_sequence: NarrationSequenceItem[] | null;
 }
 
+// Visual asset with unique ID for stable referencing
+interface VisualAsset {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  source: 'bible' | 'extracted';
+}
+
 // Story Bible for narrative and visual consistency
 interface StoryBible {
   // Narrative elements
@@ -91,7 +106,13 @@ interface StoryBible {
   childRole?: string;
   petRole?: string;
   characterDynamic?: string;
-  // World and visual consistency
+  // Consolidated visual assets
+  visualAssets?: {
+    locations: VisualAsset[];
+    characters: VisualAsset[];
+    objects: VisualAsset[];
+  };
+  // DEPRECATED: Keep for backwards compatibility
   keyLocations?: { name: string; visualDescription: string; mood: string }[];
   recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
   // Visual style guide
@@ -113,6 +134,37 @@ interface StoryReference {
   description: string;
   image_url: string | null;
   sort_order: number;
+}
+
+// Merged visual asset from Story Bible + story_references
+interface MergedLocation {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'keyLocations' | 'story_references';
+}
+
+interface MergedCharacter {
+  id: string;
+  name: string;
+  description: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'recurringCharacters' | 'story_references';
+}
+
+interface MergedObject {
+  id: string;
+  name: string;
+  description: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'story_references';
 }
 
 interface Story {
@@ -348,6 +400,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
           storyboardFocus: segment.storyboard_focus || undefined,
           storyboardExclude: segment.storyboard_exclude || undefined,
+          // ID-based storyboard fields (preferred for lookups)
+          storyboardLocationId: segment.storyboard_location_id || undefined,
+          storyboardCharacterIds: segment.storyboard_character_ids || undefined,
         }),
       });
 
@@ -1054,6 +1109,146 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   // Storyboard generation state
   const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
 
+  // Computed merged visual assets from Story Bible + legacy sources
+  const mergedVisualAssets = useMemo(() => {
+    if (!story) return { locations: [], characters: [], objects: [] };
+
+    const storyBible = story.story_bible;
+    const refs = story.references || [];
+
+    // Helper to find matching reference image from story_references
+    const findRefImage = (type: string, name: string): string | null => {
+      const match = refs.find(r =>
+        r.type === type &&
+        (r.name.toLowerCase() === name.toLowerCase() ||
+         r.name.toLowerCase().includes(name.toLowerCase()) ||
+         name.toLowerCase().includes(r.name.toLowerCase()))
+      );
+      return match?.image_url || null;
+    };
+
+    // Helper to find matching reference ID from story_references
+    const findRefId = (type: string, name: string): string | null => {
+      const match = refs.find(r =>
+        r.type === type &&
+        (r.name.toLowerCase() === name.toLowerCase() ||
+         r.name.toLowerCase().includes(name.toLowerCase()) ||
+         name.toLowerCase().includes(r.name.toLowerCase()))
+      );
+      return match?.id || null;
+    };
+
+    // Locations: prefer visualAssets, fallback to keyLocations, merge with story_references images
+    let locations: MergedLocation[] = [];
+
+    if (storyBible?.visualAssets?.locations?.length) {
+      locations = storyBible.visualAssets.locations.map(loc => ({
+        id: loc.id,
+        name: loc.name,
+        description: loc.description,
+        mood: loc.mood,
+        referenceImageUrl: loc.referenceImageUrl || findRefImage('location', loc.name) || undefined,
+        refId: findRefId('location', loc.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    } else if (storyBible?.keyLocations?.length) {
+      locations = storyBible.keyLocations.map((loc, idx) => ({
+        id: `legacy-loc-${idx}`,
+        name: loc.name,
+        description: loc.visualDescription,
+        mood: loc.mood,
+        referenceImageUrl: findRefImage('location', loc.name) || undefined,
+        refId: findRefId('location', loc.name) || undefined,
+        source: 'keyLocations' as const,
+      }));
+    }
+
+    // Add locations from story_references not already in the list
+    refs.filter(r => r.type === 'location').forEach(ref => {
+      if (!locations.some(l => l.name.toLowerCase() === ref.name.toLowerCase())) {
+        locations.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    // Characters: prefer visualAssets, fallback to recurringCharacters, merge with story_references images
+    let characters: MergedCharacter[] = [];
+
+    if (storyBible?.visualAssets?.characters?.length) {
+      characters = storyBible.visualAssets.characters.map(char => ({
+        id: char.id,
+        name: char.name,
+        description: char.description,
+        personality: char.personality,
+        role: char.role,
+        referenceImageUrl: char.referenceImageUrl || findRefImage('character', char.name) || undefined,
+        refId: findRefId('character', char.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    } else if (storyBible?.recurringCharacters?.length) {
+      characters = storyBible.recurringCharacters.map((char, idx) => ({
+        id: `legacy-char-${idx}`,
+        name: char.name,
+        description: char.visualDescription,
+        personality: char.personality,
+        role: char.role,
+        referenceImageUrl: findRefImage('character', char.name) || undefined,
+        refId: findRefId('character', char.name) || undefined,
+        source: 'recurringCharacters' as const,
+      }));
+    }
+
+    // Add characters from story_references not already in the list
+    refs.filter(r => r.type === 'character').forEach(ref => {
+      if (!characters.some(c => c.name.toLowerCase() === ref.name.toLowerCase())) {
+        characters.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    // Objects: prefer visualAssets, otherwise from story_references only (old Story Bible had no objects)
+    let objects: MergedObject[] = [];
+
+    if (storyBible?.visualAssets?.objects?.length) {
+      objects = storyBible.visualAssets.objects.map(obj => ({
+        id: obj.id,
+        name: obj.name,
+        description: obj.description,
+        referenceImageUrl: obj.referenceImageUrl || findRefImage('object', obj.name) || undefined,
+        refId: findRefId('object', obj.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    }
+
+    // Add objects from story_references not already in the list
+    refs.filter(r => r.type === 'object').forEach(ref => {
+      if (!objects.some(o => o.name.toLowerCase() === ref.name.toLowerCase())) {
+        objects.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    return { locations, characters, objects };
+  }, [story]);
+
   const fetchStory = useCallback(async () => {
     try {
       console.log('[StoryEditor] Fetching story:', storyId);
@@ -1424,29 +1619,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     }
   };
 
-  // Delete a reference
-  const handleDeleteReference = async (referenceId: string) => {
-    if (!confirm('Are you sure you want to delete this reference?')) return;
-
-    try {
-      const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) throw new Error('Failed to delete reference');
-
-      setStory(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          references: prev.references.filter(r => r.id !== referenceId),
-        };
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete reference');
-    }
-  };
-
   // Add a new reference
   const handleAddReference = async () => {
     if (!newRefName.trim() || !newRefDescription.trim()) {
@@ -1516,34 +1688,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       setGeneratingAllRefs(false);
     }
   };
-
-  // Update reference field
-  const handleSaveReferenceField = useCallback(async (
-    referenceId: string,
-    field: 'name' | 'description',
-    value: string
-  ) => {
-    const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.details || error.error);
-    }
-
-    setStory(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        references: prev.references.map(r =>
-          r.id === referenceId ? { ...r, [field]: value } : r
-        ),
-      };
-    });
-  }, [storyId]);
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => {
@@ -1772,6 +1916,9 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
             storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
             storyboardFocus: segment.storyboard_focus || undefined,
             storyboardExclude: segment.storyboard_exclude || undefined,
+            // ID-based storyboard fields (preferred for lookups)
+            storyboardLocationId: segment.storyboard_location_id || undefined,
+            storyboardCharacterIds: segment.storyboard_character_ids || undefined,
           }),
         });
 
@@ -2235,43 +2382,254 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                       </div>
                     </div>
 
-                    {/* Key Locations */}
-                    {(story.story_bible?.keyLocations?.length || 0) > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-rose-400" />
-                          Key Locations ({story.story_bible?.keyLocations?.length || 0})
-                        </h3>
-                        <div className="space-y-3">
-                          {story.story_bible?.keyLocations?.map((loc, idx) => (
-                            <div key={idx} className="bg-slate-700/30 rounded-lg p-3">
-                              <div className="font-medium text-sm text-white mb-1">{loc.name}</div>
-                              <div className="text-xs text-slate-400 mb-1">{loc.visualDescription}</div>
-                              <div className="text-xs text-slate-500">Mood: {loc.mood}</div>
-                            </div>
-                          ))}
+                    {/* Visual Assets (Locations, Characters, Objects with Reference Images) */}
+                    {(mergedVisualAssets.locations.length > 0 || mergedVisualAssets.characters.length > 0 || mergedVisualAssets.objects.length > 0) && (
+                      <div className="space-y-6">
+                        {/* Section Header with Actions */}
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-purple-400" />
+                            Visual Assets
+                            <span className="text-xs font-normal text-slate-500">
+                              ({mergedVisualAssets.locations.length + mergedVisualAssets.characters.length + mergedVisualAssets.objects.length} items)
+                            </span>
+                          </h3>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleReExtractReferences}
+                              disabled={generatingAllRefs}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded transition-colors disabled:opacity-50"
+                              title="Re-extract from story"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${generatingAllRefs ? 'animate-spin' : ''}`} />
+                              Re-extract
+                            </button>
+                            <button
+                              onClick={() => setShowAddReference(true)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add
+                            </button>
+                            {(story.references?.some(r => !r.image_url) ||
+                              mergedVisualAssets.locations.some(l => !l.referenceImageUrl) ||
+                              mergedVisualAssets.characters.some(c => !c.referenceImageUrl) ||
+                              mergedVisualAssets.objects.some(o => !o.referenceImageUrl)) && (
+                              <button
+                                onClick={handleGenerateAllReferenceImages}
+                                disabled={generatingAllRefs}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded transition-colors disabled:opacity-50"
+                              >
+                                {generatingAllRefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                Generate All
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
 
-                    {/* Recurring Characters */}
-                    {(story.story_bible?.recurringCharacters?.length || 0) > 0 && (
-                      <div>
-                        <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                          <Users className="w-4 h-4 text-indigo-400" />
-                          Recurring Characters ({story.story_bible?.recurringCharacters?.length || 0})
-                        </h3>
-                        <div className="space-y-3">
-                          {story.story_bible?.recurringCharacters?.map((char, idx) => (
-                            <div key={idx} className="bg-slate-700/30 rounded-lg p-3">
-                              <div className="font-medium text-sm text-white mb-1">{char.name}</div>
-                              <div className="text-xs text-slate-400 mb-1">{char.visualDescription}</div>
-                              <div className="text-xs text-slate-500">
-                                {char.personality} • {char.role}
+                        {/* Add Reference Form */}
+                        <AnimatePresence>
+                          {showAddReference && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
+                                <div className="flex gap-2">
+                                  <select
+                                    value={newRefType}
+                                    onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
+                                    className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
+                                  >
+                                    <option value="character">Character</option>
+                                    <option value="object">Object</option>
+                                    <option value="location">Location</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="Name"
+                                    value={newRefName}
+                                    onChange={(e) => setNewRefName(e.target.value)}
+                                    className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
+                                  />
+                                </div>
+                                <textarea
+                                  placeholder="Visual description for image generation..."
+                                  value={newRefDescription}
+                                  onChange={(e) => setNewRefDescription(e.target.value)}
+                                  rows={2}
+                                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
+                                />
+                                <div className="flex gap-2 justify-end">
+                                  <button
+                                    onClick={() => setShowAddReference(false)}
+                                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={handleAddReference}
+                                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Add
+                                  </button>
+                                </div>
                               </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Locations */}
+                        {mergedVisualAssets.locations.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-green-400" />
+                              Locations ({mergedVisualAssets.locations.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.locations.map((loc) => {
+                                const ref = story.references?.find(r => r.id === loc.refId);
+                                const isGenerating = loc.refId ? generatingRefImages.has(loc.refId) : false;
+                                return (
+                                  <div key={loc.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {loc.referenceImageUrl ? (
+                                        <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <MapPin className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      {ref && (
+                                        <button
+                                          onClick={() => handleGenerateReferenceImage(ref)}
+                                          disabled={isGenerating}
+                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                          title={loc.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                        >
+                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{loc.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{loc.description}</div>
+                                      {loc.mood && <div className="text-xs text-slate-500 mt-1">Mood: {loc.mood}</div>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        )}
+
+                        {/* Characters */}
+                        {mergedVisualAssets.characters.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5 text-blue-400" />
+                              Characters ({mergedVisualAssets.characters.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.characters.map((char) => {
+                                const ref = story.references?.find(r => r.id === char.refId);
+                                const isGenerating = char.refId ? generatingRefImages.has(char.refId) : false;
+                                return (
+                                  <div key={char.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {char.referenceImageUrl ? (
+                                        <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Users className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      {ref && (
+                                        <button
+                                          onClick={() => handleGenerateReferenceImage(ref)}
+                                          disabled={isGenerating}
+                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                          title={char.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                        >
+                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{char.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{char.description}</div>
+                                      {(char.personality || char.role) && (
+                                        <div className="text-xs text-slate-500 mt-1">
+                                          {[char.personality, char.role].filter(Boolean).join(' • ')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Objects */}
+                        {mergedVisualAssets.objects.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-amber-400" />
+                              Objects ({mergedVisualAssets.objects.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.objects.map((obj) => {
+                                const ref = story.references?.find(r => r.id === obj.refId);
+                                const isGenerating = obj.refId ? generatingRefImages.has(obj.refId) : false;
+                                return (
+                                  <div key={obj.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {obj.referenceImageUrl ? (
+                                        <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Package className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      {ref && (
+                                        <button
+                                          onClick={() => handleGenerateReferenceImage(ref)}
+                                          disabled={isGenerating}
+                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                          title={obj.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                        >
+                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                        </button>
+                                      )}
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{obj.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{obj.description}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {generatingAllRefs && (
+                          <p className="text-xs text-slate-400">
+                            {generatingRefImages.size > 0
+                              ? `Generating images... (${generatingRefImages.size} in progress)`
+                              : 'Extracting visual assets from story...'}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2394,209 +2752,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           {!story.cover_image_url && !generatingCoverImage && (
             <p className="mt-3 text-sm text-slate-500">
               Generate a cover image for this story. It will use existing segment images as style references if available.
-            </p>
-          )}
-        </section>
-
-        {/* Visual References Section */}
-        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-              Visual References
-              <span className="text-sm font-normal text-slate-400">
-                ({story.references?.length || 0} items)
-              </span>
-            </h2>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleReExtractReferences}
-                disabled={generatingAllRefs}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors disabled:opacity-50"
-                title="Re-extract references from story"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${generatingAllRefs ? 'animate-spin' : ''}`} />
-                Re-extract
-              </button>
-
-              <button
-                onClick={() => setShowAddReference(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add
-              </button>
-
-              {story.references && story.references.some(r => !r.image_url) && (
-                <button
-                  onClick={handleGenerateAllReferenceImages}
-                  disabled={generatingAllRefs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {generatingAllRefs ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-3.5 h-3.5" />
-                  )}
-                  Generate All Images
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Add Reference Form */}
-          <AnimatePresence>
-            {showAddReference && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mb-4"
-              >
-                <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
-                  <div className="flex gap-2">
-                    <select
-                      value={newRefType}
-                      onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
-                      className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
-                    >
-                      <option value="character">Character</option>
-                      <option value="object">Object</option>
-                      <option value="location">Location</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Name (e.g., 'the wise owl')"
-                      value={newRefName}
-                      onChange={(e) => setNewRefName(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
-                    />
-                  </div>
-                  <textarea
-                    placeholder="Detailed visual description for image generation..."
-                    value={newRefDescription}
-                    onChange={(e) => setNewRefDescription(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setShowAddReference(false)}
-                      className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-300"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleAddReference}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      Add Reference
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* References Grid */}
-          {story.references && story.references.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {story.references.map((ref) => {
-                const isGenerating = generatingRefImages.has(ref.id);
-                const TypeIcon = ref.type === 'character' ? Users : ref.type === 'location' ? MapPin : Package;
-                const typeColor = ref.type === 'character' ? 'text-blue-400' : ref.type === 'location' ? 'text-green-400' : 'text-amber-400';
-
-                return (
-                  <div
-                    key={ref.id}
-                    className="bg-slate-700/30 rounded-lg overflow-hidden"
-                  >
-                    {/* Image Preview */}
-                    <div className="aspect-video bg-slate-800/50 relative">
-                      {ref.image_url ? (
-                        <img
-                          src={ref.image_url}
-                          alt={ref.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center text-slate-500">
-                            <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <span className="text-xs">No image yet</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Overlay buttons */}
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <button
-                          onClick={() => handleGenerateReferenceImage(ref)}
-                          disabled={isGenerating}
-                          className="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors disabled:opacity-50"
-                          title={ref.image_url ? 'Regenerate image' : 'Generate image'}
-                        >
-                          {isGenerating ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-4 h-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteReference(ref.id)}
-                          className="p-1.5 bg-black/50 hover:bg-red-500/70 rounded-lg text-white transition-colors"
-                          title="Delete reference"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Type badge */}
-                      <div className={`absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-xs flex items-center gap-1 ${typeColor}`}>
-                        <TypeIcon className="w-3 h-3" />
-                        {ref.type}
-                      </div>
-                    </div>
-
-                    {/* Details */}
-                    <div className="p-3">
-                      <EditableField
-                        value={ref.name}
-                        onSave={(value) => handleSaveReferenceField(ref.id, 'name', value)}
-                        className="font-medium text-white text-sm mb-1"
-                      />
-                      <details className="text-xs text-slate-400">
-                        <summary className="cursor-pointer hover:text-slate-300">
-                          Description (click to edit)
-                        </summary>
-                        <div className="mt-1">
-                          <EditableField
-                            value={ref.description}
-                            onSave={(value) => handleSaveReferenceField(ref.id, 'description', value)}
-                            multiline
-                            className="text-xs text-slate-400"
-                          />
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500 text-center py-8">
-              No visual references yet. References are automatically extracted when a story is generated,
-              or you can add them manually.
-            </p>
-          )}
-
-          {generatingAllRefs && (
-            <p className="mt-3 text-sm text-slate-400">
-              {generatingRefImages.size > 0
-                ? `Generating reference images... (${generatingRefImages.size} in progress)`
-                : 'Extracting visual references from story...'}
             </p>
           )}
         </section>
@@ -2762,98 +2917,254 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               </div>
                             </details>
 
-                            {/* Storyboard Info */}
+                            {/* Storyboard Info (Editable) */}
                             {(segment.storyboard_shot_type || segment.storyboard_location) && (
                               <details className="mt-2">
                                 <summary className="text-xs text-cyan-500 cursor-pointer hover:text-cyan-400 flex items-center gap-1">
                                   <Clapperboard className="w-3 h-3" />
                                   Storyboard
                                 </summary>
-                                <div className="mt-1 pl-3 border-l border-cyan-600/50 space-y-1">
+                                <div className="mt-1 pl-3 border-l border-cyan-600/50 space-y-2">
+                                  {/* Shot Type & Camera Angle Row */}
                                   <div className="flex flex-wrap gap-2 text-xs">
-                                    {segment.storyboard_shot_type && (
-                                      <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded flex items-center gap-1">
-                                        <Camera className="w-3 h-3" />
-                                        {segment.storyboard_shot_type}
-                                      </span>
-                                    )}
-                                    {segment.storyboard_camera_angle && (
-                                      <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded flex items-center gap-1">
-                                        <Video className="w-3 h-3" />
-                                        {segment.storyboard_camera_angle}
-                                      </span>
-                                    )}
+                                    <div className="flex items-center gap-1">
+                                      <Camera className="w-3 h-3 text-cyan-400" />
+                                      <select
+                                        value={segment.storyboard_shot_type || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ storyboardShotType: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { storyboard_shot_type: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update shot type:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                      >
+                                        <option value="">Shot type...</option>
+                                        <option value="wide shot">Wide shot</option>
+                                        <option value="medium shot">Medium shot</option>
+                                        <option value="close-up">Close-up</option>
+                                        <option value="extreme close-up">Extreme close-up</option>
+                                        <option value="establishing shot">Establishing shot</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Video className="w-3 h-3 text-purple-400" />
+                                      <select
+                                        value={segment.storyboard_camera_angle || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ storyboardCameraAngle: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { storyboard_camera_angle: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update camera angle:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                      >
+                                        <option value="">Angle...</option>
+                                        <option value="eye-level">Eye-level</option>
+                                        <option value="low-angle">Low-angle</option>
+                                        <option value="high-angle">High-angle</option>
+                                        <option value="bird's eye">Bird's eye</option>
+                                        <option value="dutch angle">Dutch angle</option>
+                                      </select>
+                                    </div>
                                   </div>
-                                  {segment.storyboard_location && (
-                                    <div className="text-xs text-slate-400">
-                                      <span className="text-slate-500">Location:</span> {segment.storyboard_location}
+
+                                  {/* Location (editable) */}
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap">Location:</span>
+                                    <input
+                                      type="text"
+                                      value={segment.storyboard_location || ''}
+                                      onChange={async (e) => {
+                                        const value = e.target.value || null;
+                                        // Update local state immediately for responsiveness
+                                        handleSegmentUpdate(segment.id, { storyboard_location: value });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.trim() || null;
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardLocation: value }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update location:', err);
+                                        }
+                                      }}
+                                      placeholder="Enter location..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* NPCs/Characters (editable) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5">NPCs:</span>
+                                    <input
+                                      type="text"
+                                      value={(segment.storyboard_characters || []).join(', ')}
+                                      onChange={async (e) => {
+                                        const value = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                        handleSegmentUpdate(segment.id, { storyboard_characters: value.length > 0 ? value : null });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardCharacters: value.length > 0 ? value : null }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update characters:', err);
+                                        }
+                                      }}
+                                      placeholder="Character names, comma-separated..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* Visual Focus (editable) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5">Focus:</span>
+                                    <input
+                                      type="text"
+                                      value={segment.storyboard_focus || ''}
+                                      onChange={async (e) => {
+                                        const value = e.target.value || null;
+                                        handleSegmentUpdate(segment.id, { storyboard_focus: value });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.trim() || null;
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardFocus: value }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update focus:', err);
+                                        }
+                                      }}
+                                      placeholder="What should the image focus on..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* Continuity Note (editable) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 italic">Note:</span>
+                                    <input
+                                      type="text"
+                                      value={segment.storyboard_continuity || ''}
+                                      onChange={async (e) => {
+                                        const value = e.target.value || null;
+                                        handleSegmentUpdate(segment.id, { storyboard_continuity: value });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.trim() || null;
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardContinuity: value }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update continuity:', err);
+                                        }
+                                      }}
+                                      placeholder="Continuity notes..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs italic focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* Exclusions (with X buttons to remove) */}
+                                  <div className="space-y-1">
+                                    {segment.storyboard_exclude && segment.storyboard_exclude.length > 0 && (
+                                      <div className="text-xs text-red-400 flex items-center gap-1 flex-wrap">
+                                        <Ban className="w-3 h-3" />
+                                        <span className="text-red-500">Exclude:</span>
+                                        {segment.storyboard_exclude.map((item, i) => (
+                                          <span key={i} className="px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded flex items-center gap-1 group">
+                                            {item}
+                                            <button
+                                              onClick={async () => {
+                                                const newExclude = segment.storyboard_exclude!.filter((_, idx) => idx !== i);
+                                                try {
+                                                  const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ storyboardExclude: newExclude.length > 0 ? newExclude : null }),
+                                                  });
+                                                  if (res.ok) {
+                                                    handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude.length > 0 ? newExclude : null });
+                                                  }
+                                                } catch (err) {
+                                                  console.error('Failed to remove exclusion:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100 transition-opacity"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Add exclusion input */}
+                                    <div className="flex items-center gap-2">
+                                      <Ban className="w-3 h-3 text-red-400" />
+                                      <input
+                                        type="text"
+                                        placeholder="Add exclusion (press Enter)"
+                                        className="flex-1 px-2 py-0.5 text-xs bg-slate-700/30 border border-slate-600/50 rounded text-white placeholder-slate-500 focus:outline-none focus:border-red-500/50"
+                                        onKeyDown={async (e) => {
+                                          if (e.key === 'Enter') {
+                                            const input = e.target as HTMLInputElement;
+                                            const value = input.value.trim();
+                                            if (!value) return;
+
+                                            const currentExclude = segment.storyboard_exclude || [];
+                                            const newExclude = [...currentExclude, value];
+
+                                            try {
+                                              const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ storyboardExclude: newExclude }),
+                                              });
+                                              if (res.ok) {
+                                                handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude });
+                                                input.value = '';
+                                              }
+                                            } catch (err) {
+                                              console.error('Failed to add exclusion:', err);
+                                            }
+                                          }
+                                        }}
+                                      />
                                     </div>
-                                  )}
-                                  {segment.storyboard_characters && segment.storyboard_characters.length > 0 && (
-                                    <div className="text-xs text-slate-400">
-                                      <span className="text-slate-500">NPCs:</span> {segment.storyboard_characters.join(', ')}
-                                    </div>
-                                  )}
-                                  {segment.storyboard_focus && (
-                                    <div className="text-xs text-slate-400">
-                                      <span className="text-slate-500">Focus:</span> {segment.storyboard_focus}
-                                    </div>
-                                  )}
-                                  {segment.storyboard_continuity && (
-                                    <div className="text-xs text-slate-400 italic">
-                                      {segment.storyboard_continuity}
-                                    </div>
-                                  )}
-                                  {/* Exclusions */}
-                                  {segment.storyboard_exclude && segment.storyboard_exclude.length > 0 && (
-                                    <div className="text-xs text-red-400 flex items-center gap-1 flex-wrap">
-                                      <Ban className="w-3 h-3" />
-                                      <span className="text-red-500">Exclude:</span>
-                                      {segment.storyboard_exclude.map((item, i) => (
-                                        <span key={i} className="px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded">
-                                          {item}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
+                                  </div>
                                 </div>
                               </details>
-                            )}
-
-                            {/* Exclusion Editor - always visible if storyboard exists */}
-                            {(segment.storyboard_shot_type || segment.storyboard_location) && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <Ban className="w-3 h-3 text-red-400" />
-                                <input
-                                  type="text"
-                                  placeholder="Add exclusion (e.g., dinosaurs) and press Enter"
-                                  className="flex-1 px-2 py-1 text-xs bg-slate-700/30 border border-slate-600/50 rounded text-white placeholder-slate-500 focus:outline-none focus:border-red-500/50"
-                                  onKeyDown={async (e) => {
-                                    if (e.key === 'Enter') {
-                                      const input = e.target as HTMLInputElement;
-                                      const value = input.value.trim();
-                                      if (!value) return;
-
-                                      const currentExclude = segment.storyboard_exclude || [];
-                                      const newExclude = [...currentExclude, value];
-
-                                      try {
-                                        const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-                                          method: 'PUT',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          body: JSON.stringify({ storyboardExclude: newExclude }),
-                                        });
-                                        if (res.ok) {
-                                          handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude });
-                                          input.value = '';
-                                        }
-                                      } catch (err) {
-                                        console.error('Failed to add exclusion:', err);
-                                      }
-                                    }
-                                  }}
-                                />
-                              </div>
                             )}
 
                             {/* Audio Editor */}

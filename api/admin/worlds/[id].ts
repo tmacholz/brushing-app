@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, generateStoryboard, type ExistingStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, mergeExtractedReferencesIntoStoryBible, generateStoryboard, type ExistingStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -187,13 +187,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE stories SET status = 'draft' WHERE id = ${story.id}`;
         await sql`UPDATE story_pitches SET is_used = true WHERE id = ${pitchId}`;
 
-        // Step 4: Extract visual references for consistent image generation
+        // Step 4: Extract visual references and merge into Story Bible
         console.log('[Story] Extracting visual references for:', pitch.title);
+        let updatedStoryBible = storyBible;
         try {
           const references = await extractStoryReferences(pitch.title, pitch.description, chapters, storyBible);
           console.log('[Story] Extracted', references.length, 'visual references');
 
-          // Save references to database
+          // Merge extracted references into Story Bible
+          updatedStoryBible = mergeExtractedReferencesIntoStoryBible(storyBible, references);
+          console.log('[Story] Merged references into Story Bible visualAssets');
+
+          // Update Story Bible in database with merged assets
+          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${story.id}`;
+
+          // Also save to story_references table for backwards compatibility
           for (let i = 0; i < references.length; i++) {
             const ref = references[i];
             await sql`
@@ -231,12 +239,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const storyboard = await generateStoryboard({
             storyTitle: pitch.title,
             storyDescription: pitch.description,
-            storyBible,
+            storyBible: updatedStoryBible,
             chapters: chaptersForStoryboard,
           });
           console.log('[Story] Generated storyboard with', storyboard.length, 'segment entries');
 
-          // Update segments with storyboard data
+          // Update segments with storyboard data (including ID-based references)
           for (const entry of storyboard) {
             await sql`
               UPDATE segments SET
@@ -245,7 +253,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 storyboard_shot_type = ${entry.shotType},
                 storyboard_camera_angle = ${entry.cameraAngle},
                 storyboard_focus = ${entry.visualFocus},
-                storyboard_continuity = ${entry.continuityNote}
+                storyboard_continuity = ${entry.continuityNote},
+                storyboard_location_id = ${entry.locationId},
+                storyboard_character_ids = ${entry.characterIds}
               WHERE id = ${entry.segmentId}
             `;
           }

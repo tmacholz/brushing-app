@@ -144,6 +144,18 @@ interface VisualReference {
   imageUrl: string;
 }
 
+// Visual asset from Story Bible
+interface VisualAsset {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  source?: 'bible' | 'extracted';
+}
+
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
@@ -157,22 +169,32 @@ interface StoryImageRequest {
   includePet?: boolean;
   childName?: string;
   petName?: string;
-  storyBible?: StoryBible; // For visual consistency across all images
-  visualReferences?: VisualReference[]; // Reference images for characters/objects/locations
-  // Storyboard fields for intentional visual planning
-  storyboardLocation?: string | null;      // Exact location name from Story Bible
-  storyboardCharacters?: string[] | null;  // Specific NPCs to include
+  storyBible?: StoryBible & {              // Extended with visualAssets
+    visualAssets?: {
+      locations: VisualAsset[];
+      characters: VisualAsset[];
+      objects: VisualAsset[];
+    };
+  };
+  visualReferences?: VisualReference[];    // Reference images for characters/objects/locations
+  // Storyboard fields for intentional visual planning (name-based for display/backwards compat)
+  storyboardLocation?: string | null;      // Location name
+  storyboardCharacters?: string[] | null;  // NPC names
   storyboardShotType?: string | null;      // 'wide', 'medium', 'close-up', etc.
   storyboardCameraAngle?: string | null;   // 'eye-level', 'low-angle', etc.
   storyboardFocus?: string | null;         // What to emphasize visually
   storyboardExclude?: string[] | null;     // Elements to explicitly exclude
+  // ID-based storyboard fields (preferred for lookups)
+  storyboardLocationId?: string | null;    // visualAssets.locations[].id
+  storyboardCharacterIds?: string[] | null; // visualAssets.characters[].id
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   const {
     prompt, segmentText, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
     includeUser, includePet, childName, petName, storyBible, visualReferences,
-    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude
+    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude,
+    storyboardLocationId, storyboardCharacterIds
   } = req;
 
   if (!segmentId) {
@@ -320,31 +342,104 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     }
     fullPrompt += '\n';
 
-    // If storyboard specifies a location, only include that one from Story Bible
-    if (storyboardLocation && storyBible.keyLocations && storyBible.keyLocations.length > 0) {
-      const matchingLocation = storyBible.keyLocations.find(
-        loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase()
-      );
+    // If storyboard specifies a location, look it up from visualAssets (by ID) or keyLocations (by name)
+    const locations = storyBible.visualAssets?.locations || [];
+    const hasVisualAssets = locations.length > 0;
+
+    if (storyboardLocationId || storyboardLocation) {
+      let matchingLocation: { name: string; description: string; mood?: string } | null = null;
+
+      // Prefer ID-based lookup
+      if (storyboardLocationId && hasVisualAssets) {
+        const locById = locations.find(loc => loc.id === storyboardLocationId);
+        if (locById) {
+          matchingLocation = { name: locById.name, description: locById.description, mood: locById.mood };
+        }
+      }
+
+      // Fall back to name-based lookup
+      if (!matchingLocation && storyboardLocation) {
+        // Try visualAssets first
+        if (hasVisualAssets) {
+          const locByName = locations.find(
+            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase() ||
+                   loc.name.toLowerCase().includes(storyboardLocation.toLowerCase()) ||
+                   storyboardLocation.toLowerCase().includes(loc.name.toLowerCase())
+          );
+          if (locByName) {
+            matchingLocation = { name: locByName.name, description: locByName.description, mood: locByName.mood };
+          }
+        }
+        // Then try deprecated keyLocations
+        if (!matchingLocation && storyBible.keyLocations) {
+          const locLegacy = storyBible.keyLocations.find(
+            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase()
+          );
+          if (locLegacy) {
+            matchingLocation = { name: locLegacy.name, description: locLegacy.visualDescription, mood: locLegacy.mood };
+          }
+        }
+      }
+
       if (matchingLocation) {
         fullPrompt += `=== LOCATION: ${matchingLocation.name} ===\n`;
-        fullPrompt += `${matchingLocation.visualDescription}\n`;
-        fullPrompt += `Mood: ${matchingLocation.mood}\n\n`;
+        fullPrompt += `${matchingLocation.description}\n`;
+        if (matchingLocation.mood) {
+          fullPrompt += `Mood: ${matchingLocation.mood}\n`;
+        }
+        fullPrompt += '\n';
       }
     }
 
-    // If storyboard specifies characters, only include those from Story Bible
-    if (storyboardCharacters && storyboardCharacters.length > 0 && storyBible.recurringCharacters) {
-      const charactersToInclude = storyBible.recurringCharacters.filter(char =>
-        storyboardCharacters.some(name =>
-          char.name.toLowerCase().includes(name.toLowerCase()) ||
-          name.toLowerCase().includes(char.name.toLowerCase())
-        )
-      );
+    // If storyboard specifies characters, look them up from visualAssets (by ID) or recurringCharacters (by name)
+    const characters = storyBible.visualAssets?.characters || [];
+
+    if ((storyboardCharacterIds && storyboardCharacterIds.length > 0) ||
+        (storyboardCharacters && storyboardCharacters.length > 0)) {
+      const charactersToInclude: { name: string; description: string }[] = [];
+
+      // Prefer ID-based lookup
+      if (storyboardCharacterIds && storyboardCharacterIds.length > 0 && characters.length > 0) {
+        for (const charId of storyboardCharacterIds) {
+          const charById = characters.find(c => c.id === charId);
+          if (charById) {
+            charactersToInclude.push({ name: charById.name, description: charById.description });
+          }
+        }
+      }
+
+      // If no ID matches, fall back to name-based lookup
+      if (charactersToInclude.length === 0 && storyboardCharacters && storyboardCharacters.length > 0) {
+        // Try visualAssets first
+        if (characters.length > 0) {
+          for (const charName of storyboardCharacters) {
+            const charByName = characters.find(c =>
+              c.name.toLowerCase().includes(charName.toLowerCase()) ||
+              charName.toLowerCase().includes(c.name.toLowerCase())
+            );
+            if (charByName && !charactersToInclude.some(c => c.name === charByName.name)) {
+              charactersToInclude.push({ name: charByName.name, description: charByName.description });
+            }
+          }
+        }
+        // Then try deprecated recurringCharacters
+        if (charactersToInclude.length === 0 && storyBible.recurringCharacters) {
+          const legacyChars = storyBible.recurringCharacters.filter(char =>
+            storyboardCharacters.some(name =>
+              char.name.toLowerCase().includes(name.toLowerCase()) ||
+              name.toLowerCase().includes(char.name.toLowerCase())
+            )
+          );
+          for (const char of legacyChars) {
+            charactersToInclude.push({ name: char.name, description: char.visualDescription });
+          }
+        }
+      }
 
       if (charactersToInclude.length > 0) {
         fullPrompt += '=== CHARACTERS IN THIS SCENE ===\n';
         charactersToInclude.forEach(char => {
-          fullPrompt += `${char.name}: ${char.visualDescription}\n`;
+          fullPrompt += `${char.name}: ${char.description}\n`;
         });
         fullPrompt += '\n';
       }

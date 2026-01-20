@@ -78,9 +78,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
-    // PUT - Update segment (text, prompts, narration, image, and/or reference tags)
+    // PUT - Update segment (text, prompts, narration, image, storyboard, and/or reference tags)
     if (req.method === 'PUT') {
-      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds, storyboardExclude } = req.body;
+      const {
+        text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds,
+        // Storyboard fields
+        storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle,
+        storyboardFocus, storyboardContinuity, storyboardExclude
+      } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
         brushingPrompt: brushingPrompt !== undefined ? 'provided' : 'not provided',
@@ -89,14 +94,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         imageUrl: imageUrl ? 'provided' : 'not provided',
         selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
         referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided',
-        storyboardExclude: storyboardExclude !== undefined ? storyboardExclude.length : 'not provided'
+        storyboard: (storyboardLocation !== undefined || storyboardCharacters !== undefined ||
+          storyboardShotType !== undefined || storyboardCameraAngle !== undefined ||
+          storyboardFocus !== undefined || storyboardContinuity !== undefined ||
+          storyboardExclude !== undefined) ? 'provided' : 'not provided'
       });
 
       try {
         // Check if any field is provided
         const hasUpdate = text !== undefined || brushingPrompt !== undefined || imagePrompt !== undefined ||
           narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined ||
-          referenceIds !== undefined || storyboardExclude !== undefined;
+          referenceIds !== undefined || storyboardLocation !== undefined || storyboardCharacters !== undefined ||
+          storyboardShotType !== undefined || storyboardCameraAngle !== undefined || storyboardFocus !== undefined ||
+          storyboardContinuity !== undefined || storyboardExclude !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -147,6 +157,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             image_url = COALESCE(${imageUrl ?? null}, image_url),
             image_history = COALESCE(${imageHistoryUpdate}, image_history),
             reference_ids = COALESCE(${referenceIds ?? null}, reference_ids),
+            storyboard_location = COALESCE(${storyboardLocation ?? null}, storyboard_location),
+            storyboard_characters = COALESCE(${storyboardCharacters ?? null}, storyboard_characters),
+            storyboard_shot_type = COALESCE(${storyboardShotType ?? null}, storyboard_shot_type),
+            storyboard_camera_angle = COALESCE(${storyboardCameraAngle ?? null}, storyboard_camera_angle),
+            storyboard_focus = COALESCE(${storyboardFocus ?? null}, storyboard_focus),
+            storyboard_continuity = COALESCE(${storyboardContinuity ?? null}, storyboard_continuity),
             storyboard_exclude = COALESCE(${storyboardExclude ?? null}, storyboard_exclude)
           WHERE id = ${segmentId} RETURNING *
         `;
@@ -253,6 +269,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('Reference updated:', reference?.id);
         if (!reference) return res.status(404).json({ error: 'Reference not found' });
+
+        // Also sync image URL to Story Bible visualAssets if imageUrl was updated
+        if (imageUrl && reference) {
+          try {
+            const [story] = await sql`SELECT story_bible FROM stories WHERE id = ${id}`;
+            if (story?.story_bible?.visualAssets) {
+              const visualAssets = story.story_bible.visualAssets;
+              let updated = false;
+
+              // Find and update matching asset based on type and name
+              const assetArrays = [
+                { key: 'locations', type: 'location' },
+                { key: 'characters', type: 'character' },
+                { key: 'objects', type: 'object' },
+              ] as const;
+
+              for (const { key, type } of assetArrays) {
+                if (reference.type === type && visualAssets[key]) {
+                  for (const asset of visualAssets[key]) {
+                    // Match by name (fuzzy)
+                    const refNameLower = reference.name.toLowerCase().replace(/^the\s+/, '');
+                    const assetNameLower = asset.name.toLowerCase().replace(/^the\s+/, '');
+                    if (refNameLower === assetNameLower ||
+                        refNameLower.includes(assetNameLower) ||
+                        assetNameLower.includes(refNameLower)) {
+                      asset.referenceImageUrl = imageUrl;
+                      updated = true;
+                      console.log(`[Reference] Synced image to Story Bible visualAssets.${key}: ${asset.name}`);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              if (updated) {
+                await sql`UPDATE stories SET story_bible = ${JSON.stringify(story.story_bible)} WHERE id = ${id}`;
+              }
+            }
+          } catch (syncError) {
+            // Don't fail the main operation if sync fails
+            console.error('[Reference] Failed to sync to Story Bible (non-fatal):', syncError);
+          }
+        }
+
         return res.status(200).json({ reference });
       } catch (error) {
         console.error('Error updating reference:', error);
@@ -452,7 +512,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               chapters: chaptersForStoryboard,
             });
 
-            // Update segments with storyboard data
+            // Update segments with storyboard data (including ID-based references)
             for (const entry of storyboard) {
               await sql`
                 UPDATE segments SET
@@ -461,7 +521,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   storyboard_shot_type = ${entry.shotType},
                   storyboard_camera_angle = ${entry.cameraAngle},
                   storyboard_focus = ${entry.visualFocus},
-                  storyboard_continuity = ${entry.continuityNote}
+                  storyboard_continuity = ${entry.continuityNote},
+                  storyboard_location_id = ${entry.locationId},
+                  storyboard_character_ids = ${entry.characterIds}
                 WHERE id = ${entry.segmentId}
               `;
             }
@@ -518,7 +580,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'extractReferences') {
       try {
         // Import the extraction and tagging functions
-        const { extractStoryReferences, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
+        const { extractStoryReferences, mergeExtractedReferencesIntoStoryBible, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
 
         // Get story with bible
         const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
@@ -567,7 +629,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           story.story_bible || undefined
         );
 
-        // Delete existing references and insert new ones
+        // Merge extracted references into Story Bible if it exists
+        if (story.story_bible) {
+          const updatedStoryBible = mergeExtractedReferencesIntoStoryBible(story.story_bible, references);
+          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${id}`;
+          console.log('[extractReferences] Merged references into Story Bible visualAssets');
+        }
+
+        // Delete existing references and insert new ones (backwards compatibility)
         await sql`DELETE FROM story_references WHERE story_id = ${id}`;
 
         const savedRefs = [];
@@ -663,7 +732,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('[generateStoryboard] Generated', storyboard.length, 'segment entries');
 
-        // Update segments with storyboard data
+        // Update segments with storyboard data (including ID-based references)
         let updatedCount = 0;
         for (const entry of storyboard) {
           const result = await sql`
@@ -673,7 +742,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               storyboard_shot_type = ${entry.shotType},
               storyboard_camera_angle = ${entry.cameraAngle},
               storyboard_focus = ${entry.visualFocus},
-              storyboard_continuity = ${entry.continuityNote}
+              storyboard_continuity = ${entry.continuityNote},
+              storyboard_location_id = ${entry.locationId},
+              storyboard_character_ids = ${entry.characterIds}
             WHERE id = ${entry.segmentId}
           `;
           if (result.count > 0) updatedCount++;
