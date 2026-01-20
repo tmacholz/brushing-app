@@ -1093,6 +1093,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   // Reference management state
   const [generatingRefImages, setGeneratingRefImages] = useState<Set<string>>(new Set());
+  const [generatingAssetImages, setGeneratingAssetImages] = useState<Set<string>>(new Set()); // Track by asset ID for assets without refId
   const [generatingAllRefs, setGeneratingAllRefs] = useState(false);
   const [showAddReference, setShowAddReference] = useState(false);
   const [newRefType, setNewRefType] = useState<'character' | 'object' | 'location'>('character');
@@ -1590,6 +1591,102 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       setGeneratingRefImages(prev => {
         const next = new Set(prev);
         next.delete(reference.id);
+        return next;
+      });
+    }
+  };
+
+  // Generate image for a visual asset (creates story_references entry if needed)
+  const handleGenerateVisualAssetImage = async (
+    assetId: string,
+    assetType: 'character' | 'object' | 'location',
+    name: string,
+    description: string,
+    existingRefId?: string
+  ) => {
+    if (!story) return;
+
+    // Track by asset ID
+    setGeneratingAssetImages(prev => new Set(prev).add(assetId));
+    setError(null);
+
+    try {
+      let refId = existingRefId;
+
+      // If no existing reference, create one first
+      if (!refId) {
+        const createRes = await fetch(`/api/admin/stories/${storyId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'addReference',
+            type: assetType,
+            name: name,
+            description: description,
+          }),
+        });
+
+        if (!createRes.ok) throw new Error('Failed to create reference entry');
+
+        const createData = await createRes.json();
+        refId = createData.reference.id;
+
+        // Update local state with new reference
+        setStory(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            references: [...prev.references, createData.reference],
+          };
+        });
+      }
+
+      // Now generate the image
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'referenceImage',
+          referenceId: refId,
+          referenceType: assetType,
+          name: name,
+          description: description,
+          storyBible: story.story_bible || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate reference image');
+      }
+
+      const data = await res.json();
+
+      // Save image URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?reference=${refId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.imageUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save reference image URL');
+
+      // Update local state
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.map(r =>
+            r.id === refId ? { ...r, image_url: data.imageUrl } : r
+          ),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+    } finally {
+      setGeneratingAssetImages(prev => {
+        const next = new Set(prev);
+        next.delete(assetId);
         return next;
       });
     }
@@ -2491,8 +2588,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {mergedVisualAssets.locations.map((loc) => {
-                                const ref = story.references?.find(r => r.id === loc.refId);
-                                const isGenerating = loc.refId ? generatingRefImages.has(loc.refId) : false;
+                                const isGenerating = generatingAssetImages.has(loc.id) || (loc.refId ? generatingRefImages.has(loc.refId) : false);
                                 return (
                                   <div key={loc.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
                                     {/* Image */}
@@ -2504,16 +2600,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                           <MapPin className="w-6 h-6 text-slate-600" />
                                         </div>
                                       )}
-                                      {ref && (
-                                        <button
-                                          onClick={() => handleGenerateReferenceImage(ref)}
-                                          disabled={isGenerating}
-                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
-                                          title={loc.referenceImageUrl ? 'Regenerate' : 'Generate'}
-                                        >
-                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(loc.id, 'location', loc.name, loc.description, loc.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={loc.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
                                     </div>
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
@@ -2537,8 +2631,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {mergedVisualAssets.characters.map((char) => {
-                                const ref = story.references?.find(r => r.id === char.refId);
-                                const isGenerating = char.refId ? generatingRefImages.has(char.refId) : false;
+                                const isGenerating = generatingAssetImages.has(char.id) || (char.refId ? generatingRefImages.has(char.refId) : false);
                                 return (
                                   <div key={char.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
                                     {/* Image */}
@@ -2550,16 +2643,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                           <Users className="w-6 h-6 text-slate-600" />
                                         </div>
                                       )}
-                                      {ref && (
-                                        <button
-                                          onClick={() => handleGenerateReferenceImage(ref)}
-                                          disabled={isGenerating}
-                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
-                                          title={char.referenceImageUrl ? 'Regenerate' : 'Generate'}
-                                        >
-                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(char.id, 'character', char.name, char.description, char.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={char.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
                                     </div>
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
@@ -2587,8 +2678,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                               {mergedVisualAssets.objects.map((obj) => {
-                                const ref = story.references?.find(r => r.id === obj.refId);
-                                const isGenerating = obj.refId ? generatingRefImages.has(obj.refId) : false;
+                                const isGenerating = generatingAssetImages.has(obj.id) || (obj.refId ? generatingRefImages.has(obj.refId) : false);
                                 return (
                                   <div key={obj.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
                                     {/* Image */}
@@ -2600,16 +2690,14 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                           <Package className="w-6 h-6 text-slate-600" />
                                         </div>
                                       )}
-                                      {ref && (
-                                        <button
-                                          onClick={() => handleGenerateReferenceImage(ref)}
-                                          disabled={isGenerating}
-                                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
-                                          title={obj.referenceImageUrl ? 'Regenerate' : 'Generate'}
-                                        >
-                                          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                                        </button>
-                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(obj.id, 'object', obj.name, obj.description, obj.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={obj.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
                                     </div>
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
@@ -2623,10 +2711,10 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                           </div>
                         )}
 
-                        {generatingAllRefs && (
+                        {(generatingAllRefs || generatingAssetImages.size > 0) && (
                           <p className="text-xs text-slate-400">
-                            {generatingRefImages.size > 0
-                              ? `Generating images... (${generatingRefImages.size} in progress)`
+                            {(generatingRefImages.size + generatingAssetImages.size) > 0
+                              ? `Generating images... (${generatingRefImages.size + generatingAssetImages.size} in progress)`
                               : 'Extracting visual assets from story...'}
                           </p>
                         )}
