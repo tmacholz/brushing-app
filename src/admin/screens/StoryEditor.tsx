@@ -27,7 +27,6 @@ import {
   Package,
   Plus,
   Maximize2,
-  Tag,
   BookOpen,
   Clapperboard,
   Camera,
@@ -68,6 +67,7 @@ interface Segment {
   // ID-based references to Story Bible visualAssets
   storyboard_location_id: string | null;
   storyboard_character_ids: string[] | null;
+  storyboard_object_ids: string[] | null;
 }
 
 interface Chapter {
@@ -680,143 +680,6 @@ function getTimeAgo(date: Date): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
   return date.toLocaleDateString();
-}
-
-// Component for managing reference tags on a segment
-interface SegmentReferenceTagsProps {
-  segment: Segment;
-  storyId: string;
-  references: StoryReference[];
-  onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
-}
-
-function SegmentReferenceTags({ segment, storyId, references, onUpdate }: SegmentReferenceTagsProps) {
-  const [showPicker, setShowPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const taggedRefs = references.filter(ref =>
-    segment.reference_ids?.includes(ref.id)
-  );
-  const untaggedRefs = references.filter(ref =>
-    !segment.reference_ids?.includes(ref.id)
-  );
-
-  const handleAddRef = async (refId: string) => {
-    setSaving(true);
-    try {
-      const newRefs = [...(segment.reference_ids || []), refId];
-      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenceIds: newRefs }),
-      });
-      if (res.ok) {
-        onUpdate(segment.id, { reference_ids: newRefs });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemoveRef = async (refId: string) => {
-    setSaving(true);
-    try {
-      const newRefs = (segment.reference_ids || []).filter(id => id !== refId);
-      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenceIds: newRefs }),
-      });
-      if (res.ok) {
-        onUpdate(segment.id, { reference_ids: newRefs });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const getRefIcon = (type: string) => {
-    switch (type) {
-      case 'character': return <Users className="w-3 h-3" />;
-      case 'location': return <MapPin className="w-3 h-3" />;
-      case 'object': return <Package className="w-3 h-3" />;
-      default: return <Tag className="w-3 h-3" />;
-    }
-  };
-
-  if (references.length === 0) return null;
-
-  return (
-    <div className="mt-2 pt-2 border-t border-slate-700/50">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-slate-500 flex items-center gap-1">
-          <Tag className="w-3 h-3" />
-          References:
-        </span>
-
-        {/* Tagged references */}
-        {taggedRefs.map(ref => (
-          <button
-            key={ref.id}
-            onClick={() => handleRemoveRef(ref.id)}
-            disabled={saving}
-            className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 rounded-full hover:bg-red-500/30 hover:text-red-300 transition-colors disabled:opacity-50"
-            title={`${ref.name} - Click to remove`}
-          >
-            {getRefIcon(ref.type)}
-            {ref.name}
-            <X className="w-2.5 h-2.5" />
-          </button>
-        ))}
-
-        {/* Add button */}
-        {untaggedRefs.length > 0 && (
-          <div className="relative">
-            <button
-              onClick={() => setShowPicker(!showPicker)}
-              disabled={saving}
-              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-slate-600/50 text-slate-400 rounded-full hover:bg-slate-600 hover:text-slate-300 transition-colors disabled:opacity-50"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              Add
-            </button>
-
-            {/* Reference picker dropdown */}
-            {showPicker && (
-              <div className="absolute top-full left-0 mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-xl min-w-[200px] max-h-[200px] overflow-y-auto">
-                {untaggedRefs.map(ref => (
-                  <button
-                    key={ref.id}
-                    onClick={() => {
-                      handleAddRef(ref.id);
-                      setShowPicker(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-700 transition-colors"
-                  >
-                    {ref.image_url ? (
-                      <img src={ref.image_url} alt="" className="w-6 h-6 rounded object-cover" />
-                    ) : (
-                      <div className="w-6 h-6 rounded bg-slate-600 flex items-center justify-center">
-                        {getRefIcon(ref.type)}
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-slate-200">{ref.name}</div>
-                      <div className="text-[10px] text-slate-500">{ref.type}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {taggedRefs.length === 0 && untaggedRefs.length > 0 && (
-          <span className="text-[10px] text-slate-500 italic">No references tagged</span>
-        )}
-      </div>
-    </div>
-  );
 }
 
 // Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
@@ -3006,7 +2869,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                             </details>
 
                             {/* Storyboard Info (Editable) */}
-                            {(segment.storyboard_shot_type || segment.storyboard_location) && (
+                            {(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_location_id || segment.storyboard_character_ids?.length) && (
                               <details className="mt-2">
                                 <summary className="text-xs text-cyan-500 cursor-pointer hover:text-cyan-400 flex items-center gap-1">
                                   <Clapperboard className="w-3 h-3" />
@@ -3075,60 +2938,221 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                     </div>
                                   </div>
 
-                                  {/* Location (editable) */}
-                                  <div className="flex items-center gap-2 text-xs">
-                                    <span className="text-slate-500 whitespace-nowrap">Location:</span>
-                                    <input
-                                      type="text"
-                                      value={segment.storyboard_location || ''}
-                                      onChange={async (e) => {
-                                        const value = e.target.value || null;
-                                        // Update local state immediately for responsiveness
-                                        handleSegmentUpdate(segment.id, { storyboard_location: value });
-                                      }}
-                                      onBlur={async (e) => {
-                                        const value = e.target.value.trim() || null;
-                                        try {
-                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-                                            method: 'PUT',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ storyboardLocation: value }),
-                                          });
-                                        } catch (err) {
-                                          console.error('Failed to update location:', err);
-                                        }
-                                      }}
-                                      placeholder="Enter location..."
-                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
-                                    />
+                                  {/* Location (tag selector) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                      <MapPin className="w-3 h-3 text-green-400" />
+                                      Location:
+                                    </span>
+                                    <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                      {segment.storyboard_location_id && (() => {
+                                        const loc = mergedVisualAssets.locations.find(l => l.id === segment.storyboard_location_id);
+                                        return loc ? (
+                                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded flex items-center gap-1 text-xs">
+                                            {loc.referenceImageUrl && (
+                                              <img src={loc.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                            )}
+                                            {loc.name}
+                                            <button
+                                              onClick={async () => {
+                                                try {
+                                                  await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ storyboardLocationId: null, storyboardLocation: null }),
+                                                  });
+                                                  handleSegmentUpdate(segment.id, { storyboard_location_id: null, storyboard_location: null });
+                                                } catch (err) {
+                                                  console.error('Failed to remove location:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        ) : null;
+                                      })()}
+                                      {!segment.storyboard_location_id && (
+                                        <select
+                                          value=""
+                                          onChange={async (e) => {
+                                            const locId = e.target.value;
+                                            if (!locId) return;
+                                            const loc = mergedVisualAssets.locations.find(l => l.id === locId);
+                                            try {
+                                              await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: loc?.name || null }),
+                                              });
+                                              handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: loc?.name || null });
+                                            } catch (err) {
+                                              console.error('Failed to set location:', err);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-green-500/50"
+                                        >
+                                          <option value="">Select location...</option>
+                                          {mergedVisualAssets.locations.map(loc => (
+                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                          ))}
+                                        </select>
+                                      )}
+                                    </div>
                                   </div>
 
-                                  {/* NPCs/Characters (editable) */}
+                                  {/* NPCs/Characters (tag selector) */}
                                   <div className="flex items-start gap-2 text-xs">
-                                    <span className="text-slate-500 whitespace-nowrap pt-0.5">NPCs:</span>
-                                    <input
-                                      type="text"
-                                      value={(segment.storyboard_characters || []).join(', ')}
-                                      onChange={async (e) => {
-                                        const value = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                        handleSegmentUpdate(segment.id, { storyboard_characters: value.length > 0 ? value : null });
-                                      }}
-                                      onBlur={async (e) => {
-                                        const value = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-                                        try {
-                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-                                            method: 'PUT',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({ storyboardCharacters: value.length > 0 ? value : null }),
-                                          });
-                                        } catch (err) {
-                                          console.error('Failed to update characters:', err);
-                                        }
-                                      }}
-                                      placeholder="Character names, comma-separated..."
-                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
-                                    />
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                      <Users className="w-3 h-3 text-blue-400" />
+                                      NPCs:
+                                    </span>
+                                    <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                      {(segment.storyboard_character_ids || []).map(charId => {
+                                        const char = mergedVisualAssets.characters.find(c => c.id === charId);
+                                        if (!char) return null;
+                                        return (
+                                          <span key={charId} className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded flex items-center gap-1 text-xs">
+                                            {char.referenceImageUrl && (
+                                              <img src={char.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                            )}
+                                            {char.name}
+                                            <button
+                                              onClick={async () => {
+                                                const newIds = (segment.storyboard_character_ids || []).filter(id => id !== charId);
+                                                const newNames = newIds.map(id => mergedVisualAssets.characters.find(c => c.id === id)?.name).filter(Boolean);
+                                                try {
+                                                  await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                      storyboardCharacterIds: newIds.length > 0 ? newIds : null,
+                                                      storyboardCharacters: newNames.length > 0 ? newNames : null
+                                                    }),
+                                                  });
+                                                  handleSegmentUpdate(segment.id, {
+                                                    storyboard_character_ids: newIds.length > 0 ? newIds : null,
+                                                    storyboard_characters: newNames.length > 0 ? newNames as string[] : null
+                                                  });
+                                                } catch (err) {
+                                                  console.error('Failed to remove character:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                      {mergedVisualAssets.characters.filter(c => !(segment.storyboard_character_ids || []).includes(c.id)).length > 0 && (
+                                        <select
+                                          value=""
+                                          onChange={async (e) => {
+                                            const charId = e.target.value;
+                                            if (!charId) return;
+                                            const newIds = [...(segment.storyboard_character_ids || []), charId];
+                                            const newNames = newIds.map(id => mergedVisualAssets.characters.find(c => c.id === id)?.name).filter(Boolean);
+                                            try {
+                                              await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  storyboardCharacterIds: newIds,
+                                                  storyboardCharacters: newNames
+                                                }),
+                                              });
+                                              handleSegmentUpdate(segment.id, {
+                                                storyboard_character_ids: newIds,
+                                                storyboard_characters: newNames as string[]
+                                              });
+                                            } catch (err) {
+                                              console.error('Failed to add character:', err);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-blue-500/50"
+                                        >
+                                          <option value="">+ Add NPC...</option>
+                                          {mergedVisualAssets.characters
+                                            .filter(c => !(segment.storyboard_character_ids || []).includes(c.id))
+                                            .map(char => (
+                                              <option key={char.id} value={char.id}>{char.name}</option>
+                                            ))}
+                                        </select>
+                                      )}
+                                    </div>
                                   </div>
+
+                                  {/* Objects (tag selector) */}
+                                  {mergedVisualAssets.objects.length > 0 && (
+                                    <div className="flex items-start gap-2 text-xs">
+                                      <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                        <Package className="w-3 h-3 text-amber-400" />
+                                        Objects:
+                                      </span>
+                                      <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                        {(segment.storyboard_object_ids || []).map(objId => {
+                                          const obj = mergedVisualAssets.objects.find(o => o.id === objId);
+                                          if (!obj) return null;
+                                          return (
+                                            <span key={objId} className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded flex items-center gap-1 text-xs">
+                                              {obj.referenceImageUrl && (
+                                                <img src={obj.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                              )}
+                                              {obj.name}
+                                              <button
+                                                onClick={async () => {
+                                                  const newIds = (segment.storyboard_object_ids || []).filter(id => id !== objId);
+                                                  try {
+                                                    await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                      method: 'PUT',
+                                                      headers: { 'Content-Type': 'application/json' },
+                                                      body: JSON.stringify({ storyboardObjectIds: newIds.length > 0 ? newIds : null }),
+                                                    });
+                                                    handleSegmentUpdate(segment.id, { storyboard_object_ids: newIds.length > 0 ? newIds : null });
+                                                  } catch (err) {
+                                                    console.error('Failed to remove object:', err);
+                                                  }
+                                                }}
+                                                className="opacity-60 hover:opacity-100"
+                                              >
+                                                <X className="w-3 h-3" />
+                                              </button>
+                                            </span>
+                                          );
+                                        })}
+                                        {mergedVisualAssets.objects.filter(o => !(segment.storyboard_object_ids || []).includes(o.id)).length > 0 && (
+                                          <select
+                                            value=""
+                                            onChange={async (e) => {
+                                              const objId = e.target.value;
+                                              if (!objId) return;
+                                              const newIds = [...(segment.storyboard_object_ids || []), objId];
+                                              try {
+                                                await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                  method: 'PUT',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ storyboardObjectIds: newIds }),
+                                                });
+                                                handleSegmentUpdate(segment.id, { storyboard_object_ids: newIds });
+                                              } catch (err) {
+                                                console.error('Failed to add object:', err);
+                                              }
+                                            }}
+                                            className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-amber-500/50"
+                                          >
+                                            <option value="">+ Add object...</option>
+                                            {mergedVisualAssets.objects
+                                              .filter(o => !(segment.storyboard_object_ids || []).includes(o.id))
+                                              .map(obj => (
+                                                <option key={obj.id} value={obj.id}>{obj.name}</option>
+                                              ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
 
                                   {/* Visual Focus (editable) */}
                                   <div className="flex items-start gap-2 text-xs">
@@ -3273,15 +3297,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               onUpdate={handleSegmentUpdate}
                             />
 
-                            {/* Reference Tags */}
-                            {story?.references && story.references.length > 0 && (
-                              <SegmentReferenceTags
-                                segment={segment}
-                                storyId={storyId}
-                                references={story.references}
-                                onUpdate={handleSegmentUpdate}
-                              />
-                            )}
                           </div>
                         ))}
                       </div>

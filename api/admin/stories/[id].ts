@@ -82,9 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PUT') {
       const {
         text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds,
-        // Storyboard fields
+        // Storyboard fields (text-based for backwards compatibility)
         storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle,
-        storyboardFocus, storyboardContinuity, storyboardExclude
+        storyboardFocus, storyboardContinuity, storyboardExclude,
+        // Storyboard ID-based fields (linked to visualAssets)
+        storyboardLocationId, storyboardCharacterIds, storyboardObjectIds
       } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
@@ -106,7 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined ||
           referenceIds !== undefined || storyboardLocation !== undefined || storyboardCharacters !== undefined ||
           storyboardShotType !== undefined || storyboardCameraAngle !== undefined || storyboardFocus !== undefined ||
-          storyboardContinuity !== undefined || storyboardExclude !== undefined;
+          storyboardContinuity !== undefined || storyboardExclude !== undefined ||
+          storyboardLocationId !== undefined || storyboardCharacterIds !== undefined || storyboardObjectIds !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -163,7 +166,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             storyboard_camera_angle = COALESCE(${storyboardCameraAngle ?? null}, storyboard_camera_angle),
             storyboard_focus = COALESCE(${storyboardFocus ?? null}, storyboard_focus),
             storyboard_continuity = COALESCE(${storyboardContinuity ?? null}, storyboard_continuity),
-            storyboard_exclude = COALESCE(${storyboardExclude ?? null}, storyboard_exclude)
+            storyboard_exclude = COALESCE(${storyboardExclude ?? null}, storyboard_exclude),
+            storyboard_location_id = COALESCE(${storyboardLocationId ?? null}, storyboard_location_id),
+            storyboard_character_ids = COALESCE(${storyboardCharacterIds ?? null}, storyboard_character_ids),
+            storyboard_object_ids = COALESCE(${storyboardObjectIds ?? null}, storyboard_object_ids)
           WHERE id = ${segmentId} RETURNING *
         `;
 
