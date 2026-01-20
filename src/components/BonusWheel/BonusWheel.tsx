@@ -176,11 +176,12 @@ export function BonusWheel({
 
       // 3. Calculate spin: 4-6 full rotations + land on the selected segment
       // The wheel rotates clockwise, pointer is at top
-      // Segment 0 is at 12 o'clock, so we need to offset based on segment index
+      // Segment 0 is at 12 o'clock - to land on segment N, we subtract its position
       const spins = 4 + Math.floor(Math.random() * 3);
       // Add slight randomness within the segment for visual variety
       const segmentOffset = (Math.random() * 0.6 + 0.2) * segmentAngle; // 20-80% into segment
-      const newRotation = (spins * 360) + (segmentIndex * segmentAngle) + segmentOffset;
+      // Subtract segment position to rotate it TO the pointer, subtract offset to land within the segment
+      const newRotation = ((spins + 1) * 360) - (segmentIndex * segmentAngle) - segmentOffset;
 
       setRotation(newRotation);
 
