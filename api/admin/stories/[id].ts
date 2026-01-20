@@ -151,25 +151,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Build and execute update with all fields
+        // Use CASE WHEN to allow explicit null clearing (COALESCE would keep old value)
         const [segment] = await sql`
           UPDATE segments SET
-            text = COALESCE(${text ?? null}, text),
-            brushing_prompt = COALESCE(${brushingPrompt ?? null}, brushing_prompt),
-            image_prompt = COALESCE(${imagePrompt ?? null}, image_prompt),
-            narration_sequence = COALESCE(${narrationSequence ? JSON.stringify(narrationSequence) : null}, narration_sequence),
-            image_url = COALESCE(${imageUrl ?? null}, image_url),
-            image_history = COALESCE(${imageHistoryUpdate}, image_history),
-            reference_ids = COALESCE(${referenceIds ?? null}, reference_ids),
-            storyboard_location = COALESCE(${storyboardLocation ?? null}, storyboard_location),
-            storyboard_characters = COALESCE(${storyboardCharacters ?? null}, storyboard_characters),
-            storyboard_shot_type = COALESCE(${storyboardShotType ?? null}, storyboard_shot_type),
-            storyboard_camera_angle = COALESCE(${storyboardCameraAngle ?? null}, storyboard_camera_angle),
-            storyboard_focus = COALESCE(${storyboardFocus ?? null}, storyboard_focus),
-            storyboard_continuity = COALESCE(${storyboardContinuity ?? null}, storyboard_continuity),
-            storyboard_exclude = COALESCE(${storyboardExclude ?? null}, storyboard_exclude),
-            storyboard_location_id = COALESCE(${storyboardLocationId ?? null}, storyboard_location_id),
-            storyboard_character_ids = COALESCE(${storyboardCharacterIds ?? null}, storyboard_character_ids),
-            storyboard_object_ids = COALESCE(${storyboardObjectIds ?? null}, storyboard_object_ids)
+            text = CASE WHEN ${text !== undefined} THEN ${text ?? null} ELSE text END,
+            brushing_prompt = CASE WHEN ${brushingPrompt !== undefined} THEN ${brushingPrompt ?? null} ELSE brushing_prompt END,
+            image_prompt = CASE WHEN ${imagePrompt !== undefined} THEN ${imagePrompt ?? null} ELSE image_prompt END,
+            narration_sequence = CASE WHEN ${narrationSequence !== undefined} THEN ${narrationSequence ? JSON.stringify(narrationSequence) : null} ELSE narration_sequence END,
+            image_url = CASE WHEN ${imageUrl !== undefined} THEN ${imageUrl ?? null} ELSE image_url END,
+            image_history = CASE WHEN ${imageHistoryUpdate !== null} THEN ${imageHistoryUpdate} ELSE image_history END,
+            reference_ids = CASE WHEN ${referenceIds !== undefined} THEN ${referenceIds ?? null} ELSE reference_ids END,
+            storyboard_location = CASE WHEN ${storyboardLocation !== undefined} THEN ${storyboardLocation ?? null} ELSE storyboard_location END,
+            storyboard_characters = CASE WHEN ${storyboardCharacters !== undefined} THEN ${storyboardCharacters ?? null} ELSE storyboard_characters END,
+            storyboard_shot_type = CASE WHEN ${storyboardShotType !== undefined} THEN ${storyboardShotType ?? null} ELSE storyboard_shot_type END,
+            storyboard_camera_angle = CASE WHEN ${storyboardCameraAngle !== undefined} THEN ${storyboardCameraAngle ?? null} ELSE storyboard_camera_angle END,
+            storyboard_focus = CASE WHEN ${storyboardFocus !== undefined} THEN ${storyboardFocus ?? null} ELSE storyboard_focus END,
+            storyboard_continuity = CASE WHEN ${storyboardContinuity !== undefined} THEN ${storyboardContinuity ?? null} ELSE storyboard_continuity END,
+            storyboard_exclude = CASE WHEN ${storyboardExclude !== undefined} THEN ${storyboardExclude ?? null} ELSE storyboard_exclude END,
+            storyboard_location_id = CASE WHEN ${storyboardLocationId !== undefined} THEN ${storyboardLocationId ?? null} ELSE storyboard_location_id END,
+            storyboard_character_ids = CASE WHEN ${storyboardCharacterIds !== undefined} THEN ${storyboardCharacterIds ?? null} ELSE storyboard_character_ids END,
+            storyboard_object_ids = CASE WHEN ${storyboardObjectIds !== undefined} THEN ${storyboardObjectIds ?? null} ELSE storyboard_object_ids END
           WHERE id = ${segmentId} RETURNING *
         `;
 
