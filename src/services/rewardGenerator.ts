@@ -241,7 +241,8 @@ export async function generateSpecificReward(
   rewardType: 'points' | 'sticker' | 'accessory',
   pointAmount?: number,
   collectedStickers: string[] = [],
-  collectedAccessories: string[] = []
+  collectedAccessories: string[] = [],
+  worldId?: string
 ): Promise<ChestReward> {
   if (rewardType === 'points') {
     // If a specific point amount is requested, use it; otherwise generate random
@@ -262,7 +263,8 @@ export async function generateSpecificReward(
     return generatePointReward();
   }
 
-  const selected = selectCollectible(collectibles);
+  // Pass worldId to prefer world-themed collectibles
+  const selected = selectCollectible(collectibles, worldId);
 
   if (!selected) {
     return generatePointReward();

@@ -11,6 +11,7 @@ import { useAudio } from '../../context/AudioContext';
 
 interface BonusWheelProps {
   tokensAvailable: number;
+  worldId?: string;
   collectedStickers?: string[];
   collectedAccessories?: string[];
   onRewardClaimed: (reward: ChestReward) => void;
@@ -101,6 +102,7 @@ type WheelPhase = 'loading' | 'ready' | 'spinning' | 'revealed' | 'complete';
 
 export function BonusWheel({
   tokensAvailable,
+  worldId,
   collectedStickers = [],
   collectedAccessories = [],
   onRewardClaimed,
@@ -136,7 +138,9 @@ export function BonusWheel({
     async function loadAvailability() {
       const avail = await getRewardAvailability(localCollectedStickers, localCollectedAccessories);
       setAvailability(avail);
-      setPhase('ready');
+      // Only transition to 'ready' if we're still in 'loading' phase (initial mount)
+      // Don't reset phase if we're already spinning/revealed/complete
+      setPhase(prev => prev === 'loading' ? 'ready' : prev);
     }
     loadAvailability();
   }, [localCollectedStickers, localCollectedAccessories]);
@@ -166,7 +170,8 @@ export function BonusWheel({
         landingSegment.rewardType,
         landingSegment.pointAmount,
         localCollectedStickers,
-        localCollectedAccessories
+        localCollectedAccessories,
+        worldId
       );
 
       // 3. Calculate spin: 4-6 full rotations + land on the selected segment
@@ -208,7 +213,7 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, phase, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
+  }, [tokensRemaining, isAnimating, phase, localCollectedStickers, localCollectedAccessories, worldId, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
 
   const handleSpin = () => {
     if (phase !== 'ready' || isAnimating) return;
@@ -462,7 +467,9 @@ export function BonusWheel({
                     transition={{ type: 'spring', delay: 0.1 }}
                     className="bg-yellow-400 text-yellow-900 text-sm font-bold px-4 py-2 rounded-full shadow-lg mb-4 whitespace-nowrap"
                   >
-                    🎉 NEW {currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉
+                    {currentReward.isNew
+                      ? `🎉 NEW ${currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉`
+                      : `✨ ${currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! ✨`}
                   </motion.div>
 
                   {/* Sticker/Accessory image with bounce animation */}
