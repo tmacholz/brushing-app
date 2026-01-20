@@ -14,7 +14,12 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react';
-import { characters, type Character } from '../../data/characters';
+
+interface Character {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
 
 interface Pet {
   id: string;
@@ -38,6 +43,7 @@ interface SpriteManagerProps {
 
 export function SpriteManager({ onBack }: SpriteManagerProps) {
   const [activeTab, setActiveTab] = useState<'characters' | 'pets'>('characters');
+  const [characters, setCharacters] = useState<Character[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +58,17 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch pets
+  // Fetch characters and pets
   const fetchData = useCallback(async () => {
     try {
+      // Fetch characters from database
+      const charsRes = await fetch('/api/admin/characters?entity=characters');
+      if (charsRes.ok) {
+        const charsData = await charsRes.json();
+        setCharacters(charsData.characters || []);
+      }
+
+      // Fetch pets
       const petsRes = await fetch('/api/admin/pets');
       if (petsRes.ok) {
         const petsData = await petsRes.json();
@@ -117,8 +131,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
     return null;
   };
 
-  // State for showing upload success
-  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState<string | null>(null);
 
   // Handle avatar upload for characters
   const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,7 +139,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
 
     setUploadingAvatar(true);
     setError(null);
-    setUploadedAvatarUrl(null);
 
     try {
       const formData = new FormData();
@@ -145,8 +156,12 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
         throw new Error(data.error || 'Failed to upload avatar');
       }
 
-      // Show the new URL to the user
-      setUploadedAvatarUrl(data.avatarUrl);
+      // Refresh characters list to show the new avatar
+      const charsRes = await fetch('/api/admin/characters?entity=characters');
+      if (charsRes.ok) {
+        const charsData = await charsRes.json();
+        setCharacters(charsData.characters || []);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload avatar');
     } finally {
@@ -326,41 +341,6 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
           </motion.div>
         )}
 
-        {uploadedAvatarUrl && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-green-500/20 border border-green-500/50 rounded-xl p-4 mb-6"
-          >
-            <p className="text-green-400 font-medium mb-2">Avatar uploaded successfully!</p>
-            <div className="flex items-center gap-4 mb-3">
-              <img
-                src={uploadedAvatarUrl}
-                alt="Uploaded avatar"
-                className="w-16 h-16 rounded-full object-cover border-2 border-green-500"
-              />
-              <div className="flex-1">
-                <p className="text-sm text-slate-300 mb-1">New avatar URL:</p>
-                <input
-                  type="text"
-                  readOnly
-                  value={uploadedAvatarUrl}
-                  className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-slate-300 font-mono"
-                  onClick={(e) => (e.target as HTMLInputElement).select()}
-                />
-              </div>
-            </div>
-            <p className="text-xs text-slate-400 mb-2">
-              Update <code className="bg-slate-700 px-1 rounded">src/data/characters.ts</code> with this URL to make it permanent.
-            </p>
-            <button
-              onClick={() => setUploadedAvatarUrl(null)}
-              className="text-green-300 text-sm underline"
-            >
-              Dismiss
-            </button>
-          </motion.div>
-        )}
 
         {/* Character/Pet Selection or Sprite Management */}
         {!selectedCharacterType && !selectedPet ? (

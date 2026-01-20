@@ -545,7 +545,9 @@ IMPORTANT:
     },
   ];
 
-  const result = await generateAndUpload(parts, `pet-avatars/${petId}.png`);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `pet-avatars/${petId}-${timestamp}.png`);
   return res.status(200).json({ avatarUrl: result.url, type: 'pet', ...(result.isDataUrl && { warning: 'Using data URL fallback' }) });
 }
 
