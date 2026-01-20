@@ -4,12 +4,12 @@ interface CompositeStoryImageProps {
   backgroundUrl: string | null;
   childSpriteUrl?: string | null;
   petSpriteUrl?: string | null;
-  // Border color for portrait circles (defaults to white)
+  // Border color for portrait frames (defaults to white)
   borderColor?: string;
   className?: string;
 }
 
-// Animation variants for portrait circles
+// Animation variants for portrait frames
 const portraitVariants = {
   hidden: {
     opacity: 0,
@@ -64,20 +64,20 @@ export function CompositeStoryImage({
       {/* Gradient overlay for text readability */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-black/30 pointer-events-none" />
 
-      {/* Character portraits - Circle overlays in corners */}
-      {/* Child portrait - Bottom left corner */}
+      {/* Character portraits - Rounded square overlays above control buttons */}
+      {/* Child portrait - Bottom left corner, above pause button */}
       <AnimatePresence mode="wait">
         {showChild && (
           <motion.div
             key={`child-portrait-${childSpriteUrl}`}
-            className="absolute bottom-3 left-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24"
+            className="absolute bottom-20 left-3 w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 lg:w-44 lg:h-44"
             variants={portraitVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
           >
             <div
-              className="w-full h-full rounded-full overflow-hidden"
+              className="w-full h-full rounded-2xl overflow-hidden"
               style={{
                 border: `3px solid ${borderColor}`,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2)',
@@ -93,12 +93,12 @@ export function CompositeStoryImage({
         )}
       </AnimatePresence>
 
-      {/* Pet portrait - Bottom right corner */}
+      {/* Pet portrait - Bottom right corner, above exit button */}
       <AnimatePresence mode="wait">
         {showPet && (
           <motion.div
             key={`pet-portrait-${petSpriteUrl}`}
-            className="absolute bottom-3 right-3 w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24"
+            className="absolute bottom-20 right-3 w-32 h-32 sm:w-36 sm:h-36 md:w-40 md:h-40 lg:w-44 lg:h-44"
             variants={portraitVariants}
             initial="hidden"
             animate="visible"
@@ -106,7 +106,7 @@ export function CompositeStoryImage({
             transition={{ delay: 0.1 }}
           >
             <div
-              className="w-full h-full rounded-full overflow-hidden"
+              className="w-full h-full rounded-2xl overflow-hidden"
               style={{
                 border: `3px solid ${borderColor}`,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2)',

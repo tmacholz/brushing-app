@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Volume2, VolumeX, Pause, Play, X } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, X, Subtitles } from 'lucide-react';
 import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
@@ -44,6 +44,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   // New task bonus flow state
@@ -727,22 +728,25 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             exit={{ opacity: 0 }}
             className="text-center flex flex-col items-center justify-end flex-1 w-full"
           >
-            <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 max-w-[90%] sm:max-w-lg landscape:max-w-[50%] landscape:p-2">
-              <p className="text-white text-sm sm:text-xl landscape:text-xs leading-snug sm:leading-relaxed mb-1 sm:mb-2 drop-shadow-lg">
-                {currentSegment?.text}
-              </p>
-              {currentSegment?.brushingPrompt && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-white/20 rounded-lg sm:rounded-xl p-2 sm:p-3 mt-1 sm:mt-2"
-                >
-                  <p className="text-accent font-bold text-sm sm:text-lg landscape:text-xs drop-shadow">
-                    {currentSegment.brushingPrompt}
-                  </p>
-                </motion.div>
-              )}
-            </div>
+            {/* Only hide subtitles if toggle is off AND there's a background image */}
+            {(subtitlesEnabled || !backgroundImage) && (
+              <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 max-w-[90%] sm:max-w-lg landscape:max-w-[50%] landscape:p-2">
+                <p className="text-white text-sm sm:text-xl landscape:text-xs leading-snug sm:leading-relaxed mb-1 sm:mb-2 drop-shadow-lg">
+                  {currentSegment?.text}
+                </p>
+                {currentSegment?.brushingPrompt && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white/20 rounded-lg sm:rounded-xl p-2 sm:p-3 mt-1 sm:mt-2"
+                  >
+                    <p className="text-accent font-bold text-sm sm:text-lg landscape:text-xs drop-shadow">
+                      {currentSegment.brushingPrompt}
+                    </p>
+                  </motion.div>
+                )}
+              </div>
+            )}
           </motion.div>
         );
 
@@ -876,6 +880,21 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
               <Volume2 className={`w-5 h-5 ${(isSpeaking || isSplicedAudioPlaying) ? 'animate-pulse' : ''}`} />
             ) : (
               <VolumeX className="w-5 h-5" />
+            )}
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setSubtitlesEnabled(!subtitlesEnabled)}
+            className={`p-2 rounded-full transition-colors relative ${
+              subtitlesEnabled ? 'bg-white/30 text-white' : 'bg-white/10 text-white/50'
+            }`}
+            title={subtitlesEnabled ? 'Hide subtitles' : 'Show subtitles'}
+          >
+            <Subtitles className="w-5 h-5" />
+            {!subtitlesEnabled && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-6 h-0.5 bg-white/70 rotate-45 rounded-full" />
+              </div>
             )}
           </motion.button>
         </div>
