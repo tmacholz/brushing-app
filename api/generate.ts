@@ -1069,13 +1069,13 @@ interface SpriteGenerationRequest {
   posePrompt: string;  // Expression description
 }
 
-// Style prefix for portrait generation (white background for removal, will be circle-masked in UI)
+// Style prefix for portrait generation (soft gradient background, will be circle-masked in UI)
 const PORTRAIT_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
-PURE WHITE #FFFFFF BACKGROUND (critical - solid white background, no gradients or shadows),
+SOFT WARM GRADIENT BACKGROUND - gentle off-white to warm tan/beige gradient, subtle and calming,
 PORTRAIT SHOT - shoulders up, head and upper chest only, NO full body,
 centered face with clear expressive features, Studio Ghibli inspired soft aesthetic,
 warm inviting colors, friendly approachable character design,
-clean sharp edges suitable for circle masking.`;
+DO NOT draw any circles, frames, borders, or outlines around the character.`;
 
 async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelResponse) {
   const { ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt } = req;
@@ -1109,10 +1109,11 @@ CRITICAL REQUIREMENTS:
   - Any distinctive features (ears, horns, etc. for pets)
 - Create a PORTRAIT showing HEAD AND SHOULDERS ONLY (no full body!)
 - The facial expression should clearly convey: ${posePrompt}
-- The background MUST be pure white #FFFFFF (solid white, no gradients)
+- The background MUST be a soft warm gradient (off-white to warm tan/beige)
+- DO NOT draw any circles, frames, borders, or outlines around the character
+- The character should NOT be inside a circle or any shape - just the character on the gradient background
 - Square composition, character centered
 - Face should be the focal point, expressive and clear
-- Clean edges suitable for circle mask overlay
 - Maintain the whimsical children's book illustration style
 - No text, labels, or watermarks`;
 
