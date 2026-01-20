@@ -11,6 +11,7 @@ import { useAudio } from '../../context/AudioContext';
 
 interface BonusWheelProps {
   tokensAvailable: number;
+  worldId?: string;
   collectedStickers?: string[];
   collectedAccessories?: string[];
   onRewardClaimed: (reward: ChestReward) => void;
@@ -101,6 +102,7 @@ type WheelPhase = 'loading' | 'ready' | 'spinning' | 'revealed' | 'complete';
 
 export function BonusWheel({
   tokensAvailable,
+  worldId,
   collectedStickers = [],
   collectedAccessories = [],
   onRewardClaimed,
@@ -136,7 +138,9 @@ export function BonusWheel({
     async function loadAvailability() {
       const avail = await getRewardAvailability(localCollectedStickers, localCollectedAccessories);
       setAvailability(avail);
-      setPhase('ready');
+      // Only transition to 'ready' if we're still in 'loading' phase (initial mount)
+      // Don't reset phase if we're already spinning/revealed/complete
+      setPhase(prev => prev === 'loading' ? 'ready' : prev);
     }
     loadAvailability();
   }, [localCollectedStickers, localCollectedAccessories]);
@@ -166,16 +170,18 @@ export function BonusWheel({
         landingSegment.rewardType,
         landingSegment.pointAmount,
         localCollectedStickers,
-        localCollectedAccessories
+        localCollectedAccessories,
+        worldId
       );
 
       // 3. Calculate spin: 4-6 full rotations + land on the selected segment
       // The wheel rotates clockwise, pointer is at top
-      // Segment 0 is at 12 o'clock, so we need to offset based on segment index
+      // Segment 0 is at 12 o'clock - to land on segment N, we subtract its position
       const spins = 4 + Math.floor(Math.random() * 3);
       // Add slight randomness within the segment for visual variety
       const segmentOffset = (Math.random() * 0.6 + 0.2) * segmentAngle; // 20-80% into segment
-      const newRotation = (spins * 360) + (segmentIndex * segmentAngle) + segmentOffset;
+      // Subtract segment position to rotate it TO the pointer, subtract offset to land within the segment
+      const newRotation = ((spins + 1) * 360) - (segmentIndex * segmentAngle) - segmentOffset;
 
       setRotation(newRotation);
 
@@ -208,7 +214,7 @@ export function BonusWheel({
       setPhase('revealed');
       onRewardClaimed(fallbackReward);
     }
-  }, [tokensRemaining, isAnimating, phase, localCollectedStickers, localCollectedAccessories, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
+  }, [tokensRemaining, isAnimating, phase, localCollectedStickers, localCollectedAccessories, worldId, playSound, onRewardClaimed, wheelSegments, segmentAngle]);
 
   const handleSpin = () => {
     if (phase !== 'ready' || isAnimating) return;
@@ -430,22 +436,21 @@ export function BonusWheel({
             transition={{ type: 'spring', damping: 10 }}
             className="text-center"
           >
-            {/* Reward card */}
-            <motion.div
-              initial={{ y: -50 }}
-              animate={{ y: 0 }}
-              transition={{ type: 'spring', damping: 8 }}
-              className={`bg-gradient-to-br ${displayInfo.color} rounded-3xl p-8 shadow-2xl mb-6 relative overflow-hidden`}
-            >
-              {/* Shine effect */}
+            {currentReward.type === 'points' ? (
+              /* Points reward - show in colored card */
               <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                initial={{ x: '-100%' }}
-                animate={{ x: '200%' }}
-                transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
-              />
-
-              {currentReward.type === 'points' ? (
+                initial={{ y: -50 }}
+                animate={{ y: 0 }}
+                transition={{ type: 'spring', damping: 8 }}
+                className={`bg-gradient-to-br ${displayInfo.color} rounded-3xl p-8 shadow-2xl mb-6 relative overflow-hidden`}
+              >
+                {/* Shine effect */}
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  initial={{ x: '-100%' }}
+                  animate={{ x: '200%' }}
+                  transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
+                />
                 <motion.div
                   animate={{ rotate: [0, 360] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
@@ -453,43 +458,40 @@ export function BonusWheel({
                 >
                   {displayInfo.emoji}
                 </motion.div>
-              ) : (
-                <div className="flex flex-col items-center">
-                  {/* Celebratory banner for collectibles */}
+              </motion.div>
+            ) : (
+              /* Collectible reward - show image with rounded border and shine effect */
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.2, 1] }}
+                transition={{ duration: 0.5, type: 'spring' }}
+                className="mb-6 relative"
+              >
+                <div className="bg-gradient-to-br from-yellow-300 to-amber-400 rounded-2xl p-3 shadow-xl relative overflow-hidden">
+                  {/* Shine effect */}
                   <motion.div
-                    initial={{ scale: 0, rotate: -10 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ type: 'spring', delay: 0.1 }}
-                    className="bg-yellow-400 text-yellow-900 text-sm font-bold px-4 py-2 rounded-full shadow-lg mb-4 whitespace-nowrap"
-                  >
-                    🎉 NEW {currentReward.type === 'sticker' ? 'STICKER' : 'ACCESSORY'}! 🎉
-                  </motion.div>
-
-                  {/* Sticker/Accessory image with bounce animation */}
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: [0, 1.2, 1] }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                  >
-                    {currentReward.collectible.imageUrl ? (
-                      <img
-                        src={currentReward.collectible.imageUrl}
-                        alt={currentReward.collectible.displayName}
-                        className="w-32 h-32 object-contain mx-auto rounded-2xl bg-white/20 p-2"
-                        onError={(e) => {
-                          // Fallback if image fails to load
-                          (e.target as HTMLImageElement).style.display = 'none';
-                          (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <div className={`text-7xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
-                      {displayInfo.emoji}
-                    </div>
-                  </motion.div>
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                    initial={{ x: '-100%' }}
+                    animate={{ x: '200%' }}
+                    transition={{ duration: 1.5, repeat: Infinity, repeatDelay: 1 }}
+                  />
+                  {currentReward.collectible.imageUrl ? (
+                    <img
+                      src={currentReward.collectible.imageUrl}
+                      alt={currentReward.collectible.displayName}
+                      className="w-40 h-40 object-contain mx-auto rounded-xl bg-white/30 p-2 relative"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                      }}
+                    />
+                  ) : null}
+                  <div className={`text-8xl ${currentReward.collectible.imageUrl ? 'hidden' : ''}`}>
+                    {displayInfo.emoji}
+                  </div>
                 </div>
-              )}
-            </motion.div>
+              </motion.div>
+            )}
 
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
