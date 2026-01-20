@@ -116,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST - Create or generate collectibles
   if (req.method === 'POST') {
-    const { action, worldId, worldName, type, name, displayName, description, imageUrl, rarity, petId } = req.body;
+    const { action, worldId, worldName, type, name, displayName, description, imageUrl, rarity, petId, customPrompt } = req.body;
 
     // Generate sticker with AI
     if (action === 'generate') {
@@ -133,10 +133,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (worldId && worldName) {
-          sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription);
+          sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription, customPrompt);
           sticker = { ...sticker, worldId };
         } else {
-          sticker = await generateUniversalSticker();
+          sticker = await generateUniversalSticker(customPrompt);
         }
 
         const saved = await saveSticker({
@@ -145,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           description: sticker.description,
           imageUrl: sticker.imageUrl,
           worldId: (sticker as { worldId?: string }).worldId || null,
-          rarity: 'uncommon',
+          rarity: rarity || 'uncommon',
         });
 
         return res.status(200).json({ collectible: formatCollectible(saved) });
@@ -174,10 +174,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           let sticker;
 
           if (worldId && worldName) {
-            sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription);
+            sticker = await generateWorldSticker(worldThemeKey || worldId, worldName, worldDescription, customPrompt);
             sticker = { ...sticker, worldId };
           } else {
-            sticker = await generateUniversalSticker();
+            sticker = await generateUniversalSticker(customPrompt);
           }
 
           const saved = await saveSticker({
@@ -186,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             description: sticker.description,
             imageUrl: sticker.imageUrl,
             worldId: (sticker as { worldId?: string }).worldId || null,
-            rarity: 'uncommon',
+            rarity: rarity || 'uncommon',
           });
 
           results.push(formatCollectible(saved));

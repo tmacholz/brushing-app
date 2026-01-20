@@ -83,7 +83,13 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
     fetchWorlds();
   }, []);
 
-  const handleGenerate = async (worldId: string, worldName: string, count: number) => {
+  const handleGenerate = async (
+    worldId: string,
+    worldName: string,
+    count: number,
+    customPrompt?: string,
+    rarity?: 'common' | 'uncommon' | 'rare'
+  ) => {
     setGenerating(true);
     setGeneratingCount(count);
     setError(null);
@@ -97,6 +103,8 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
           worldId: worldId || undefined,
           worldName: worldName || 'Universal',
           count,
+          customPrompt: customPrompt || undefined,
+          rarity: rarity || 'uncommon',
         }),
       });
 
@@ -405,14 +413,19 @@ function GenerateModal({
 }: {
   worlds: World[];
   onClose: () => void;
-  onGenerate: (worldId: string, worldName: string, count: number) => void;
+  onGenerate: (worldId: string, worldName: string, count: number, customPrompt?: string, rarity?: 'common' | 'uncommon' | 'rare') => void;
   generating: boolean;
 }) {
   const [selectedWorld, setSelectedWorld] = useState('');
-  const [count, setCount] = useState(3);
+  const [count, setCount] = useState(1);
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [rarity, setRarity] = useState<'common' | 'uncommon' | 'rare'>('uncommon');
 
   const selectedWorldObj = worlds.find((w) => w.id === selectedWorld);
   const worldName = selectedWorldObj?.display_name || 'Universal';
+
+  // When using custom prompt, default to 1 sticker
+  const effectiveCount = customPrompt ? 1 : count;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-6 z-50">
@@ -420,7 +433,7 @@ function GenerateModal({
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md"
+        className="bg-slate-800 border border-slate-700 rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto"
       >
         <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-purple-400" />
@@ -448,29 +461,80 @@ function GenerateModal({
           </div>
 
           <div>
-            <label className="block text-sm text-slate-400 mb-1">Number of Stickers</label>
+            <label className="block text-sm text-slate-400 mb-1">
+              Custom Prompt <span className="text-slate-500">(optional)</span>
+            </label>
+            <textarea
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="e.g., a friendly dragon breathing bubbles, a magical toothbrush with sparkles..."
+              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              rows={3}
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Describe what you want on the sticker. Leave empty for auto-generated themes.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-400 mb-1">Rarity</label>
             <div className="flex gap-2">
-              {[1, 3, 5].map((n) => (
+              {(['common', 'uncommon', 'rare'] as const).map((r) => (
                 <button
-                  key={n}
-                  onClick={() => setCount(n)}
-                  className={`flex-1 py-2 rounded-lg transition-colors ${
-                    count === n
-                      ? 'bg-purple-500 text-white'
+                  key={r}
+                  type="button"
+                  onClick={() => setRarity(r)}
+                  className={`flex-1 py-2 rounded-lg capitalize transition-colors ${
+                    rarity === r
+                      ? r === 'rare'
+                        ? 'bg-purple-500 text-white'
+                        : r === 'uncommon'
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-slate-500 text-white'
                       : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
                   }`}
                 >
-                  {n}
+                  {r}
                 </button>
               ))}
             </div>
           </div>
 
+          {!customPrompt && (
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Number of Stickers</label>
+              <div className="flex gap-2">
+                {[1, 3, 5].map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setCount(n)}
+                    className={`flex-1 py-2 rounded-lg transition-colors ${
+                      count === n
+                        ? 'bg-purple-500 text-white'
+                        : 'bg-slate-700/50 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Batch generation uses random themes from the world
+              </p>
+            </div>
+          )}
+
           <div className="bg-slate-700/30 rounded-lg p-3 text-sm text-slate-400">
             <p>
-              Will generate <strong className="text-white">{count}</strong> AI-generated{' '}
+              Will generate <strong className="text-white">{effectiveCount}</strong>{' '}
+              <strong className={`${rarity === 'rare' ? 'text-purple-300' : rarity === 'uncommon' ? 'text-blue-300' : 'text-slate-300'}`}>{rarity}</strong>{' '}
               <strong className="text-white">{worldName}</strong> sticker
-              {count > 1 ? 's' : ''} using Gemini.
+              {effectiveCount > 1 ? 's' : ''} using Gemini.
+              {customPrompt && (
+                <span className="block mt-1 text-cyan-300">
+                  Using custom prompt: &quot;{customPrompt.slice(0, 50)}{customPrompt.length > 50 ? '...' : ''}&quot;
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -484,7 +548,7 @@ function GenerateModal({
             Cancel
           </button>
           <button
-            onClick={() => onGenerate(selectedWorld, worldName, count)}
+            onClick={() => onGenerate(selectedWorld, worldName, effectiveCount, customPrompt || undefined, rarity)}
             disabled={generating}
             className="flex-1 px-4 py-2 bg-purple-500 hover:bg-purple-400 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
           >
