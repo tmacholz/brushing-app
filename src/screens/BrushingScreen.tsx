@@ -726,11 +726,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="text-center flex flex-col items-center justify-end flex-1 w-full"
+            className="text-center flex flex-col items-center justify-start flex-1 w-full"
           >
             {/* Only hide subtitles if toggle is off AND there's a background image */}
             {(subtitlesEnabled || !backgroundImage) && (
-              <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 max-w-[90%] sm:max-w-lg landscape:max-w-[50%] landscape:p-2">
+              <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 w-[95%] sm:w-[90%] max-w-2xl landscape:max-w-[70%] landscape:p-2">
                 <p className="text-white text-sm sm:text-xl landscape:text-xs leading-snug sm:leading-relaxed mb-1 sm:mb-2 drop-shadow-lg">
                   {currentSegment?.text}
                 </p>

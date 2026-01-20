@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
-import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
@@ -34,43 +33,8 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
   }
 }
 
-// Remove white background from image using threshold detection
-async function removeWhiteBackground(imageBuffer: Buffer): Promise<Buffer> {
-  // Extract raw RGBA pixel data
-  const { data, info } = await sharp(imageBuffer)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  // Process pixels - make white pixels transparent
-  const processedData = Buffer.from(data);
-  const whiteThreshold = 240; // RGB values >= 240 considered white
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-
-    if (r >= whiteThreshold && g >= whiteThreshold && b >= whiteThreshold) {
-      // Make white/near-white pixels fully transparent
-      processedData[i + 3] = 0; // Alpha = transparent
-    }
-  }
-
-  // Convert back to PNG with transparency
-  return sharp(processedData, {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: 4,
-    },
-  })
-    .png()
-    .toBuffer();
-}
-
 // Helper to call Gemini API and upload result
-// Optional postProcess function to transform the image buffer before upload (e.g., background removal)
+// Optional postProcess function to transform the image buffer before upload
 async function generateAndUpload(
   parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>,
   storageKey: string,
@@ -1155,9 +1119,10 @@ CRITICAL REQUIREMENTS:
     { text: prompt },
   ];
 
-  const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}.png`;
-  // Apply white background removal after generation
-  const result = await generateAndUpload(parts, storageKey, removeWhiteBackground);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}-${timestamp}.png`;
+  const result = await generateAndUpload(parts, storageKey);
 
   return res.status(200).json({
     spriteUrl: result.url,
