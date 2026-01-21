@@ -27,6 +27,7 @@ function toChild(row: Record<string, unknown>) {
     completedStoryArcs: row.completed_story_arcs,
     lastBrushDate: row.last_brush_date,
     nameAudioUrl: row.name_audio_url,
+    namePossessiveAudioUrl: row.name_possessive_audio_url,
     createdAt: row.created_at,
     // Collectibles
     collectedStickers: row.collected_stickers || [],
@@ -35,21 +36,13 @@ function toChild(row: Record<string, unknown>) {
   };
 }
 
-// Generate TTS audio for a name
-async function generateNameAudio(name: string, childId: string): Promise<string | null> {
-  if (!ELEVENLABS_API_KEY) {
-    console.warn('[Children API] ELEVENLABS_API_KEY not configured, skipping audio generation');
-    return null;
-  }
-
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    console.warn('[Children API] BLOB_READ_WRITE_TOKEN not configured, skipping audio generation');
+// Generate TTS audio for a single text phrase
+async function generateSingleAudio(text: string, storagePath: string): Promise<string | null> {
+  if (!ELEVENLABS_API_KEY || !process.env.BLOB_READ_WRITE_TOKEN) {
     return null;
   }
 
   try {
-    console.log('[Children API] Generating name audio for:', name);
-
     const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
       method: 'POST',
       headers: {
@@ -57,7 +50,7 @@ async function generateNameAudio(name: string, childId: string): Promise<string 
         'xi-api-key': ELEVENLABS_API_KEY,
       },
       body: JSON.stringify({
-        text: name,
+        text,
         model_id: 'eleven_turbo_v2_5',
         voice_settings: {
           stability: 0.5,
@@ -75,20 +68,46 @@ async function generateNameAudio(name: string, childId: string): Promise<string 
     }
 
     const audioBuffer = await response.arrayBuffer();
-    const storagePath = `name-audio/children/${childId}.mp3`;
-
     const blob = await put(storagePath, Buffer.from(audioBuffer), {
       access: 'public',
       contentType: 'audio/mpeg',
       allowOverwrite: true,
     });
 
-    console.log('[Children API] Audio uploaded:', blob.url);
     return blob.url;
   } catch (error) {
-    console.error('[Children API] Error generating name audio:', error);
+    console.error('[Children API] Error generating audio:', error);
     return null;
   }
+}
+
+// Generate TTS audio for a name (both regular and possessive forms)
+interface NameAudioResult {
+  regular: string | null;
+  possessive: string | null;
+}
+
+async function generateNameAudio(name: string, childId: string): Promise<NameAudioResult> {
+  if (!ELEVENLABS_API_KEY) {
+    console.warn('[Children API] ELEVENLABS_API_KEY not configured, skipping audio generation');
+    return { regular: null, possessive: null };
+  }
+
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    console.warn('[Children API] BLOB_READ_WRITE_TOKEN not configured, skipping audio generation');
+    return { regular: null, possessive: null };
+  }
+
+  console.log('[Children API] Generating name audio for:', name);
+
+  // Generate both regular and possessive forms in parallel
+  const [regularUrl, possessiveUrl] = await Promise.all([
+    generateSingleAudio(name, `name-audio/children/${childId}.mp3`),
+    generateSingleAudio(`${name}'s`, `name-audio/children/${childId}-possessive.mp3`),
+  ]);
+
+  console.log('[Children API] Audio uploaded:', { regular: regularUrl, possessive: possessiveUrl });
+  return { regular: regularUrl, possessive: possessiveUrl };
 }
 
 // Unified children API:
@@ -195,6 +214,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // POST - Actions on a single child (like regenerate audio)
+    if (req.method === 'POST') {
+      const { action } = req.body;
+
+      if (action === 'regenerateAudio') {
+        try {
+          // Get child's name first
+          const [child] = await sql`SELECT name FROM children WHERE id = ${id}`;
+          if (!child) {
+            return res.status(404).json({ error: 'Child not found' });
+          }
+
+          console.log('[Children API] Regenerating audio for child:', id, child.name);
+          const { regular, possessive } = await generateNameAudio(child.name as string, id);
+
+          if (regular || possessive) {
+            await sql`
+              UPDATE children
+              SET name_audio_url = ${regular}, name_possessive_audio_url = ${possessive}
+              WHERE id = ${id}
+            `;
+          }
+
+          return res.status(200).json({
+            success: true,
+            nameAudioUrl: regular,
+            namePossessiveAudioUrl: possessive,
+          });
+        } catch (error) {
+          console.error('[Children API] Error regenerating audio:', error);
+          return res.status(500).json({ error: 'Failed to regenerate audio' });
+        }
+      }
+
+      return res.status(400).json({ error: 'Invalid action' });
+    }
+
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -274,12 +330,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Generate name audio if not provided (for new profiles, not migrations)
       if (!nameAudioUrl) {
-        const audioUrl = await generateNameAudio(name, child.id as string);
-        if (audioUrl) {
+        const { regular, possessive } = await generateNameAudio(name, child.id as string);
+        if (regular || possessive) {
           await sql`
-            UPDATE children SET name_audio_url = ${audioUrl} WHERE id = ${child.id}
+            UPDATE children
+            SET name_audio_url = ${regular}, name_possessive_audio_url = ${possessive}
+            WHERE id = ${child.id}
           `;
-          child.nameAudioUrl = audioUrl;
+          child.nameAudioUrl = regular;
+          child.namePossessiveAudioUrl = possessive;
         }
       }
 

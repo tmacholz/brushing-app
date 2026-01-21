@@ -12,6 +12,7 @@ export const pets: Pet[] = [
     isStarter: true,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/sparkle.png',
     nameAudioUrl: null, // Will be pre-generated via admin
+    namePossessiveAudioUrl: null,
   },
   {
     id: 'bubbles',
@@ -24,6 +25,7 @@ export const pets: Pet[] = [
     isStarter: true,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/bubbles.png',
     nameAudioUrl: null,
+    namePossessiveAudioUrl: null,
   },
   {
     id: 'cosmo',
@@ -36,6 +38,7 @@ export const pets: Pet[] = [
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/cosmo.png',
     nameAudioUrl: null,
+    namePossessiveAudioUrl: null,
   },
   {
     id: 'fern',
@@ -48,6 +51,7 @@ export const pets: Pet[] = [
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/fern.png',
     nameAudioUrl: null,
+    namePossessiveAudioUrl: null,
   },
   {
     id: 'captain-whiskers',
@@ -60,6 +64,7 @@ export const pets: Pet[] = [
     isStarter: false,
     avatarUrl: 'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/pet-avatars/captain-whiskers.png',
     nameAudioUrl: null,
+    namePossessiveAudioUrl: null,
   },
 ];
 

@@ -118,18 +118,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const { audio } = req.query;
 
-    // Get all pet audio URLs
+    // Get all pet audio URLs (both regular and possessive forms)
     if (audio === 'true') {
       try {
-        const rows = await sql`SELECT pet_id, audio_url FROM pet_name_audio`;
+        const rows = await sql`SELECT pet_id, audio_url, possessive_audio_url FROM pet_name_audio`;
         const petAudio: Record<string, string> = {};
+        const petAudioPossessive: Record<string, string> = {};
         rows.forEach((row) => {
           petAudio[row.pet_id] = row.audio_url;
+          if (row.possessive_audio_url) {
+            petAudioPossessive[row.pet_id] = row.possessive_audio_url;
+          }
         });
-        return res.status(200).json({ petAudio });
+        return res.status(200).json({ petAudio, petAudioPossessive });
       } catch (error) {
         console.error('Error fetching pet audio (table may not exist):', error);
-        return res.status(200).json({ petAudio: {} });
+        return res.status(200).json({ petAudio: {}, petAudioPossessive: {} });
       }
     }
 
@@ -155,21 +159,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // POST - Create pet or generate suggestions
   if (req.method === 'POST') {
-    const { action, name, displayName, description, storyPersonality, unlockCost, isStarter, count, petId, audioUrl } = req.body;
+    const { action, name, displayName, description, storyPersonality, unlockCost, isStarter, count, petId, audioUrl, possessiveAudioUrl } = req.body;
 
-    // Save pet audio URL
+    // Save pet audio URLs (both regular and possessive forms)
     if (action === 'saveAudio') {
       if (!petId || !audioUrl) {
         return res.status(400).json({ error: 'Missing petId or audioUrl' });
       }
       try {
         await sql`
-          INSERT INTO pet_name_audio (pet_id, audio_url)
-          VALUES (${petId}, ${audioUrl})
+          INSERT INTO pet_name_audio (pet_id, audio_url, possessive_audio_url)
+          VALUES (${petId}, ${audioUrl}, ${possessiveAudioUrl})
           ON CONFLICT (pet_id)
-          DO UPDATE SET audio_url = EXCLUDED.audio_url, created_at = NOW()
+          DO UPDATE SET
+            audio_url = EXCLUDED.audio_url,
+            possessive_audio_url = COALESCE(EXCLUDED.possessive_audio_url, pet_name_audio.possessive_audio_url),
+            created_at = NOW()
         `;
-        return res.status(200).json({ success: true, petId, audioUrl });
+        return res.status(200).json({ success: true, petId, audioUrl, possessiveAudioUrl });
       } catch (error) {
         console.error('Error saving pet audio:', error);
         return res.status(500).json({ error: 'Failed to save pet audio' });

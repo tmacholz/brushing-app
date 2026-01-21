@@ -14,6 +14,7 @@ import { pets } from '../../data/pets';
 interface PetAudioData {
   petId: string;
   audioUrl: string | null;
+  possessiveAudioUrl: string | null;
   loading: boolean;
 }
 
@@ -41,6 +42,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
             audioMap[pet.id] = {
               petId: pet.id,
               audioUrl: data.petAudio?.[pet.id] || null,
+              possessiveAudioUrl: data.petAudioPossessive?.[pet.id] || null,
               loading: false,
             };
           });
@@ -55,6 +57,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
           audioMap[pet.id] = {
             petId: pet.id,
             audioUrl: null,
+            possessiveAudioUrl: null,
             loading: false,
           };
         });
@@ -91,7 +94,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
 
       const data = await res.json();
 
-      // Save to database
+      // Save both regular and possessive audio to database
       await fetch('/api/admin/pets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,6 +102,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
           action: 'saveAudio',
           petId,
           audioUrl: data.audioUrl,
+          possessiveAudioUrl: data.possessiveAudioUrl,
         }),
       });
 
@@ -107,6 +111,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
         [petId]: {
           petId,
           audioUrl: data.audioUrl,
+          possessiveAudioUrl: data.possessiveAudioUrl,
           loading: false,
         },
       }));
@@ -122,7 +127,9 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
 
   const generateAllAudio = async () => {
     for (const pet of pets) {
-      if (!petAudio[pet.id]?.audioUrl) {
+      // Generate if missing either regular or possessive audio
+      const audio = petAudio[pet.id];
+      if (!audio?.audioUrl || !audio?.possessiveAudioUrl) {
         await generateAudio(pet.id, pet.displayName);
         // Small delay between requests to avoid rate limiting
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -148,7 +155,8 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
   };
 
   const totalPets = pets.length;
-  const petsWithAudio = Object.values(petAudio).filter((p) => p.audioUrl).length;
+  const petsWithBothAudio = Object.values(petAudio).filter((p) => p.audioUrl && p.possessiveAudioUrl).length;
+  const petsWithAnyAudio = Object.values(petAudio).filter((p) => p.audioUrl || p.possessiveAudioUrl).length;
 
   if (loading) {
     return (
@@ -192,7 +200,12 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
           <div className="mt-4 flex items-center gap-2">
             <Volume2 className="w-4 h-4 text-cyan-400" />
             <span className="text-sm text-slate-300">
-              {petsWithAudio} / {totalPets} pets have audio
+              {petsWithBothAudio} / {totalPets} pets have both forms
+              {petsWithAnyAudio > petsWithBothAudio && (
+                <span className="text-amber-400 ml-2">
+                  ({petsWithAnyAudio - petsWithBothAudio} missing possessive)
+                </span>
+              )}
             </span>
           </div>
         </div>
@@ -224,11 +237,11 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {audio?.audioUrl ? (
+                  {audio?.audioUrl && audio?.possessiveAudioUrl ? (
                     <>
                       <span className="flex items-center gap-1 text-xs text-green-400">
                         <CheckCircle className="w-3.5 h-3.5" />
-                        Audio ready
+                        Both forms ready
                       </span>
                       <button
                         onClick={() => togglePlay(pet.id, audio.audioUrl!)}
@@ -252,6 +265,36 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
                           <Mic className="w-4 h-4" />
                         )}
                         Regenerate
+                      </button>
+                    </>
+                  ) : audio?.audioUrl ? (
+                    <>
+                      <span className="flex items-center gap-1 text-xs text-amber-400">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        Missing possessive
+                      </span>
+                      <button
+                        onClick={() => togglePlay(pet.id, audio.audioUrl!)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors"
+                      >
+                        {isPlaying ? (
+                          <Pause className="w-4 h-4" />
+                        ) : (
+                          <Play className="w-4 h-4" />
+                        )}
+                        {isPlaying ? 'Stop' : 'Play'}
+                      </button>
+                      <button
+                        onClick={() => generateAudio(pet.id, pet.displayName)}
+                        disabled={audio?.loading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {audio?.loading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Mic className="w-4 h-4" />
+                        )}
+                        Generate Possessive
                       </button>
                     </>
                   ) : (

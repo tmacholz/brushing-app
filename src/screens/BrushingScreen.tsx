@@ -17,7 +17,7 @@ import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
-import { getPetAudioUrl } from '../services/petAudio';
+import { getPetAudioUrl, getPetAudioPossessiveUrl } from '../services/petAudio';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
@@ -45,6 +45,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
+  const [petNamePossessiveAudioUrl, setPetNamePossessiveAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   // New task bonus flow state
   const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
@@ -72,7 +73,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     error: splicedAudioError,
   } = useAudioSplicing({
     childNameAudioUrl: child?.nameAudioUrl ?? null,
+    childNamePossessiveAudioUrl: child?.namePossessiveAudioUrl ?? null,
     petNameAudioUrl,
+    petNamePossessiveAudioUrl,
     externalAudioContext: getWebAudioContext(),
   });
 
@@ -86,6 +89,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       const audioLookupKey = pet?.name ?? storyPetId;
       console.log('[Audio] Fetching pet audio for:', { storyPetId, petName: pet?.name, audioLookupKey });
       getPetAudioUrl(audioLookupKey).then(setPetNameAudioUrl);
+      getPetAudioPossessiveUrl(audioLookupKey).then(setPetNamePossessiveAudioUrl);
     }
   }, [storyPetId, getPetById]);
 
@@ -406,6 +410,14 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return () => clearTimeout(timer);
   }, [isRunning, narrationEnabled, phase, currentPhaseKey, advanceToNext]);
 
+  // Trigger completion when story phase reaches 'complete'
+  useEffect(() => {
+    if (phase === 'complete' && isRunning && !isComplete) {
+      console.log('[Progression] Story complete, triggering completion flow');
+      handleBrushingComplete();
+    }
+  }, [phase, isRunning, isComplete]);
+
   // Play sounds on phase changes
   useEffect(() => {
     if (phase !== lastPhaseRef.current) {
@@ -439,6 +451,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Text-to-speech narration (with audio splicing support for pre-recorded audio)
   useEffect(() => {
     if (!narrationEnabled || !isRunning || !child) return;
+    if (phase === 'complete') return; // No narration for complete phase
 
     const childName = child.name;
     const petName = pet?.displayName ?? 'Friend';
