@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -50,13 +51,11 @@ interface StoryPitch {
   is_used: boolean;
 }
 
-interface WorldEditorProps {
-  worldId: string;
-  onBack: () => void;
-  onSelectStory: (storyId: string) => void;
-}
-
-export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps) {
+export function WorldEditor() {
+  const params = useParams<{ worldId: string }>();
+  const navigate = useNavigate();
+  // Guaranteed by the route definition
+  const worldId = params.worldId!;
   const [world, setWorld] = useState<World | null>(null);
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,6 +86,7 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
   const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
 
   const fetchWorld = useCallback(async () => {
+    if (!worldId) return;
     try {
       const res = await fetch(`/api/admin/worlds/${worldId}`);
       if (!res.ok) throw new Error('Failed to fetch world');
@@ -144,7 +144,7 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
     try {
       const res = await fetch(`/api/admin/worlds/${worldId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete world');
-      onBack();
+      navigate('/admin/worlds');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete world');
     }
@@ -331,7 +331,7 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
       <header className="border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
-            onClick={onBack}
+            onClick={() => navigate('/admin/worlds')}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -578,7 +578,7 @@ export function WorldEditor({ worldId, onBack, onSelectStory }: WorldEditorProps
                   key={story.id}
                   whileHover={{ scale: 1.01 }}
                   whileTap={{ scale: 0.99 }}
-                  onClick={() => onSelectStory(story.id)}
+                  onClick={() => navigate(`/admin/worlds/${worldId}/stories/${story.id}`)}
                   className="w-full bg-slate-700/30 border border-slate-600/50 rounded-lg p-4 text-left hover:border-cyan-500/50 transition-colors"
                 >
                   <div className="flex items-start justify-between">

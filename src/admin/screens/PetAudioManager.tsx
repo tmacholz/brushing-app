@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -18,11 +19,8 @@ interface PetAudioData {
   loading: boolean;
 }
 
-interface PetAudioManagerProps {
-  onBack: () => void;
-}
-
-export function PetAudioManager({ onBack }: PetAudioManagerProps) {
+export function PetAudioManager() {
+  const navigate = useNavigate();
   const [petAudio, setPetAudio] = useState<Record<string, PetAudioData>>({});
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -175,7 +173,7 @@ export function PetAudioManager({ onBack }: PetAudioManagerProps) {
       <header className="border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
-            onClick={onBack}
+            onClick={() => navigate('/admin/pets')}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

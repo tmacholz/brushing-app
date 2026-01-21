@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
@@ -39,11 +40,8 @@ interface PetSuggestion {
   created_at: string;
 }
 
-interface PetManagerProps {
-  onBack: () => void;
-}
-
-export function PetManager({ onBack }: PetManagerProps) {
+export function PetManager() {
+  const navigate = useNavigate();
   const [pets, setPets] = useState<Pet[]>([]);
   const [suggestions, setSuggestions] = useState<PetSuggestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -145,7 +143,7 @@ export function PetManager({ onBack }: PetManagerProps) {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={onBack}
+              onClick={() => navigate('/admin/worlds')}
               className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />

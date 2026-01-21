@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -33,11 +34,8 @@ interface World {
   display_name: string;
 }
 
-interface CollectiblesManagerProps {
-  onBack: () => void;
-}
-
-export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
+export function CollectiblesManager() {
+  const navigate = useNavigate();
   const [collectibles, setCollectibles] = useState<Collectible[]>([]);
   const [worlds, setWorlds] = useState<World[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,7 +194,7 @@ export function CollectiblesManager({ onBack }: CollectiblesManagerProps) {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
-              onClick={onBack}
+              onClick={() => navigate('/admin/worlds')}
               className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
             >
               <ArrowLeft className="w-5 h-5" />
