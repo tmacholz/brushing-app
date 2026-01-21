@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -188,10 +189,7 @@ interface Story {
   references: StoryReference[];
 }
 
-interface StoryEditorProps {
-  storyId: string;
-  onBack: () => void;
-}
+// Props interface removed - using React Router params instead
 
 // Component for managing audio on a single segment
 interface SegmentAudioEditorProps {
@@ -936,7 +934,13 @@ function EditableField({ value, onSave, multiline = false, className = '', label
   );
 }
 
-export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
+export function StoryEditor() {
+  const params = useParams<{ worldId: string; storyId: string }>();
+  const navigate = useNavigate();
+  // These are guaranteed by the route definition
+  const worldId = params.worldId!;
+  const storyId = params.storyId!;
+
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1290,7 +1294,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     try {
       const res = await fetch(`/api/admin/stories/${storyId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete story');
-      onBack();
+      navigate(`/admin/worlds/${worldId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete story');
     }
@@ -1927,7 +1931,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4">
         <p className="text-slate-400">{error || 'Story not found'}</p>
         <button
-          onClick={onBack}
+          onClick={() => navigate(`/admin/worlds/${worldId}`)}
           className="flex items-center gap-2 px-4 py-2 text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -1943,7 +1947,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       <header className="border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
-            onClick={onBack}
+            onClick={() => navigate(`/admin/worlds/${worldId}`)}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

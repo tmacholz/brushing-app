@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -37,11 +38,8 @@ interface SpriteStatus {
   generatedAt: string | null;
 }
 
-interface SpriteManagerProps {
-  onBack: () => void;
-}
-
-export function SpriteManager({ onBack }: SpriteManagerProps) {
+export function SpriteManager() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'characters' | 'pets'>('characters');
   const [characters, setCharacters] = useState<Character[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
@@ -306,7 +304,7 @@ export function SpriteManager({ onBack }: SpriteManagerProps) {
                 setSelectedCharacterType(null);
                 setSelectedPet(null);
               } else {
-                onBack();
+                navigate('/admin/worlds');
               }
             }}
             className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"

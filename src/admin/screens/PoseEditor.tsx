@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
@@ -23,11 +24,8 @@ interface PoseDefinition {
   isActive: boolean;
 }
 
-interface PoseEditorProps {
-  onBack: () => void;
-}
-
-export function PoseEditor({ onBack }: PoseEditorProps) {
+export function PoseEditor() {
+  const navigate = useNavigate();
   const [poses, setPoses] = useState<PoseDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +148,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
-            onClick={onBack}
+            onClick={() => navigate('/admin/worlds')}
             className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
