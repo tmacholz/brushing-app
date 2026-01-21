@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, VolumeX, Pause, Play, X, Subtitles } from 'lucide-react';
-import { useBrushingTimer, formatTime } from '../hooks/useBrushingTimer';
+import { useBrushingTimer } from '../hooks/useBrushingTimer';
 import { useStoryProgression } from '../hooks/useStoryProgression';
 import { useTextToSpeech } from '../hooks/useTextToSpeech';
 import { useAudioSplicing } from '../hooks/useAudioSplicing';
@@ -10,7 +10,6 @@ import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
 import { useContent } from '../context/ContentContext';
-import { ProgressBar } from '../components/ui/ProgressBar';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
 import { TaskCheckIn } from '../components/TaskCheckIn';
@@ -18,7 +17,7 @@ import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
-import { getPetAudioUrl } from '../services/petAudio';
+import { getPetAudioUrl, getPetAudioPossessiveUrl } from '../services/petAudio';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
@@ -36,16 +35,17 @@ interface BrushingScreenProps {
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward } = useChild();
-  const { playSound } = useAudio();
+  const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
-  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
+  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking, error: ttsError } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
+  const [petNamePossessiveAudioUrl, setPetNamePossessiveAudioUrl] = useState<string | null>(null);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   // New task bonus flow state
   const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
@@ -62,6 +62,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
 
   // Audio splicing hook for pre-recorded narration with name insertion
+  // Pass the shared Web Audio context for better iOS compatibility
   const {
     play: playSplicedAudio,
     stop: stopSplicedAudio,
@@ -69,9 +70,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     resume: resumeSplicedAudio,
     isPlaying: isSplicedAudioPlaying,
     isLoading: isSplicedAudioLoading,
+    error: splicedAudioError,
   } = useAudioSplicing({
     childNameAudioUrl: child?.nameAudioUrl ?? null,
+    childNamePossessiveAudioUrl: child?.namePossessiveAudioUrl ?? null,
     petNameAudioUrl,
+    petNamePossessiveAudioUrl,
+    externalAudioContext: getWebAudioContext(),
   });
 
   // Always use the current active pet for stories
@@ -84,6 +89,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       const audioLookupKey = pet?.name ?? storyPetId;
       console.log('[Audio] Fetching pet audio for:', { storyPetId, petName: pet?.name, audioLookupKey });
       getPetAudioUrl(audioLookupKey).then(setPetNameAudioUrl);
+      getPetAudioPossessiveUrl(audioLookupKey).then(setPetNamePossessiveAudioUrl);
     }
   }, [storyPetId, getPetById]);
 
@@ -255,9 +261,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   };
 
   const {
-    elapsedSeconds,
-    remainingSeconds,
-    progress,
     isRunning,
     isComplete,
     start,
@@ -268,15 +271,152 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const {
     currentSegment,
     phase,
-    getSegmentForTime,
+    advanceToNext,
   } = useStoryProgression(currentChapter);
 
-  // Update story progression based on timer
+  // Track audio state for segment advancement
+  const advanceTimerRef = useRef<number | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
+  const audioStartedForPhaseRef = useRef<string | null>(null);
+  const SEGMENT_BUFFER_MS = 2000; // 2 second buffer between segments after audio completes
+  const AUDIO_ERROR_BUFFER_MS = 8000; // 8 second delay when audio errors (give time to read)
+  const AUDIO_FALLBACK_MS = 10000; // 10 second fallback if audio never starts
+
+  // Create a unique key for current phase + segment
+  const currentPhaseKey = phase === 'story'
+    ? `story-${currentSegment?.id ?? 'unknown'}`
+    : phase;
+
+  // Track when audio starts for the current phase
   useEffect(() => {
-    if (isRunning) {
-      getSegmentForTime(elapsedSeconds);
+    const isAudioActive = isSpeaking || isSplicedAudioPlaying || isTTSLoading || isSplicedAudioLoading;
+
+    if (isAudioActive && audioStartedForPhaseRef.current !== currentPhaseKey) {
+      audioStartedForPhaseRef.current = currentPhaseKey;
+      console.log('[Progression] Audio started for:', currentPhaseKey);
+
+      // Clear fallback timer since audio started
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
     }
-  }, [elapsedSeconds, isRunning, getSegmentForTime]);
+  }, [isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, currentPhaseKey]);
+
+  // Fallback: advance if audio fails to start or errors occur
+  useEffect(() => {
+    if (!isRunning || !narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // If there's an audio error, give user time to read the text before advancing
+    const hasAudioError = ttsError || splicedAudioError;
+    if (hasAudioError && audioStartedForPhaseRef.current !== currentPhaseKey) {
+      console.log('[Progression] Audio error detected, advancing after', AUDIO_ERROR_BUFFER_MS, 'ms:', hasAudioError);
+
+      if (!advanceTimerRef.current) {
+        advanceTimerRef.current = window.setTimeout(() => {
+          console.log('[Progression] Advancing due to audio error from', currentPhaseKey);
+          advanceTimerRef.current = null;
+          audioStartedForPhaseRef.current = null;
+          advanceToNext();
+        }, AUDIO_ERROR_BUFFER_MS);
+      }
+      return;
+    }
+
+    // Start fallback timer when entering a new phase (in case audio never starts)
+    if (audioStartedForPhaseRef.current !== currentPhaseKey && !fallbackTimerRef.current) {
+      console.log('[Progression] Starting fallback timer for', currentPhaseKey);
+
+      fallbackTimerRef.current = window.setTimeout(() => {
+        // Only trigger if audio still hasn't started
+        if (audioStartedForPhaseRef.current !== currentPhaseKey) {
+          console.log('[Progression] Fallback: audio never started for', currentPhaseKey, ', advancing');
+          fallbackTimerRef.current = null;
+          audioStartedForPhaseRef.current = currentPhaseKey; // Mark as "handled"
+          advanceToNext();
+        }
+      }, AUDIO_FALLBACK_MS);
+    }
+
+    return () => {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+    };
+  }, [isRunning, narrationEnabled, phase, currentPhaseKey, ttsError, splicedAudioError, advanceToNext]);
+
+  // Detect when audio completes and schedule advancement to next segment
+  useEffect(() => {
+    // Only advance if we're running and narration is enabled
+    if (!isRunning || !narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // Clear timer if we're still loading/playing
+    const isAudioPlaying = isSpeaking || isSplicedAudioPlaying;
+    const isAudioLoading = isTTSLoading || isSplicedAudioLoading;
+
+    if (isAudioPlaying || isAudioLoading) {
+      // Clear any pending advance timer
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Audio has finished - but only advance if audio actually started for this phase
+    if (audioStartedForPhaseRef.current !== currentPhaseKey) {
+      // Audio hasn't started yet for this phase, wait (fallback timer will handle)
+      return;
+    }
+
+    // Audio has completed for this phase - start the buffer timer
+    if (!advanceTimerRef.current) {
+      console.log('[Progression] Audio complete for', currentPhaseKey, ', waiting', SEGMENT_BUFFER_MS, 'ms');
+
+      advanceTimerRef.current = window.setTimeout(() => {
+        console.log('[Progression] Advancing from', currentPhaseKey);
+        advanceTimerRef.current = null;
+        audioStartedForPhaseRef.current = null; // Reset for next phase
+        advanceToNext();
+      }, SEGMENT_BUFFER_MS);
+    }
+
+    return () => {
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+    };
+  }, [isRunning, narrationEnabled, isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, phase, currentPhaseKey, advanceToNext]);
+
+  // Also advance if narration is disabled (no audio to wait for)
+  useEffect(() => {
+    if (!isRunning || narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // With narration disabled, advance after a fixed delay per phase
+    const NO_NARRATION_DELAY = 5000; // 5 seconds when no narration
+
+    console.log('[Progression] No narration mode - will advance from', currentPhaseKey, 'in', NO_NARRATION_DELAY, 'ms');
+
+    const timer = window.setTimeout(() => {
+      console.log('[Progression] No narration mode - advancing from', currentPhaseKey);
+      advanceToNext();
+    }, NO_NARRATION_DELAY);
+
+    return () => clearTimeout(timer);
+  }, [isRunning, narrationEnabled, phase, currentPhaseKey, advanceToNext]);
+
+  // Trigger completion when story phase reaches 'complete'
+  useEffect(() => {
+    if (phase === 'complete' && isRunning && !isComplete) {
+      console.log('[Progression] Story complete, triggering completion flow');
+      handleBrushingComplete();
+    }
+  }, [phase, isRunning, isComplete]);
 
   // Play sounds on phase changes
   useEffect(() => {
@@ -308,32 +448,59 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   }, [currentSegment, phase, playSound]);
 
-  // Text-to-speech narration (with audio splicing support for story segments)
+  // Text-to-speech narration (with audio splicing support for pre-recorded audio)
   useEffect(() => {
     if (!narrationEnabled || !isRunning || !child) return;
+    if (phase === 'complete') return; // No narration for complete phase
 
     const childName = child.name;
     const petName = pet?.displayName ?? 'Friend';
 
-    // For story segments with pre-recorded audio, use gapless audio splicing
-    if (phase === 'story' && currentSegment?.narrationSequence && currentSegment.narrationSequence.length > 0) {
-      // Only play if this is a new segment
-      if (currentSegment.id !== lastSplicedSegmentRef.current) {
-        console.log('[Audio] Using pre-recorded audio for segment:', currentSegment.id);
-        lastSplicedSegmentRef.current = currentSegment.id;
-        lastSpokenTextRef.current = null; // Reset TTS ref so we don't duplicate
-        playSplicedAudio(currentSegment.narrationSequence);
+    // Check for pre-recorded audio based on current phase
+    let narrationSequence: import('../types').NarrationSequenceItem[] | null = null;
+    let narrationKey: string | null = null;
+
+    switch (phase) {
+      case 'recap':
+        if (currentChapter?.recapNarrationSequence && currentChapter.recapNarrationSequence.length > 0) {
+          narrationSequence = currentChapter.recapNarrationSequence;
+          narrationKey = `recap-${currentChapter.id}`;
+        }
+        break;
+      case 'story':
+        if (currentSegment?.narrationSequence && currentSegment.narrationSequence.length > 0) {
+          narrationSequence = currentSegment.narrationSequence;
+          narrationKey = `segment-${currentSegment.id}`;
+        }
+        break;
+      case 'cliffhanger':
+        if (currentChapter?.cliffhangerNarrationSequence && currentChapter.cliffhangerNarrationSequence.length > 0) {
+          narrationSequence = currentChapter.cliffhangerNarrationSequence;
+          narrationKey = `cliffhanger-${currentChapter.id}`;
+        }
+        break;
+      case 'teaser':
+        if (currentChapter?.teaserNarrationSequence && currentChapter.teaserNarrationSequence.length > 0) {
+          narrationSequence = currentChapter.teaserNarrationSequence;
+          narrationKey = `teaser-${currentChapter.id}`;
+        }
+        break;
+    }
+
+    // Use pre-recorded audio if available
+    if (narrationSequence && narrationKey) {
+      if (lastSplicedSegmentRef.current !== narrationKey) {
+        console.log('[Audio] Using pre-recorded audio for:', narrationKey);
+        lastSplicedSegmentRef.current = narrationKey;
+        lastSpokenTextRef.current = null; // Reset TTS ref
+        playSplicedAudio(narrationSequence);
       }
       return;
     }
 
-    // Fall back to TTS for segments without pre-recorded audio
-    if (phase === 'story') {
-      console.log('[Audio] No narrationSequence, falling back to TTS for segment:', currentSegment?.id, {
-        hasNarrationSequence: !!currentSegment?.narrationSequence,
-        narrationLength: currentSegment?.narrationSequence?.length,
-      });
-    }
+    // Fall back to TTS for phases without pre-recorded audio
+    console.log('[Audio] No pre-recorded audio for phase:', phase, ', falling back to TTS');
+
     let textToSpeak: string | null = null;
 
     switch (phase) {
@@ -852,16 +1019,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           </motion.div>
         ) : null}
       </AnimatePresence>
-      {/* Header with progress and narration toggle */}
+      {/* Header with narration and subtitle toggles */}
       <div className="relative z-10 mb-8">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="flex-1">
-            <ProgressBar
-              progress={progress}
-              showTime
-              timeRemaining={formatTime(remainingSeconds)}
-            />
-          </div>
+        <div className="flex items-center justify-end gap-3 mb-3">
           <motion.button
             whileTap={{ scale: 0.9 }}
             onClick={() => {

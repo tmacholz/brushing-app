@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -188,10 +189,7 @@ interface Story {
   references: StoryReference[];
 }
 
-interface StoryEditorProps {
-  storyId: string;
-  onBack: () => void;
-}
+// Props interface removed - using React Router params instead
 
 // Component for managing audio on a single segment
 interface SegmentAudioEditorProps {
@@ -936,7 +934,13 @@ function EditableField({ value, onSave, multiline = false, className = '', label
   );
 }
 
-export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
+export function StoryEditor() {
+  const params = useParams<{ worldId: string; storyId: string }>();
+  const navigate = useNavigate();
+  // These are guaranteed by the route definition
+  const worldId = params.worldId!;
+  const storyId = params.storyId!;
+
   const [story, setStory] = useState<Story | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -978,6 +982,9 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   // Storyboard generation state
   const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
+
+  // Visual assets lightbox
+  const [visualAssetLightboxUrl, setVisualAssetLightboxUrl] = useState<string | null>(null);
 
   // Computed merged visual assets from Story Bible + legacy sources
   const mergedVisualAssets = useMemo(() => {
@@ -1290,7 +1297,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     try {
       const res = await fetch(`/api/admin/stories/${storyId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete story');
-      onBack();
+      navigate(`/admin/worlds/${worldId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete story');
     }
@@ -1927,7 +1934,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4">
         <p className="text-slate-400">{error || 'Story not found'}</p>
         <button
-          onClick={onBack}
+          onClick={() => navigate(`/admin/worlds/${worldId}`)}
           className="flex items-center gap-2 px-4 py-2 text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -1943,7 +1950,7 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       <header className="border-b border-slate-700/50 bg-slate-800/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
-            onClick={onBack}
+            onClick={() => navigate(`/admin/worlds/${worldId}`)}
             className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -2463,7 +2470,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {loc.referenceImageUrl ? (
-                                        <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(loc.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <MapPin className="w-6 h-6 text-slate-600" />
@@ -2506,7 +2522,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {char.referenceImageUrl ? (
-                                        <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(char.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <Users className="w-6 h-6 text-slate-600" />
@@ -2553,7 +2578,16 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {obj.referenceImageUrl ? (
-                                        <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(obj.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <Package className="w-6 h-6 text-slate-600" />
@@ -3418,6 +3452,40 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           ))}
         </section>
       </main>
+
+      {/* Visual Assets Lightbox */}
+      <AnimatePresence>
+        {visualAssetLightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setVisualAssetLightboxUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={visualAssetLightboxUrl}
+                alt="Visual asset"
+                className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setVisualAssetLightboxUrl(null)}
+                className="absolute -top-3 -right-3 bg-white text-slate-900 p-2 rounded-full shadow-lg hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

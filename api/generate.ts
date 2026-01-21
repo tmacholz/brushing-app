@@ -1160,16 +1160,16 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Name too long (max 50 characters)' });
   }
 
-  try {
-    console.log('Calling ElevenLabs API...');
+  // Helper to generate TTS for a single text
+  const generateSingleAudio = async (text: string, storagePath: string): Promise<string> => {
     const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY,
+        'xi-api-key': ELEVENLABS_API_KEY!,
       },
       body: JSON.stringify({
-        text: name,
+        text,
         model_id: 'eleven_turbo_v2_5',
         voice_settings: {
           stability: 0.5,
@@ -1182,24 +1182,40 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
 
     if (!response.ok) {
       const error = await response.text();
-      console.log('ElevenLabs API error:', response.status, error);
-      return res.status(500).json({ error: `ElevenLabs API error: ${error}` });
+      throw new Error(`ElevenLabs API error: ${error}`);
     }
 
-    console.log('ElevenLabs API success, uploading to blob...');
     const audioBuffer = await response.arrayBuffer();
-    const storagePath = nameType === 'child'
-      ? `name-audio/children/${id}.mp3`
-      : `name-audio/pets/${id}.mp3`;
-
     const blob = await put(storagePath, Buffer.from(audioBuffer), {
       access: 'public',
       contentType: 'audio/mpeg',
       allowOverwrite: true,
     });
 
-    console.log('Blob upload success:', blob.url);
-    return res.status(200).json({ audioUrl: blob.url, name, type: nameType, id });
+    return blob.url;
+  };
+
+  try {
+    console.log('Calling ElevenLabs API for both regular and possessive forms...');
+
+    const baseStoragePath = nameType === 'child'
+      ? `name-audio/children/${id}`
+      : `name-audio/pets/${id}`;
+
+    // Generate both regular and possessive forms in parallel
+    const [audioUrl, possessiveAudioUrl] = await Promise.all([
+      generateSingleAudio(name, `${baseStoragePath}.mp3`),
+      generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive.mp3`),
+    ]);
+
+    console.log('Blob upload success:', { audioUrl, possessiveAudioUrl });
+    return res.status(200).json({
+      audioUrl,
+      possessiveAudioUrl,
+      name,
+      type: nameType,
+      id
+    });
   } catch (error) {
     console.error('handleNameAudio error:', error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate name audio' });

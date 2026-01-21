@@ -27,6 +27,7 @@ export interface Child {
   createdAt: string;
   characterId: string; // Selected character ('boy' or 'girl')
   nameAudioUrl: string | null; // Pre-generated TTS of child's name for audio splicing
+  namePossessiveAudioUrl: string | null; // Pre-generated TTS of child's name possessive (e.g., "Tim's")
   // Collectibles
   collectedStickers: string[]; // Array of collectible IDs
   collectedAccessories: string[]; // Array of collectible IDs
@@ -80,6 +81,7 @@ export interface Pet {
   isStarter: boolean;
   avatarUrl: string | null; // Illustrated pet avatar for story consistency
   nameAudioUrl: string | null; // Pre-generated TTS of pet's name for audio splicing
+  namePossessiveAudioUrl: string | null; // Pre-generated TTS of pet's name possessive (e.g., "Sparkle's")
 }
 
 export interface ToothBrush {
@@ -150,9 +152,10 @@ export interface StoryChapter {
 }
 
 // Item in the narration sequence - either an audio clip or a name placeholder
+// Possessive forms (e.g., "Tim's") are separate placeholders to avoid splicing issues
 export type NarrationSequenceItem =
   | { type: 'audio'; url: string }
-  | { type: 'name'; placeholder: 'CHILD' | 'PET' };
+  | { type: 'name'; placeholder: 'CHILD' | 'PET' | 'CHILD_POSSESSIVE' | 'PET_POSSESSIVE' };
 
 // Character expression for portrait overlay circles
 export type Expression = 'happy' | 'sad' | 'surprised' | 'worried' | 'determined' | 'excited';

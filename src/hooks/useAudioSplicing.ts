@@ -3,7 +3,11 @@ import type { NarrationSequenceItem } from '../types';
 
 interface AudioSplicingOptions {
   childNameAudioUrl: string | null;
+  childNamePossessiveAudioUrl: string | null; // Possessive form (e.g., "Tim's")
   petNameAudioUrl: string | null;
+  petNamePossessiveAudioUrl: string | null; // Possessive form (e.g., "Sparkle's")
+  // Optional external AudioContext (e.g., from AudioProvider) - helps with iOS unlock
+  externalAudioContext?: AudioContext | null;
 }
 
 interface UseAudioSplicingReturn {
@@ -47,9 +51,19 @@ async function getAudioBuffer(
 /**
  * Hook for playing narration sequences with gapless audio.
  * Uses Web Audio API to schedule clips precisely without gaps.
+ *
+ * On iOS, the AudioContext must be created/resumed during a user gesture.
+ * Pass an externalAudioContext from AudioProvider (which handles iOS unlocking)
+ * to ensure audio works on mobile devices.
  */
 export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicingReturn {
-  const { childNameAudioUrl, petNameAudioUrl } = options;
+  const {
+    childNameAudioUrl,
+    childNamePossessiveAudioUrl,
+    petNameAudioUrl,
+    petNamePossessiveAudioUrl,
+    externalAudioContext,
+  } = options;
 
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -62,6 +76,9 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
   const startTimeRef = useRef<number>(0);
   const totalDurationRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
+
+  // Track whether we created our own context (vs using external)
+  const ownsContextRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -76,7 +93,8 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           // Already stopped
         }
       });
-      if (audioContextRef.current) {
+      // Only close if we created the context ourselves
+      if (audioContextRef.current && ownsContextRef.current) {
         audioContextRef.current.close();
       }
     };
@@ -119,9 +137,13 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
       setProgress(0);
 
       try {
-        // Create or reuse audio context
-        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        // Use external AudioContext if provided (better for iOS), otherwise create our own
+        if (externalAudioContext && externalAudioContext.state !== 'closed') {
+          audioContextRef.current = externalAudioContext;
+          ownsContextRef.current = false;
+        } else if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
           audioContextRef.current = new AudioContext();
+          ownsContextRef.current = true;
         }
         const ctx = audioContextRef.current;
 
@@ -137,10 +159,22 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           if (item.type === 'audio') {
             urlsToLoad.add(item.url);
           } else if (item.type === 'name') {
-            if (item.placeholder === 'CHILD' && childNameAudioUrl) {
-              urlsToLoad.add(childNameAudioUrl);
-            } else if (item.placeholder === 'PET' && petNameAudioUrl) {
-              urlsToLoad.add(petNameAudioUrl);
+            // Handle both regular and possessive name forms
+            switch (item.placeholder) {
+              case 'CHILD':
+                if (childNameAudioUrl) urlsToLoad.add(childNameAudioUrl);
+                break;
+              case 'CHILD_POSSESSIVE':
+                if (childNamePossessiveAudioUrl) urlsToLoad.add(childNamePossessiveAudioUrl);
+                else if (childNameAudioUrl) urlsToLoad.add(childNameAudioUrl); // Fallback
+                break;
+              case 'PET':
+                if (petNameAudioUrl) urlsToLoad.add(petNameAudioUrl);
+                break;
+              case 'PET_POSSESSIVE':
+                if (petNamePossessiveAudioUrl) urlsToLoad.add(petNamePossessiveAudioUrl);
+                else if (petNameAudioUrl) urlsToLoad.add(petNameAudioUrl); // Fallback
+                break;
             }
           }
         }
@@ -159,7 +193,7 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         // Use overlap around name clips to reduce perceived gaps from audio silence padding
         const NAME_OVERLAP_BEFORE = 0.25; // Overlap before name clips (tighten lead-in)
-        const NAME_OVERLAP_AFTER = 0.20; // Overlap after name clips (tighten follow-up)
+        const NAME_OVERLAP_AFTER = 0.30; // Overlap after name clips (tighten follow-up) - increased for tighter transitions
         let scheduleTime = ctx.currentTime;
         const sources: AudioBufferSourceNode[] = [];
 
@@ -171,7 +205,22 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           if (item.type === 'audio') {
             buffer = bufferMap.get(item.url);
           } else if (item.type === 'name') {
-            const url = item.placeholder === 'CHILD' ? childNameAudioUrl : petNameAudioUrl;
+            // Get the appropriate URL based on placeholder type (regular or possessive)
+            let url: string | null = null;
+            switch (item.placeholder) {
+              case 'CHILD':
+                url = childNameAudioUrl;
+                break;
+              case 'CHILD_POSSESSIVE':
+                url = childNamePossessiveAudioUrl || childNameAudioUrl; // Fallback to regular
+                break;
+              case 'PET':
+                url = petNameAudioUrl;
+                break;
+              case 'PET_POSSESSIVE':
+                url = petNamePossessiveAudioUrl || petNameAudioUrl; // Fallback to regular
+                break;
+            }
             if (url) {
               buffer = bufferMap.get(url);
             }
@@ -234,7 +283,7 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         setIsPlaying(false);
       }
     },
-    [childNameAudioUrl, petNameAudioUrl, updateProgress]
+    [childNameAudioUrl, childNamePossessiveAudioUrl, petNameAudioUrl, petNamePossessiveAudioUrl, externalAudioContext, updateProgress]
   );
 
   const stop = useCallback(() => {

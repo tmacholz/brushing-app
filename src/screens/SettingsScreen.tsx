@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Check, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { ArrowLeft, Check, Trash2, ToggleLeft, ToggleRight, RefreshCw, Loader2 } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { characters, getCharacterById } from '../data/characters';
@@ -117,11 +117,13 @@ function TaskBonusSettings({
 }
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig } = useChild();
+  const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig, refreshChildren } = useChild();
   const { playSound } = useAudio();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResetAllConfirm, setShowResetAllConfirm] = useState(false);
+  const [regeneratingAudio, setRegeneratingAudio] = useState(false);
+  const [audioRegenerateStatus, setAudioRegenerateStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   const handleBack = () => {
     playSound('tap');
@@ -146,6 +148,39 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     playSound('tap');
     resetAllData();
     setShowResetAllConfirm(false);
+  };
+
+  const handleRegenerateAudio = async () => {
+    if (!child?.id || regeneratingAudio) return;
+
+    playSound('tap');
+    setRegeneratingAudio(true);
+    setAudioRegenerateStatus('idle');
+
+    try {
+      const res = await fetch(`/api/children?id=${child.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'regenerateAudio' }),
+      });
+
+      if (res.ok) {
+        setAudioRegenerateStatus('success');
+        // Refresh child data to get updated audio URLs
+        refreshChildren();
+        // Clear success status after 3 seconds
+        setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
+      } else {
+        setAudioRegenerateStatus('error');
+        setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
+      }
+    } catch (error) {
+      console.error('Failed to regenerate audio:', error);
+      setAudioRegenerateStatus('error');
+      setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
+    } finally {
+      setRegeneratingAudio(false);
+    }
   };
 
   if (!child) return null;
@@ -265,6 +300,46 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               <span className="text-text/60">Longest Streak</span>
               <span className="font-medium text-text">{child.longestStreak} days</span>
             </div>
+          </div>
+
+          {/* Regenerate Name Audio */}
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <button
+              onClick={handleRegenerateAudio}
+              disabled={regeneratingAudio}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium transition-colors ${
+                audioRegenerateStatus === 'success'
+                  ? 'bg-green-100 text-green-700'
+                  : audioRegenerateStatus === 'error'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-gray-100 text-text/70 hover:bg-gray-200'
+              } disabled:opacity-50`}
+            >
+              {regeneratingAudio ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Regenerating Audio...
+                </>
+              ) : audioRegenerateStatus === 'success' ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Audio Regenerated!
+                </>
+              ) : audioRegenerateStatus === 'error' ? (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Failed - Try Again
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Regenerate Name Audio
+                </>
+              )}
+            </button>
+            <p className="text-xs text-text/50 text-center mt-2">
+              Regenerate the voice audio for your name used in stories
+            </p>
           </div>
         </section>
 

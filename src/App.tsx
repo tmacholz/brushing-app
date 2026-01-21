@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Lock, Check, Loader2 } from 'lucide-react';
 import { characters } from './data/characters';
@@ -484,14 +485,158 @@ function OnboardingScreen({ onComplete }: { onComplete: () => void }) {
   );
 }
 
-// Screens that show the bottom navigation
-const SCREENS_WITH_NAV: ScreenName[] = ['home', 'pet-select', 'collection', 'story-world-select', 'settings'];
+// Paths that show the bottom navigation
+const PATHS_WITH_NAV = ['/', '/home', '/pets', '/collection', '/worlds', '/settings'];
+
+// Map URL path to ScreenName for BottomNav
+function pathToScreenName(path: string): ScreenName {
+  if (path === '/' || path === '/home') return 'home';
+  if (path === '/pets') return 'pet-select';
+  if (path === '/collection') return 'collection';
+  if (path.startsWith('/worlds')) return 'story-world-select';
+  if (path === '/settings') return 'settings';
+  return 'home';
+}
+
+// Wrapper components for each route with animation
+function AnimatedRoute({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  return (
+    <motion.div
+      key={location.pathname}
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+// Home screen wrapper
+function HomeRoute() {
+  const navigate = useNavigate();
+  const handleNavigate = (screen: ScreenName) => {
+    switch (screen) {
+      case 'brushing': navigate('/brush'); break;
+      case 'pet-select': navigate('/pets'); break;
+      case 'profile-select': navigate('/profiles'); break;
+      case 'collection': navigate('/collection'); break;
+      case 'story-world-select': navigate('/worlds'); break;
+      case 'settings': navigate('/settings'); break;
+      default: navigate('/');
+    }
+  };
+  return (
+    <AnimatedRoute>
+      <HomeScreen onNavigate={handleNavigate} />
+    </AnimatedRoute>
+  );
+}
+
+// Brushing screen wrapper
+function BrushingRoute() {
+  const navigate = useNavigate();
+  return (
+    <motion.div
+      key="brushing"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <BrushingScreen
+        onComplete={() => navigate('/')}
+        onExit={() => navigate('/')}
+      />
+    </motion.div>
+  );
+}
+
+// Pet select wrapper
+function PetSelectRoute() {
+  const navigate = useNavigate();
+  return (
+    <AnimatedRoute>
+      <PetSelectScreen onBack={() => navigate('/')} />
+    </AnimatedRoute>
+  );
+}
+
+// Profile select wrapper
+function ProfileSelectRoute() {
+  const navigate = useNavigate();
+  return (
+    <AnimatedRoute>
+      <ProfileSelectScreen onBack={() => navigate('/')} />
+    </AnimatedRoute>
+  );
+}
+
+// Collection wrapper
+function CollectionRoute() {
+  const navigate = useNavigate();
+  return (
+    <AnimatedRoute>
+      <CollectionScreen onBack={() => navigate('/')} />
+    </AnimatedRoute>
+  );
+}
+
+// Story world select wrapper
+function StoryWorldSelectRoute() {
+  const navigate = useNavigate();
+  return (
+    <AnimatedRoute>
+      <StoryWorldSelectScreen
+        onBack={() => navigate('/')}
+        onSelectWorld={(worldId) => navigate(`/worlds/${worldId}`)}
+      />
+    </AnimatedRoute>
+  );
+}
+
+// Story select wrapper (with worldId param)
+function StorySelectRoute() {
+  const { worldId } = useParams<{ worldId: string }>();
+  const navigate = useNavigate();
+
+  if (!worldId) {
+    return <Navigate to="/worlds" replace />;
+  }
+
+  return (
+    <AnimatedRoute>
+      <StorySelectScreen
+        worldId={worldId}
+        onBack={() => navigate('/worlds')}
+        onStartStory={() => navigate('/brush')}
+      />
+    </AnimatedRoute>
+  );
+}
+
+// Settings wrapper
+function SettingsRoute() {
+  const navigate = useNavigate();
+  return (
+    <AnimatedRoute>
+      <SettingsScreen onBack={() => navigate('/')} />
+    </AnimatedRoute>
+  );
+}
 
 function AppContent() {
   const { child, isNewUser, isLoading } = useChild();
-  const [currentScreen, setCurrentScreen] = useState<ScreenName>('home');
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [selectedWorldId, setSelectedWorldId] = useState<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Sync URL changes for onboarding completion
+  useEffect(() => {
+    if (!showOnboarding && !isNewUser && child) {
+      // User is authenticated, ensure they're on a valid route
+    }
+  }, [showOnboarding, isNewUser, child]);
 
   // Show loading screen while fetching children
   if (isLoading) {
@@ -516,124 +661,41 @@ function AppContent() {
     return <OnboardingScreen onComplete={() => setShowOnboarding(false)} />;
   }
 
-  const handleBrushingComplete = (_pointsEarned: number) => {
-    // Navigate back to home after completion
-    setCurrentScreen('home');
-  };
+  const showBottomNav = PATHS_WITH_NAV.some(p =>
+    p === location.pathname || (p !== '/' && location.pathname.startsWith(p))
+  );
+  const currentScreen = pathToScreenName(location.pathname);
 
-  const handleBrushingExit = () => {
-    setCurrentScreen('home');
+  const handleNavNavigate = (screen: ScreenName) => {
+    switch (screen) {
+      case 'home': navigate('/'); break;
+      case 'pet-select': navigate('/pets'); break;
+      case 'collection': navigate('/collection'); break;
+      case 'story-world-select': navigate('/worlds'); break;
+      case 'settings': navigate('/settings'); break;
+      default: navigate('/');
+    }
   };
-
-  const showBottomNav = SCREENS_WITH_NAV.includes(currentScreen);
 
   return (
     <>
       <AnimatePresence mode="wait">
-        {currentScreen === 'home' && (
-          <motion.div
-            key="home"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <HomeScreen onNavigate={setCurrentScreen} />
-          </motion.div>
-        )}
-
-        {currentScreen === 'brushing' && (
-          <motion.div
-            key="brushing"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <BrushingScreen
-              onComplete={handleBrushingComplete}
-              onExit={handleBrushingExit}
-            />
-          </motion.div>
-        )}
-
-        {currentScreen === 'pet-select' && (
-          <motion.div
-            key="pet-select"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <PetSelectScreen onBack={() => setCurrentScreen('home')} />
-          </motion.div>
-        )}
-
-        {currentScreen === 'profile-select' && (
-          <motion.div
-            key="profile-select"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <ProfileSelectScreen onBack={() => setCurrentScreen('home')} />
-          </motion.div>
-        )}
-
-        {currentScreen === 'collection' && (
-          <motion.div
-            key="collection"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <CollectionScreen onBack={() => setCurrentScreen('home')} />
-          </motion.div>
-        )}
-
-        {currentScreen === 'story-world-select' && (
-          <motion.div
-            key="story-world-select"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <StoryWorldSelectScreen
-              onBack={() => setCurrentScreen('home')}
-              onSelectWorld={(worldId) => {
-                setSelectedWorldId(worldId);
-                setCurrentScreen('story-select');
-              }}
-            />
-          </motion.div>
-        )}
-
-        {currentScreen === 'story-select' && selectedWorldId && (
-          <motion.div
-            key="story-select"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <StorySelectScreen
-              worldId={selectedWorldId}
-              onBack={() => setCurrentScreen('story-world-select')}
-              onStartStory={() => setCurrentScreen('brushing')}
-            />
-          </motion.div>
-        )}
-
-        {currentScreen === 'settings' && (
-          <motion.div
-            key="settings"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-          >
-            <SettingsScreen onBack={() => setCurrentScreen('home')} />
-          </motion.div>
-        )}
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="/home" element={<Navigate to="/" replace />} />
+          <Route path="/brush" element={<BrushingRoute />} />
+          <Route path="/pets" element={<PetSelectRoute />} />
+          <Route path="/profiles" element={<ProfileSelectRoute />} />
+          <Route path="/collection" element={<CollectionRoute />} />
+          <Route path="/worlds" element={<StoryWorldSelectRoute />} />
+          <Route path="/worlds/:worldId" element={<StorySelectRoute />} />
+          <Route path="/settings" element={<SettingsRoute />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </AnimatePresence>
 
       {showBottomNav && (
-        <BottomNav currentScreen={currentScreen} onNavigate={setCurrentScreen} />
+        <BottomNav currentScreen={currentScreen} onNavigate={handleNavNavigate} />
       )}
     </>
   );
