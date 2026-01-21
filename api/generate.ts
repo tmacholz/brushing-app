@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
-import sharp from 'sharp';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
@@ -34,43 +33,8 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
   }
 }
 
-// Remove white background from image using threshold detection
-async function removeWhiteBackground(imageBuffer: Buffer): Promise<Buffer> {
-  // Extract raw RGBA pixel data
-  const { data, info } = await sharp(imageBuffer)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-
-  // Process pixels - make white pixels transparent
-  const processedData = Buffer.from(data);
-  const whiteThreshold = 240; // RGB values >= 240 considered white
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-
-    if (r >= whiteThreshold && g >= whiteThreshold && b >= whiteThreshold) {
-      // Make white/near-white pixels fully transparent
-      processedData[i + 3] = 0; // Alpha = transparent
-    }
-  }
-
-  // Convert back to PNG with transparency
-  return sharp(processedData, {
-    raw: {
-      width: info.width,
-      height: info.height,
-      channels: 4,
-    },
-  })
-    .png()
-    .toBuffer();
-}
-
 // Helper to call Gemini API and upload result
-// Optional postProcess function to transform the image buffer before upload (e.g., background removal)
+// Optional postProcess function to transform the image buffer before upload
 async function generateAndUpload(
   parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>,
   storageKey: string,
@@ -144,10 +108,23 @@ interface VisualReference {
   imageUrl: string;
 }
 
+// Visual asset from Story Bible
+interface VisualAsset {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  source?: 'bible' | 'extracted';
+}
+
 // Story image generation
 interface StoryImageRequest {
   type: 'image';
-  prompt: string;
+  prompt?: string;                         // Optional manual override for scene description
+  segmentText?: string;                    // The narrative text of the segment (used with storyboard)
   segmentId: string;
   referenceImageUrl?: string;
   userAvatarUrl?: string | null;
@@ -156,23 +133,79 @@ interface StoryImageRequest {
   includePet?: boolean;
   childName?: string;
   petName?: string;
-  storyBible?: StoryBible; // For visual consistency across all images
-  visualReferences?: VisualReference[]; // Reference images for characters/objects/locations
+  storyBible?: StoryBible & {              // Extended with visualAssets
+    visualAssets?: {
+      locations: VisualAsset[];
+      characters: VisualAsset[];
+      objects: VisualAsset[];
+    };
+  };
+  visualReferences?: VisualReference[];    // Reference images for characters/objects/locations
+  // Storyboard fields for intentional visual planning (name-based for display/backwards compat)
+  storyboardLocation?: string | null;      // Location name
+  storyboardCharacters?: string[] | null;  // NPC names
+  storyboardShotType?: string | null;      // 'wide', 'medium', 'close-up', etc.
+  storyboardCameraAngle?: string | null;   // 'eye-level', 'low-angle', etc.
+  storyboardFocus?: string | null;         // What to emphasize visually
+  storyboardExclude?: string[] | null;     // Elements to explicitly exclude
+  // ID-based storyboard fields (preferred for lookups)
+  storyboardLocationId?: string | null;    // visualAssets.locations[].id
+  storyboardCharacterIds?: string[] | null; // visualAssets.characters[].id
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
-  const { prompt, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl, includeUser, includePet, childName, petName, storyBible, visualReferences } = req;
+  const {
+    prompt, segmentText, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
+    includeUser, includePet, childName, petName, storyBible, visualReferences,
+    storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude,
+    storyboardLocationId, storyboardCharacterIds
+  } = req;
 
-  if (!prompt || !segmentId) {
-    return res.status(400).json({ error: 'Missing required fields: prompt, segmentId' });
+  if (!segmentId) {
+    return res.status(400).json({ error: 'Missing required field: segmentId' });
+  }
+
+  // Determine if we have storyboard data to build from
+  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
+
+  // Using overlay system - child and pet will be composited separately
+  const usingOverlaySystem = !includeUser && !includePet;
+
+  // Helper to strip [CHILD] and [PET] placeholders from text (they're overlaid separately)
+  const stripMainCharacters = (text: string): string => {
+    return text
+      .replace(/\[CHILD\]/g, 'the young hero')
+      .replace(/\[PET\]/g, 'the companion');
+  };
+
+  // Build scene description: use manual prompt override, or build from storyboard + segment text
+  let sceneDescription: string;
+  if (prompt) {
+    // Manual override takes precedence
+    sceneDescription = usingOverlaySystem ? stripMainCharacters(prompt) : prompt;
+  } else if (hasStoryboard && segmentText) {
+    // Build from storyboard data - strip character names for overlay system
+    const cleanText = usingOverlaySystem ? stripMainCharacters(segmentText) : segmentText;
+    sceneDescription = `Scene context: ${cleanText}`;
+    if (storyboardFocus) {
+      const cleanFocus = usingOverlaySystem ? stripMainCharacters(storyboardFocus) : storyboardFocus;
+      sceneDescription += `\n\nVisual emphasis: ${cleanFocus}`;
+    }
+  } else if (segmentText) {
+    // Fallback to just segment text
+    const cleanText = usingOverlaySystem ? stripMainCharacters(segmentText) : segmentText;
+    sceneDescription = `Illustrate this scene: ${cleanText}`;
+  } else {
+    return res.status(400).json({ error: 'Missing scene data: provide prompt, or segmentText with storyboard data' });
   }
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   const referenceDescriptions: string[] = [];
   let imageIndex = 1;
 
-  // Add previous scene reference
-  if (referenceImageUrl) {
+  // Only add previous scene reference if NO storyboard data (legacy behavior)
+  // With storyboard, we rely on Story Bible and references for consistency instead
+  if (referenceImageUrl && !hasStoryboard) {
     const imageData = await fetchImageAsBase64(referenceImageUrl);
     if (imageData) {
       parts.push({ inlineData: imageData });
@@ -191,7 +224,7 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
         const typeLabel = ref.type === 'character' ? 'CHARACTER REFERENCE SHEET' :
                          ref.type === 'location' ? 'LOCATION REFERENCE' : 'OBJECT REFERENCE SHEET';
         referenceDescriptions.push(
-          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - If this ${ref.type} appears in the scene, match its appearance EXACTLY from this reference`
+          `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - Match this ${ref.type}'s appearance EXACTLY`
         );
         imageIndex++;
       }
@@ -225,55 +258,204 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   // Build the complete prompt
   let fullPrompt = STYLE_PREFIX + '\n\n';
 
-  // Add Story Bible visual guidelines if provided
+  // Add storyboard camera/composition instructions if provided
+  if (hasStoryboard) {
+    fullPrompt += '=== STORYBOARD DIRECTION ===\n';
+
+    if (storyboardShotType) {
+      const shotDescriptions: Record<string, string> = {
+        'wide': 'WIDE SHOT - Show the full environment with characters small in frame. Establish the setting.',
+        'medium': 'MEDIUM SHOT - Characters from waist up. Good balance of character and environment.',
+        'close-up': 'CLOSE-UP - Focus on character face/upper body. Emotional, intimate framing.',
+        'extreme-close-up': 'EXTREME CLOSE-UP - Tight focus on a specific detail (object, expression, hands).',
+        'over-shoulder': 'OVER-SHOULDER SHOT - From behind one character, looking at another or at the scene.',
+      };
+      fullPrompt += `SHOT: ${shotDescriptions[storyboardShotType] || storyboardShotType}\n`;
+    }
+
+    if (storyboardCameraAngle) {
+      const angleDescriptions: Record<string, string> = {
+        'eye-level': 'EYE-LEVEL - Camera at subject height. Neutral, relatable perspective.',
+        'low-angle': 'LOW-ANGLE - Camera looking UP at subject. Makes them appear powerful, heroic, larger.',
+        'high-angle': 'HIGH-ANGLE - Camera looking DOWN at subject. Makes them appear small, vulnerable.',
+        'birds-eye': 'BIRD\'S EYE - Directly from above. Shows geography, layout, patterns.',
+        'worms-eye': 'WORM\'S EYE - From ground looking up. Dramatic, emphasizes scale.',
+        'dutch-angle': 'DUTCH ANGLE - Tilted frame. Creates unease, tension, or dynamic action.',
+      };
+      fullPrompt += `ANGLE: ${angleDescriptions[storyboardCameraAngle] || storyboardCameraAngle}\n`;
+    }
+
+    if (storyboardFocus) {
+      fullPrompt += `VISUAL FOCUS: ${storyboardFocus}\n`;
+    }
+
+    fullPrompt += '\n';
+  }
+
+  // Add Story Bible visual style (always include if provided)
   if (storyBible) {
-    fullPrompt += 'STORY VISUAL STYLE GUIDE (maintain consistency):\n';
+    fullPrompt += '=== VISUAL STYLE GUIDE ===\n';
     if (storyBible.colorPalette) {
-      fullPrompt += `- Color Palette: ${storyBible.colorPalette}\n`;
+      fullPrompt += `Color Palette: ${storyBible.colorPalette}\n`;
     }
     if (storyBible.lightingStyle) {
-      fullPrompt += `- Lighting: ${storyBible.lightingStyle}\n`;
+      fullPrompt += `Lighting: ${storyBible.lightingStyle}\n`;
     }
     if (storyBible.artDirection) {
-      fullPrompt += `- Art Direction: ${storyBible.artDirection}\n`;
+      fullPrompt += `Art Direction: ${storyBible.artDirection}\n`;
+    }
+    fullPrompt += '\n';
+
+    // If storyboard specifies a location, look it up from visualAssets (by ID) or keyLocations (by name)
+    const locations = storyBible.visualAssets?.locations || [];
+    const hasVisualAssets = locations.length > 0;
+
+    if (storyboardLocationId || storyboardLocation) {
+      let matchingLocation: { name: string; description: string; mood?: string } | null = null;
+
+      // Prefer ID-based lookup
+      if (storyboardLocationId && hasVisualAssets) {
+        const locById = locations.find(loc => loc.id === storyboardLocationId);
+        if (locById) {
+          matchingLocation = { name: locById.name, description: locById.description, mood: locById.mood };
+        }
+      }
+
+      // Fall back to name-based lookup
+      if (!matchingLocation && storyboardLocation) {
+        // Try visualAssets first
+        if (hasVisualAssets) {
+          const locByName = locations.find(
+            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase() ||
+                   loc.name.toLowerCase().includes(storyboardLocation.toLowerCase()) ||
+                   storyboardLocation.toLowerCase().includes(loc.name.toLowerCase())
+          );
+          if (locByName) {
+            matchingLocation = { name: locByName.name, description: locByName.description, mood: locByName.mood };
+          }
+        }
+        // Then try deprecated keyLocations
+        if (!matchingLocation && storyBible.keyLocations) {
+          const locLegacy = storyBible.keyLocations.find(
+            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase()
+          );
+          if (locLegacy) {
+            matchingLocation = { name: locLegacy.name, description: locLegacy.visualDescription, mood: locLegacy.mood };
+          }
+        }
+      }
+
+      if (matchingLocation) {
+        fullPrompt += `=== LOCATION: ${matchingLocation.name} ===\n`;
+        fullPrompt += `${matchingLocation.description}\n`;
+        if (matchingLocation.mood) {
+          fullPrompt += `Mood: ${matchingLocation.mood}\n`;
+        }
+        fullPrompt += '\n';
+      }
     }
 
-    // Add relevant location descriptions if any match the prompt
-    if (storyBible.keyLocations && storyBible.keyLocations.length > 0) {
-      fullPrompt += '\nKEY LOCATIONS (use these visual descriptions if the scene is in one of these places):\n';
-      storyBible.keyLocations.forEach(loc => {
-        fullPrompt += `- ${loc.name}: ${loc.visualDescription} (mood: ${loc.mood})\n`;
-      });
-    }
+    // If storyboard specifies characters, look them up from visualAssets (by ID) or recurringCharacters (by name)
+    const characters = storyBible.visualAssets?.characters || [];
 
-    // Add recurring character appearances for consistency
-    if (storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
-      fullPrompt += '\nRECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
+    if ((storyboardCharacterIds && storyboardCharacterIds.length > 0) ||
+        (storyboardCharacters && storyboardCharacters.length > 0)) {
+      const charactersToInclude: { name: string; description: string }[] = [];
+
+      // Prefer ID-based lookup
+      if (storyboardCharacterIds && storyboardCharacterIds.length > 0 && characters.length > 0) {
+        for (const charId of storyboardCharacterIds) {
+          const charById = characters.find(c => c.id === charId);
+          if (charById) {
+            charactersToInclude.push({ name: charById.name, description: charById.description });
+          }
+        }
+      }
+
+      // If no ID matches, fall back to name-based lookup
+      if (charactersToInclude.length === 0 && storyboardCharacters && storyboardCharacters.length > 0) {
+        // Try visualAssets first
+        if (characters.length > 0) {
+          for (const charName of storyboardCharacters) {
+            const charByName = characters.find(c =>
+              c.name.toLowerCase().includes(charName.toLowerCase()) ||
+              charName.toLowerCase().includes(c.name.toLowerCase())
+            );
+            if (charByName && !charactersToInclude.some(c => c.name === charByName.name)) {
+              charactersToInclude.push({ name: charByName.name, description: charByName.description });
+            }
+          }
+        }
+        // Then try deprecated recurringCharacters
+        if (charactersToInclude.length === 0 && storyBible.recurringCharacters) {
+          const legacyChars = storyBible.recurringCharacters.filter(char =>
+            storyboardCharacters.some(name =>
+              char.name.toLowerCase().includes(name.toLowerCase()) ||
+              name.toLowerCase().includes(char.name.toLowerCase())
+            )
+          );
+          for (const char of legacyChars) {
+            charactersToInclude.push({ name: char.name, description: char.visualDescription });
+          }
+        }
+      }
+
+      if (charactersToInclude.length > 0) {
+        fullPrompt += '=== CHARACTERS IN THIS SCENE ===\n';
+        charactersToInclude.forEach(char => {
+          fullPrompt += `${char.name}: ${char.description}\n`;
+        });
+        fullPrompt += '\n';
+      }
+    } else if (!hasStoryboard && storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
+      // Legacy behavior: include all characters if no storyboard
+      fullPrompt += 'RECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
       storyBible.recurringCharacters.forEach(char => {
         fullPrompt += `- ${char.name}: ${char.visualDescription}\n`;
+      });
+      fullPrompt += '\n';
+    }
+  }
+
+  if (referenceDescriptions.length > 0) {
+    fullPrompt += '=== REFERENCE IMAGES ===\n' + referenceDescriptions.join('\n') + '\n\n';
+  }
+
+  if (includeUser || includePet) {
+    fullPrompt += '=== MAIN CHARACTERS ===\n';
+    if (includeUser) {
+      fullPrompt += `${childName || 'The child'} MUST be clearly visible. `;
+      fullPrompt += userAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as a friendly child protagonist.\n';
+    }
+    if (includePet) {
+      fullPrompt += `${petName || 'The pet companion'} MUST be clearly visible. `;
+      fullPrompt += petAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as an adorable, friendly companion.\n';
+    }
+    fullPrompt += '\n';
+  }
+
+  // Add exclusions (negative prompt)
+  const hasExclusions = (storyboardExclude && storyboardExclude.length > 0) || usingOverlaySystem;
+  if (hasExclusions) {
+    fullPrompt += '=== DO NOT INCLUDE ===\n';
+    fullPrompt += 'The following elements must NOT appear in this image:\n';
+
+    // When using overlay system, explicitly exclude child and pet characters
+    if (usingOverlaySystem) {
+      fullPrompt += '- NO children or child characters (they will be added as a separate overlay)\n';
+      fullPrompt += '- NO pets, animal companions, or sidekick creatures (they will be added as a separate overlay)\n';
+      fullPrompt += '- This is a BACKGROUND ONLY image - show only the environment, setting, and any NPCs\n';
+    }
+
+    if (storyboardExclude && storyboardExclude.length > 0) {
+      storyboardExclude.forEach(item => {
+        fullPrompt += `- NO ${item}\n`;
       });
     }
     fullPrompt += '\n';
   }
 
-  if (referenceDescriptions.length > 0) {
-    fullPrompt += 'REFERENCE IMAGES PROVIDED:\n' + referenceDescriptions.join('\n') + '\n\n';
-  }
-
-  if (includeUser || includePet) {
-    fullPrompt += 'CHARACTER REQUIREMENTS:\n';
-    if (includeUser) {
-      fullPrompt += `- ${childName || 'The child'} MUST be clearly visible in this scene. `;
-      fullPrompt += userAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as a friendly child protagonist.\n';
-    }
-    if (includePet) {
-      fullPrompt += `- ${petName || 'The pet companion'} MUST be clearly visible in this scene. `;
-      fullPrompt += petAvatarUrl ? 'Match their appearance EXACTLY from the reference image.\n' : 'Show them as an adorable, friendly companion.\n';
-    }
-    fullPrompt += '- Characters should be interacting with the scene appropriately.\n\n';
-  }
-
-  fullPrompt += `SCENE TO ILLUSTRATE:\n${prompt}`;
+  fullPrompt += `=== SCENE DESCRIPTION ===\n${sceneDescription}`;
   parts.push({ text: fullPrompt });
 
   // Include timestamp in filename for reliable cache busting (CDN may ignore query params)
@@ -363,7 +545,9 @@ IMPORTANT:
     },
   ];
 
-  const result = await generateAndUpload(parts, `pet-avatars/${petId}.png`);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const result = await generateAndUpload(parts, `pet-avatars/${petId}-${timestamp}.png`);
   return res.status(200).json({ avatarUrl: result.url, type: 'pet', ...(result.isDataUrl && { warning: 'Using data URL fallback' }) });
 }
 
@@ -875,23 +1059,23 @@ CRITICAL - NO TEXT:
   return res.status(200).json({ coverImageUrl: result.url, storyId });
 }
 
-// Character sprite generation (transparent PNG for overlay compositing)
+// Character portrait generation (for circle overlay compositing)
 interface SpriteGenerationRequest {
   type: 'sprite';
   ownerType: 'child' | 'pet';
   ownerId: string;
-  poseKey: string;
+  poseKey: string;  // Now represents expression: happy, sad, surprised, worried, determined, excited
   sourceAvatarUrl: string;
-  posePrompt: string;
+  posePrompt: string;  // Expression description
 }
 
-// Style prefix for sprite generation (white background for removal)
-const SPRITE_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
-PURE WHITE #FFFFFF BACKGROUND (critical - solid white background, no gradients or shadows),
-full body character sprite suitable for compositing over scene backgrounds,
-clean sharp edges for easy overlay, Studio Ghibli inspired soft aesthetic,
-no ground shadow, character on plain white background,
-warm inviting colors, friendly approachable character design.`;
+// Style prefix for portrait generation (soft gradient background, will be circle-masked in UI)
+const PORTRAIT_STYLE = `Children's book illustration style, soft watercolor and digital art hybrid,
+SOFT WARM GRADIENT BACKGROUND - gentle off-white to warm tan/beige gradient, subtle and calming,
+PORTRAIT SHOT - shoulders up, head and upper chest only, NO full body,
+centered face with clear expressive features, Studio Ghibli inspired soft aesthetic,
+warm inviting colors, friendly approachable character design,
+DO NOT draw any circles, frames, borders, or outlines around the character.`;
 
 async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelResponse) {
   const { ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt } = req;
@@ -908,13 +1092,13 @@ async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelR
     return res.status(400).json({ error: 'Failed to fetch source avatar image' });
   }
 
-  // Build the prompt for sprite generation
-  const prompt = `${SPRITE_STYLE}
+  // Build the prompt for portrait generation
+  const prompt = `${PORTRAIT_STYLE}
 
 REFERENCE CHARACTER IMAGE PROVIDED:
 [Image 1] This is the character's established appearance. You MUST match their features EXACTLY.
 
-POSE TO CREATE:
+EXPRESSION TO CREATE:
 ${posePrompt}
 
 CRITICAL REQUIREMENTS:
@@ -922,13 +1106,14 @@ CRITICAL REQUIREMENTS:
   - Face shape, features, and expression style
   - Hair color, style, and design
   - Skin tone and overall coloring
-  - Clothing and accessories (if visible)
-  - Body proportions and size
-- Create a FULL BODY sprite showing the entire character from head to toe
-- The background MUST be pure white #FFFFFF (solid white, no gradients or shadows)
-- Clean, sharp edges suitable for compositing over other images
-- The pose should be: ${posePrompt}
-- Character should be centered in the frame with padding
+  - Any distinctive features (ears, horns, etc. for pets)
+- Create a PORTRAIT showing HEAD AND SHOULDERS ONLY (no full body!)
+- The facial expression should clearly convey: ${posePrompt}
+- The background MUST be a soft warm gradient (off-white to warm tan/beige)
+- DO NOT draw any circles, frames, borders, or outlines around the character
+- The character should NOT be inside a circle or any shape - just the character on the gradient background
+- Square composition, character centered
+- Face should be the focal point, expressive and clear
 - Maintain the whimsical children's book illustration style
 - No text, labels, or watermarks`;
 
@@ -937,9 +1122,10 @@ CRITICAL REQUIREMENTS:
     { text: prompt },
   ];
 
-  const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}.png`;
-  // Apply white background removal after generation
-  const result = await generateAndUpload(parts, storageKey, removeWhiteBackground);
+  // Include timestamp in filename for reliable cache busting
+  const timestamp = Date.now();
+  const storageKey = `sprites/${ownerType}/${ownerId}/${poseKey}-${timestamp}.png`;
+  const result = await generateAndUpload(parts, storageKey);
 
   return res.status(200).json({
     spriteUrl: result.url,

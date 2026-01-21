@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, type ExistingStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, mergeExtractedReferencesIntoStoryBible, generateStoryboard, type ExistingStory } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -178,8 +178,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           for (const segment of chapter.segments) {
             await sql`
-              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, image_prompt, child_pose, pet_pose, child_position, pet_position)
-              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.imagePrompt}, ${segment.childPose}, ${segment.petPose}, ${segment.childPosition}, ${segment.petPosition})
+              INSERT INTO segments (chapter_id, segment_order, text, duration_seconds, brushing_zone, brushing_prompt, child_pose, pet_pose)
+              VALUES (${savedChapter.id}, ${segment.segmentOrder}, ${segment.text}, ${segment.durationSeconds}, ${segment.brushingZone}, ${segment.brushingPrompt}, ${segment.childPose}, ${segment.petPose})
             `;
           }
         }
@@ -187,13 +187,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE stories SET status = 'draft' WHERE id = ${story.id}`;
         await sql`UPDATE story_pitches SET is_used = true WHERE id = ${pitchId}`;
 
-        // Step 4: Extract visual references for consistent image generation
+        // Step 4: Extract visual references and merge into Story Bible
         console.log('[Story] Extracting visual references for:', pitch.title);
+        let updatedStoryBible = storyBible;
         try {
           const references = await extractStoryReferences(pitch.title, pitch.description, chapters, storyBible);
           console.log('[Story] Extracted', references.length, 'visual references');
 
-          // Save references to database
+          // Merge extracted references into Story Bible
+          updatedStoryBible = mergeExtractedReferencesIntoStoryBible(storyBible, references);
+          console.log('[Story] Merged references into Story Bible visualAssets');
+
+          // Update Story Bible in database with merged assets
+          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${story.id}`;
+
+          // Also save to story_references table for backwards compatibility
           for (let i = 0; i < references.length; i++) {
             const ref = references[i];
             await sql`
@@ -205,6 +213,93 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (refError) {
           // Don't fail the whole story if reference extraction fails
           console.error('[Story] Reference extraction failed (non-fatal):', refError);
+        }
+
+        // Step 5: Generate storyboard for visual planning
+        console.log('[Story] Generating storyboard for:', pitch.title);
+        try {
+          // Fetch chapters with segments (including segment IDs)
+          const savedChapters = await sql`SELECT * FROM chapters WHERE story_id = ${story.id} ORDER BY chapter_number`;
+          const chaptersForStoryboard = await Promise.all(
+            savedChapters.map(async (ch) => {
+              const segs = await sql`SELECT id, segment_order, text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+              return {
+                chapterNumber: ch.chapter_number,
+                title: ch.title,
+                segments: segs.map(s => ({
+                  id: s.id,
+                  segmentOrder: s.segment_order,
+                  text: s.text,
+                  imagePrompt: null, // No longer used
+                })),
+              };
+            })
+          );
+
+          const storyboard = await generateStoryboard({
+            storyTitle: pitch.title,
+            storyDescription: pitch.description,
+            storyBible: updatedStoryBible,
+            chapters: chaptersForStoryboard,
+          });
+          console.log('[Story] Generated storyboard with', storyboard.length, 'segment entries');
+
+          // Update segments with storyboard data (including ID-based references)
+          for (const entry of storyboard) {
+            await sql`
+              UPDATE segments SET
+                storyboard_location = ${entry.location},
+                storyboard_characters = ${entry.characters},
+                storyboard_shot_type = ${entry.shotType},
+                storyboard_camera_angle = ${entry.cameraAngle},
+                storyboard_focus = ${entry.visualFocus},
+                storyboard_continuity = ${entry.continuityNote},
+                storyboard_location_id = ${entry.locationId},
+                storyboard_character_ids = ${entry.characterIds}
+              WHERE id = ${entry.segmentId}
+            `;
+          }
+          console.log('[Story] Storyboard data saved to segments');
+
+          // Step 6: Auto-tag references based on storyboard characters and locations
+          const savedReferences = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${story.id}`;
+          if (savedReferences.length > 0) {
+            console.log('[Story] Auto-tagging references based on storyboard...');
+            for (const entry of storyboard) {
+              const matchingRefIds: string[] = [];
+
+              // Match characters from storyboard to character references
+              for (const charName of entry.characters || []) {
+                const matchingRef = savedReferences.find(r =>
+                  r.type === 'character' &&
+                  (r.name.toLowerCase().includes(charName.toLowerCase()) ||
+                   charName.toLowerCase().includes(r.name.toLowerCase()))
+                );
+                if (matchingRef) matchingRefIds.push(matchingRef.id);
+              }
+
+              // Match location from storyboard to location references
+              if (entry.location) {
+                const matchingRef = savedReferences.find(r =>
+                  r.type === 'location' &&
+                  (r.name.toLowerCase().includes(entry.location!.toLowerCase()) ||
+                   entry.location!.toLowerCase().includes(r.name.toLowerCase()))
+                );
+                if (matchingRef) matchingRefIds.push(matchingRef.id);
+              }
+
+              if (matchingRefIds.length > 0) {
+                await sql`
+                  UPDATE segments SET reference_ids = ${matchingRefIds}
+                  WHERE id = ${entry.segmentId}
+                `;
+              }
+            }
+            console.log('[Story] Reference tags applied to segments');
+          }
+        } catch (storyboardError) {
+          // Don't fail the whole story if storyboard generation fails
+          console.error('[Story] Storyboard generation failed (non-fatal):', storyboardError);
         }
 
         // Generate background music asynchronously (fire and forget - don't block response)

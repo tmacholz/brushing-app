@@ -82,7 +82,18 @@ CREATE TABLE IF NOT EXISTS segments (
   pet_pose VARCHAR(50) DEFAULT 'happy',
   child_position VARCHAR(20) DEFAULT 'center',
   pet_position VARCHAR(20) DEFAULT 'right',
-  background_prompt TEXT
+  background_prompt TEXT,
+  -- Storyboard fields for intentional visual planning
+  storyboard_location VARCHAR(100),          -- Location name (for display)
+  storyboard_characters TEXT[],              -- NPC names (for display)
+  storyboard_shot_type VARCHAR(50),          -- 'wide', 'medium', 'close-up', etc.
+  storyboard_camera_angle VARCHAR(50),       -- 'eye-level', 'low-angle', 'high-angle', etc.
+  storyboard_focus TEXT,                     -- What to emphasize visually
+  storyboard_continuity TEXT,                -- Notes about visual continuity
+  storyboard_exclude TEXT[],                 -- Elements to explicitly exclude from image
+  -- ID-based references to Story Bible visualAssets (for precise lookups)
+  storyboard_location_id VARCHAR(100),       -- References visualAssets.locations[].id
+  storyboard_character_ids TEXT[]            -- References visualAssets.characters[].id
 );
 
 -- Pre-generated name audio for pets (static, generated once)

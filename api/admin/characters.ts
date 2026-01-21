@@ -427,6 +427,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // ==================== CHARACTER DEFINITIONS ====================
+  if (entity === 'characters') {
+    if (req.method === 'GET') {
+      try {
+        const characters = await sql`
+          SELECT id, display_name, avatar_url, created_at, updated_at
+          FROM character_definitions
+          ORDER BY id
+        `;
+
+        return res.status(200).json({
+          characters: characters.map((c: { id: string; display_name: string; avatar_url: string | null; created_at: string; updated_at: string }) => ({
+            id: c.id,
+            displayName: c.display_name,
+            avatarUrl: c.avatar_url,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at,
+          })),
+        });
+      } catch (error) {
+        console.error('Error fetching characters:', error);
+        return res.status(500).json({ error: 'Failed to fetch character definitions' });
+      }
+    }
+
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   // ==================== AVATAR UPLOAD ====================
   if (entity === 'avatar') {
     if (req.method === 'POST') {
@@ -497,11 +525,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log(`Uploaded character avatar for ${characterId}: ${blob.url}`);
 
+        // Update the database with the new avatar URL
+        await sql`
+          INSERT INTO character_definitions (id, display_name, avatar_url, updated_at)
+          VALUES (${characterId}, ${characterId === 'boy' ? 'Boy' : 'Girl'}, ${blob.url}, NOW())
+          ON CONFLICT (id) DO UPDATE SET
+            avatar_url = ${blob.url},
+            updated_at = NOW()
+        `;
+
         return res.status(200).json({
           success: true,
           characterId,
           avatarUrl: blob.url,
-          message: `Avatar uploaded successfully. Update src/data/characters.ts with this URL: ${blob.url}`,
         });
       } catch (error) {
         console.error('Error uploading avatar:', error);
@@ -512,5 +548,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  return res.status(400).json({ error: 'Missing or invalid entity parameter. Use "poses", "sprites", or "avatar"' });
+  return res.status(400).json({ error: 'Missing or invalid entity parameter. Use "poses", "sprites", "characters", or "avatar"' });
 }

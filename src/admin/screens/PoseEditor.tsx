@@ -119,7 +119,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
   };
 
   const handleDeletePose = async (poseId: string) => {
-    if (!confirm('Are you sure you want to delete this pose?')) return;
+    if (!confirm('Are you sure you want to delete this expression?')) return;
 
     try {
       const res = await fetch(`/api/admin/characters?entity=poses&id=${poseId}`, {
@@ -156,9 +156,9 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">Pose Definitions</h1>
+            <h1 className="text-2xl font-bold text-white">Expression Definitions</h1>
             <p className="text-slate-400 text-sm">
-              Manage character poses for the overlay system
+              Manage character expressions for the portrait overlay system
             </p>
           </div>
         </div>
@@ -190,7 +190,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
             }`}
           >
             <User className="w-4 h-4" />
-            Child Poses ({poses.filter((p) => p.characterType === 'child').length})
+            Child Expressions ({poses.filter((p) => p.characterType === 'child').length})
           </button>
           <button
             onClick={() => setActiveTab('pet')}
@@ -201,7 +201,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
             }`}
           >
             <Cat className="w-4 h-4" />
-            Pet Poses ({poses.filter((p) => p.characterType === 'pet').length})
+            Pet Expressions ({poses.filter((p) => p.characterType === 'pet').length})
           </button>
         </div>
 
@@ -319,7 +319,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
           {filteredPoses.length === 0 && (
             <div className="text-center py-12 text-slate-500">
               <Image className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No {activeTab} poses defined yet</p>
+              <p>No {activeTab} expressions defined yet</p>
             </div>
           )}
         </div>
@@ -332,18 +332,18 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
             className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6"
           >
             <h3 className="text-lg font-medium text-white mb-4">
-              Add New {activeTab === 'child' ? 'Child' : 'Pet'} Pose
+              Add New {activeTab === 'child' ? 'Child' : 'Pet'} Expression
             </h3>
             <form onSubmit={handleCreatePose} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Pose Key</label>
+                  <label className="block text-sm text-slate-400 mb-1">Expression Key</label>
                   <input
                     type="text"
                     value={newPoseKey}
                     onChange={(e) => setNewPoseKey(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
-                    placeholder="e.g., celebrating"
+                    placeholder="e.g., excited"
                   />
                 </div>
                 <div>
@@ -366,7 +366,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
                   onChange={(e) => setNewPrompt(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white resize-none"
                   rows={3}
-                  placeholder="Describe the pose for AI generation..."
+                  placeholder="Describe the facial expression for AI generation..."
                 />
               </div>
               <div className="flex justify-end gap-3">
@@ -392,7 +392,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
                   ) : (
                     <Plus className="w-4 h-4" />
                   )}
-                  Create Pose
+                  Create Expression
                 </button>
               </div>
             </form>
@@ -403,7 +403,7 @@ export function PoseEditor({ onBack }: PoseEditorProps) {
             className="w-full py-3 border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-xl text-slate-500 hover:text-cyan-400 transition-colors flex items-center justify-center gap-2"
           >
             <Plus className="w-5 h-5" />
-            Add New {activeTab === 'child' ? 'Child' : 'Pet'} Pose
+            Add New {activeTab === 'child' ? 'Child' : 'Pet'} Expression
           </button>
         )}
       </div>

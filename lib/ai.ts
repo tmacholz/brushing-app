@@ -83,11 +83,68 @@ async function callGemini(prompt: string, maxRetries: number = 5): Promise<strin
 }
 
 function extractJson<T>(text: string): T {
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || text.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-  if (!jsonMatch) {
+  // First try to extract from code block
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      return JSON.parse(codeBlockMatch[1].trim()) as T;
+    } catch {
+      // Fall through to other methods
+    }
+  }
+
+  // Try to find balanced JSON object or array
+  const startChar = text.indexOf('{') !== -1 ? '{' : '[';
+  const endChar = startChar === '{' ? '}' : ']';
+  const startIndex = text.indexOf(startChar);
+
+  if (startIndex === -1) {
     throw new Error('No JSON found in response');
   }
-  return JSON.parse(jsonMatch[1].trim()) as T;
+
+  // Find the matching closing brace/bracket by counting
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+  let endIndex = -1;
+
+  for (let i = startIndex; i < text.length; i++) {
+    const char = text[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === startChar || char === '{' || char === '[') {
+      depth++;
+    } else if (char === endChar || char === '}' || char === ']') {
+      depth--;
+      if (depth === 0) {
+        endIndex = i;
+        break;
+      }
+    }
+  }
+
+  if (endIndex === -1) {
+    throw new Error('No valid JSON found - unbalanced braces');
+  }
+
+  const jsonStr = text.slice(startIndex, endIndex + 1);
+  return JSON.parse(jsonStr) as T;
 }
 
 export interface GeneratedWorld {
@@ -115,6 +172,18 @@ export interface StoryPitch {
 }
 
 // Story Bible - comprehensive reference for consistent storytelling and visuals
+// Visual asset with unique ID for stable referencing
+export interface VisualAsset {
+  id: string;                    // Unique ID (e.g., "loc-abc123", "char-def456", "obj-ghi789")
+  name: string;                  // Display name
+  description: string;           // Visual description for image generation
+  mood?: string;                 // For locations
+  personality?: string;          // For characters
+  role?: string;                 // For characters (e.g., "wise mentor", "comic relief")
+  referenceImageUrl?: string;    // Generated reference image
+  source: 'bible' | 'extracted'; // Where it came from
+}
+
 export interface StoryBible {
   // Narrative elements
   tone: string; // e.g., "whimsical and heartwarming with gentle humor"
@@ -126,19 +195,24 @@ export interface StoryBible {
   petRole: string; // How [PET] acts, e.g., "loyal sidekick who provides comic relief"
   characterDynamic: string; // How they interact, e.g., "[CHILD] leads, [PET] encourages and helps"
 
-  // World and visual consistency
-  keyLocations: {
+  // CONSOLIDATED VISUAL ASSETS (replaces keyLocations + recurringCharacters)
+  visualAssets: {
+    locations: VisualAsset[];
+    characters: VisualAsset[];  // NPCs only (not child/pet)
+    objects: VisualAsset[];     // Important items
+  };
+
+  // DEPRECATED: Keep for backwards compatibility during migration
+  keyLocations?: {
     name: string;
-    visualDescription: string; // Detailed visual for image generation
+    visualDescription: string;
     mood: string;
   }[];
-
-  // Supporting characters (NPCs)
-  recurringCharacters: {
+  recurringCharacters?: {
     name: string;
     visualDescription: string;
     personality: string;
-    role: string; // e.g., "wise mentor", "comic relief", "needs help"
+    role: string;
   }[];
 
   // Visual style guide
@@ -150,6 +224,32 @@ export interface StoryBible {
   magicSystem: string | null; // If applicable, how magic works
   stakes: string; // What's at risk, e.g., "The forest animals will lose their home"
   resolution: string; // How it ends (for consistent buildup)
+}
+
+// Generate a unique ID for visual assets
+function generateAssetId(type: 'loc' | 'char' | 'obj'): string {
+  return `${type}-${Math.random().toString(36).substring(2, 10)}`;
+}
+
+// Raw response from AI before we add IDs
+interface RawStoryBibleResponse {
+  tone: string;
+  themes: string[];
+  narrativeStyle: string;
+  childRole: string;
+  petRole: string;
+  characterDynamic: string;
+  visualAssets: {
+    locations: { name: string; description: string; mood?: string }[];
+    characters: { name: string; description: string; personality?: string; role?: string }[];
+    objects: { name: string; description: string }[];
+  };
+  colorPalette: string;
+  lightingStyle: string;
+  artDirection: string;
+  magicSystem: string | null;
+  stakes: string;
+  resolution: string;
 }
 
 export async function generateStoryBible(
@@ -185,22 +285,29 @@ Respond with ONLY this JSON structure:
   "petRole": "How [PET] behaves and helps in THIS specific story",
   "characterDynamic": "How [CHILD] and [PET] interact and support each other",
 
-  "keyLocations": [
-    {
-      "name": "Location Name",
-      "visualDescription": "Detailed visual description for image generation - colors, lighting, key features, atmosphere",
-      "mood": "emotional quality of this place"
-    }
-  ],
-
-  "recurringCharacters": [
-    {
-      "name": "Character Name",
-      "visualDescription": "Detailed visual appearance for consistent image generation",
-      "personality": "2-3 word personality",
-      "role": "their role in the story"
-    }
-  ],
+  "visualAssets": {
+    "locations": [
+      {
+        "name": "Location Name",
+        "description": "Detailed visual description for image generation - colors, lighting, key features, atmosphere",
+        "mood": "emotional quality of this place"
+      }
+    ],
+    "characters": [
+      {
+        "name": "NPC Character Name (NOT [CHILD] or [PET])",
+        "description": "Detailed visual appearance for consistent image generation",
+        "personality": "2-3 word personality",
+        "role": "their role in the story (e.g., 'wise mentor', 'comic relief', 'needs help')"
+      }
+    ],
+    "objects": [
+      {
+        "name": "Important Object Name",
+        "description": "Detailed visual description of the object - appearance, materials, special features"
+      }
+    ]
+  },
 
   "colorPalette": "The dominant colors that should appear throughout the story's images",
   "lightingStyle": "Consistent lighting approach for all scenes",
@@ -211,10 +318,71 @@ Respond with ONLY this JSON structure:
   "resolution": "Brief description of how the story resolves (for proper buildup)"
 }
 
+IMPORTANT for visualAssets:
+- locations: Include 2-4 key places that appear multiple times
+- characters: Include NPCs (allies, mentors, creatures) that appear multiple times. Do NOT include [CHILD] or [PET].
+- objects: Include 1-3 important items central to the plot (magical items, tools, treasures)
+
 Be specific and detailed - this bible will be the source of truth for the entire story!`;
 
   const text = await callGemini(prompt);
-  return extractJson<StoryBible>(text);
+  const raw = extractJson<RawStoryBibleResponse>(text);
+
+  // Add unique IDs and source tracking to all visual assets
+  const visualAssets: StoryBible['visualAssets'] = {
+    locations: (raw.visualAssets?.locations || []).map(loc => ({
+      id: generateAssetId('loc'),
+      name: loc.name,
+      description: loc.description,
+      mood: loc.mood,
+      source: 'bible' as const,
+    })),
+    characters: (raw.visualAssets?.characters || []).map(char => ({
+      id: generateAssetId('char'),
+      name: char.name,
+      description: char.description,
+      personality: char.personality,
+      role: char.role,
+      source: 'bible' as const,
+    })),
+    objects: (raw.visualAssets?.objects || []).map(obj => ({
+      id: generateAssetId('obj'),
+      name: obj.name,
+      description: obj.description,
+      source: 'bible' as const,
+    })),
+  };
+
+  // Build the full StoryBible with backwards compatibility
+  const storyBible: StoryBible = {
+    tone: raw.tone,
+    themes: raw.themes,
+    narrativeStyle: raw.narrativeStyle,
+    childRole: raw.childRole,
+    petRole: raw.petRole,
+    characterDynamic: raw.characterDynamic,
+    visualAssets,
+    // Backwards compatibility: populate deprecated fields
+    keyLocations: visualAssets.locations.map(loc => ({
+      name: loc.name,
+      visualDescription: loc.description,
+      mood: loc.mood || '',
+    })),
+    recurringCharacters: visualAssets.characters.map(char => ({
+      name: char.name,
+      visualDescription: char.description,
+      personality: char.personality || '',
+      role: char.role || '',
+    })),
+    colorPalette: raw.colorPalette,
+    lightingStyle: raw.lightingStyle,
+    artDirection: raw.artDirection,
+    magicSystem: raw.magicSystem,
+    stakes: raw.stakes,
+    resolution: raw.resolution,
+  };
+
+  return storyBible;
 }
 
 export interface ExistingStory {
@@ -284,10 +452,10 @@ function getRandomBrushingPrompt(zone: string): string {
   return prompts[Math.floor(Math.random() * prompts.length)];
 }
 
-// Valid poses for character overlay system
-const CHILD_POSES = ['happy', 'excited', 'surprised', 'worried', 'walking'] as const;
-const PET_POSES = ['happy', 'excited', 'alert', 'worried', 'following'] as const;
-const POSITIONS = ['left', 'center', 'right', 'off-screen'] as const;
+// Valid expressions for character portrait overlay system
+// Unified expressions for both child and pet (circle portrait style)
+const EXPRESSIONS = ['happy', 'sad', 'surprised', 'worried', 'determined', 'excited'] as const;
+export type Expression = typeof EXPRESSIONS[number];
 
 export interface GeneratedChapter {
   chapterNumber: number;
@@ -301,12 +469,9 @@ export interface GeneratedChapter {
     durationSeconds: number;
     brushingZone: string | null;
     brushingPrompt: string | null;
-    imagePrompt: string;
-    // Character overlay system fields
-    childPose: string | null;
-    petPose: string | null;
-    childPosition: string;
-    petPosition: string;
+    // Character expression fields (stored as pose fields for DB compatibility)
+    childPose: string | null;  // Expression: happy, sad, surprised, worried, determined, excited
+    petPose: string | null;    // Expression: happy, sad, surprised, worried, determined, excited
   }[];
 }
 
@@ -365,6 +530,14 @@ ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger
 
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
 Use [CHILD] and [PET] as placeholders in the story text.
+
+IMPORTANT - [PET] DESCRIPTIONS:
+The pet companion could be ANY type of creature (animal, robot, magical being, fish, etc.).
+- NEVER use species-specific physical descriptions (no "wagged tail", "fuzzy nose", "flapped wings", "purred", etc.)
+- ONLY describe [PET]'s expressions and emotions (smiled, looked excited, seemed worried, bounced happily)
+- Use universal actions: "jumped", "bounced", "nodded", "looked at", "moved closer"
+- AVOID: tail, fur, paws, wings, fins, antenna, or any body part references
+
 ${isFirstChapter ? 'Start with excitement!' : 'Begin with brief recap.'}
 ${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : `End with an exciting cliffhanger that:
 - Poses a QUESTION about what will happen next (e.g., "Will [CHILD] and [PET] reach the cave in time?" or "What could be making that strange sound?")
@@ -372,18 +545,15 @@ ${isLastChapter ? 'End with happy conclusion that resolves the story stakes.' : 
 - Creates suspense by leaving an existing situation unresolved
 - Makes the reader wonder about the outcome of the current scene`}
 
-IMPORTANT - CHARACTER OVERLAY SYSTEM:
-For each segment, provide:
-- "imagePrompt": A BACKGROUND-ONLY scene description. Do NOT include [CHILD] or [PET] in the image prompt. Other NPCs/recurring characters CAN appear - use their visual descriptions from the Story Bible. Include the color palette and lighting style from the bible. Focus on environment, setting, atmosphere.
-- "childPose": The child's expression/pose. Options: "happy", "excited", "surprised", "worried", "walking", or null if child not in scene.
-- "petPose": The pet's expression/pose. Options: "happy", "excited", "alert", "worried", "following", or null if pet not in scene.
-- "childPosition": Where the child appears. Options: "left", "center", "right", or "off-screen".
-- "petPosition": Where the pet appears. Options: "left", "center", "right", or "off-screen".
+IMPORTANT - CHARACTER EXPRESSION SYSTEM:
+For each segment, provide character expressions (portrait overlays will be shown in corner circles):
+- "childExpression": The child's facial expression. Options: "happy", "sad", "surprised", "worried", "determined", "excited", or null if child not featured in this segment.
+- "petExpression": The pet's facial expression. Options: "happy", "sad", "surprised", "worried", "determined", "excited", or null if pet not featured in this segment.
 
-Choose poses that match the emotional content of each segment. Avoid putting both characters in the same position.
+Choose expressions that match the emotional content of each segment.
 
 Respond with ONLY JSON:
-{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "imagePrompt": "BACKGROUND ONLY scene description with Story Bible visual style", "childPose": "happy", "petPose": "happy", "childPosition": "center", "petPosition": "right"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
+{"chapterNumber": ${chapterOutline.chapter}, "title": "${chapterOutline.title}", "recap": ${isFirstChapter ? 'null' : '"Brief recap"'}, "segments": [{"segmentOrder": 1, "text": "Story text...", "childExpression": "happy", "petExpression": "happy"}, ...5 segments], "cliffhanger": "${isLastChapter ? '' : 'A question about what happens next (not a new event)'}", "nextChapterTeaser": "${isLastChapter ? 'The End!' : 'Teaser...'}"}`;
 
     const text = await callGemini(prompt);
     const chapterData = extractJson<{
@@ -393,11 +563,8 @@ Respond with ONLY JSON:
       segments: {
         segmentOrder: number;
         text: string;
-        imagePrompt: string;
-        childPose?: string | null;
-        petPose?: string | null;
-        childPosition?: string;
-        petPosition?: string;
+        childExpression?: string | null;
+        petExpression?: string | null;
       }[];
       cliffhanger: string;
       nextChapterTeaser: string;
@@ -407,19 +574,13 @@ Respond with ONLY JSON:
       const zone = BRUSHING_ZONES[idx % BRUSHING_ZONES.length];
       const hasBrushingPrompt = idx === 1 || idx === 3 || idx === 4;
 
-      // Validate and default pose/position values
-      const childPose = segment.childPose && CHILD_POSES.includes(segment.childPose as typeof CHILD_POSES[number])
-        ? segment.childPose
+      // Validate expression values (stored in childPose/petPose fields for DB compatibility)
+      const childPose = segment.childExpression && EXPRESSIONS.includes(segment.childExpression as Expression)
+        ? segment.childExpression
         : 'happy';
-      const petPose = segment.petPose && PET_POSES.includes(segment.petPose as typeof PET_POSES[number])
-        ? segment.petPose
+      const petPose = segment.petExpression && EXPRESSIONS.includes(segment.petExpression as Expression)
+        ? segment.petExpression
         : 'happy';
-      const childPosition = segment.childPosition && POSITIONS.includes(segment.childPosition as typeof POSITIONS[number])
-        ? segment.childPosition
-        : 'center';
-      const petPosition = segment.petPosition && POSITIONS.includes(segment.petPosition as typeof POSITIONS[number])
-        ? segment.petPosition
-        : 'right';
 
       return {
         ...segment,
@@ -428,8 +589,6 @@ Respond with ONLY JSON:
         brushingPrompt: hasBrushingPrompt ? getRandomBrushingPrompt(zone) : null,
         childPose,
         petPose,
-        childPosition,
-        petPosition,
       };
     });
 
@@ -455,13 +614,9 @@ export async function extractStoryReferences(
   chapters: GeneratedChapter[],
   storyBible?: StoryBible
 ): Promise<ExtractedReference[]> {
-  // Compile all story text and image prompts for analysis
+  // Compile all story text for analysis
   const allSegmentTexts = chapters.flatMap(ch =>
     ch.segments.map(s => s.text)
-  ).join('\n');
-
-  const allImagePrompts = chapters.flatMap(ch =>
-    ch.segments.map(s => s.imagePrompt)
   ).join('\n');
 
   const allCliffhangers = chapters
@@ -469,14 +624,22 @@ export async function extractStoryReferences(
     .map(ch => ch.cliffhanger)
     .join('\n');
 
-  // Include Story Bible info for richer extraction
-  const bibleContext = storyBible ? `
+  // Include Story Bible info for richer extraction (use new visualAssets or fallback to deprecated fields)
+  let bibleContext = '';
+  if (storyBible) {
+    const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({ name: l.name, description: l.visualDescription })) || [];
+    const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({ name: c.name, description: c.visualDescription })) || [];
+    const objects = storyBible.visualAssets?.objects || [];
+
+    bibleContext = `
 STORY BIBLE CONTEXT:
-Key Locations: ${storyBible.keyLocations.map(l => `${l.name} - ${l.visualDescription}`).join('; ')}
-Recurring Characters: ${storyBible.recurringCharacters.map(c => `${c.name} - ${c.visualDescription}`).join('; ')}
+Locations: ${locations.map(l => `${l.name} - ${l.description}`).join('; ')}
+Characters: ${characters.map(c => `${c.name} - ${c.description}`).join('; ')}
+Objects: ${objects.map(o => `${o.name} - ${o.description}`).join('; ')}
 Color Palette: ${storyBible.colorPalette}
 Lighting Style: ${storyBible.lightingStyle}
-` : '';
+`;
+  }
 
   const prompt = `Analyze this children's story and extract visual elements that need CONSISTENT reference images for illustration.
 
@@ -485,29 +648,24 @@ ${bibleContext}
 STORY TEXT:
 ${allSegmentTexts}
 
-IMAGE PROMPTS ALREADY IN THE STORY:
-${allImagePrompts}
-
 CLIFFHANGERS:
 ${allCliffhangers}
 
 Extract the KEY VISUAL ELEMENTS that need to look consistent across different scenes.
-
-IMPORTANT: Pay special attention to the IMAGE PROMPTS above - these describe exactly what will appear in each illustration. Any characters, creatures, objects, or locations mentioned in the image prompts are HIGH PRIORITY for reference sheets since they will be directly illustrated.
 
 DO NOT INCLUDE:
 - [CHILD] or [PET] - these are the main characters handled separately
 - Generic background elements (sky, grass, trees unless they're special)
 - Single-use throwaway objects that only appear once
 
-DO INCLUDE (up to 8 total, prioritize by frequency in image prompts):
-1. CHARACTERS: NPCs, creatures, allies, or antagonists mentioned in image prompts (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
-2. OBJECTS: Important items that appear in multiple image prompts (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
-3. LOCATIONS: Specific places described in image prompts (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
+DO INCLUDE (up to 8 total, prioritize by frequency in the story):
+1. CHARACTERS: NPCs, creatures, allies, or antagonists that appear multiple times (e.g., "the wise owl", "the grumpy troll", "Queen Coral")
+2. OBJECTS: Important items that appear in multiple scenes (e.g., "the magical toothbrush", "the glowing crystal", "the treasure map")
+3. LOCATIONS: Specific places that are revisited (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
 
 For CHARACTERS, provide descriptions suitable for generating a CHARACTER REFERENCE SHEET (showing the character from multiple angles).
 
-Respond with ONLY a JSON array (max 8 items, sorted by frequency in image prompts):
+Respond with ONLY a JSON array (max 8 items, sorted by importance to the story):
 [
   {
     "type": "character",
@@ -539,6 +697,91 @@ If the story has fewer meaningful visual elements, return fewer items. Quality o
       ref.description
     )
     .slice(0, 8);
+}
+
+// Helper to check if two names are similar (fuzzy match)
+function namesAreSimilar(name1: string, name2: string): boolean {
+  const normalize = (s: string) => s.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]/g, '');
+  const n1 = normalize(name1);
+  const n2 = normalize(name2);
+  return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+}
+
+// Merge extracted references into Story Bible's visualAssets
+export function mergeExtractedReferencesIntoStoryBible(
+  storyBible: StoryBible,
+  extractedRefs: ExtractedReference[]
+): StoryBible {
+  // Initialize visualAssets if not present
+  const visualAssets = storyBible.visualAssets || {
+    locations: [],
+    characters: [],
+    objects: [],
+  };
+
+  // Get existing names for deduplication
+  const existingLocationNames = new Set(visualAssets.locations.map(l => l.name.toLowerCase()));
+  const existingCharacterNames = new Set(visualAssets.characters.map(c => c.name.toLowerCase()));
+  const existingObjectNames = new Set(visualAssets.objects.map(o => o.name.toLowerCase()));
+
+  for (const ref of extractedRefs) {
+    const refNameLower = ref.name.toLowerCase();
+
+    if (ref.type === 'location') {
+      // Check if similar location exists
+      const exists = visualAssets.locations.some(l => namesAreSimilar(l.name, ref.name)) ||
+                     existingLocationNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.locations.push({
+          id: generateAssetId('loc'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    } else if (ref.type === 'character') {
+      const exists = visualAssets.characters.some(c => namesAreSimilar(c.name, ref.name)) ||
+                     existingCharacterNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.characters.push({
+          id: generateAssetId('char'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    } else if (ref.type === 'object') {
+      const exists = visualAssets.objects.some(o => namesAreSimilar(o.name, ref.name)) ||
+                     existingObjectNames.has(refNameLower);
+      if (!exists) {
+        visualAssets.objects.push({
+          id: generateAssetId('obj'),
+          name: ref.name,
+          description: ref.description,
+          source: 'extracted',
+        });
+      }
+    }
+  }
+
+  // Update deprecated fields for backwards compatibility
+  const updatedBible: StoryBible = {
+    ...storyBible,
+    visualAssets,
+    keyLocations: visualAssets.locations.map(loc => ({
+      name: loc.name,
+      visualDescription: loc.description,
+      mood: loc.mood || '',
+    })),
+    recurringCharacters: visualAssets.characters.map(char => ({
+      name: char.name,
+      visualDescription: char.description,
+      personality: char.personality || '',
+      role: char.role || '',
+    })),
+  };
+
+  return updatedBible;
 }
 
 // =====================================================
@@ -625,6 +868,195 @@ Include ALL segments in the response, even if they have no references (empty arr
     }
     return { segmentId: seg.id, referenceIds: [] };
   });
+}
+
+// =====================================================
+// Storyboard Generation
+// =====================================================
+
+export interface StoryboardSegment {
+  segmentId: string;
+  segmentOrder: number;
+  chapterNumber: number;
+  location: string | null;           // Location name (for display)
+  characters: string[];              // NPC names (for display)
+  locationId: string | null;         // Story Bible visualAssets.locations[].id
+  characterIds: string[];            // Story Bible visualAssets.characters[].id
+  shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-shoulder';
+  cameraAngle: 'eye-level' | 'low-angle' | 'high-angle' | 'birds-eye' | 'worms-eye' | 'dutch-angle';
+  visualFocus: string;               // What to emphasize visually
+  continuityNote: string;            // How this connects to adjacent segments
+}
+
+export interface FullStoryboardInput {
+  storyTitle: string;
+  storyDescription: string;
+  storyBible: StoryBible;
+  chapters: {
+    chapterNumber: number;
+    title: string;
+    segments: {
+      id: string;
+      segmentOrder: number;
+      text: string;
+      imagePrompt: string | null;
+    }[];
+  }[];
+}
+
+export async function generateStoryboard(input: FullStoryboardInput): Promise<StoryboardSegment[]> {
+  const { storyTitle, storyDescription, storyBible, chapters } = input;
+
+  // Get locations from visualAssets (preferred) or fallback to deprecated keyLocations
+  const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({
+    id: generateAssetId('loc'),
+    name: l.name,
+    description: l.visualDescription,
+    mood: l.mood,
+    source: 'bible' as const,
+  })) || [];
+
+  // Get characters from visualAssets (preferred) or fallback to deprecated recurringCharacters
+  const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({
+    id: generateAssetId('char'),
+    name: c.name,
+    description: c.visualDescription,
+    personality: c.personality,
+    role: c.role,
+    source: 'bible' as const,
+  })) || [];
+
+  // Build location list from Story Bible
+  const locationList = locations.length
+    ? locations.map(l => `- "${l.name}": ${l.description} (mood: ${l.mood || 'unspecified'})`).join('\n')
+    : 'No specific locations defined';
+
+  // Build character list from Story Bible
+  const characterList = characters.length
+    ? characters.map(c => `- "${c.name}": ${c.description} (${c.personality || 'unspecified'}, ${c.role || 'unspecified'})`).join('\n')
+    : 'No recurring NPCs defined';
+
+  // Build full story structure for analysis
+  const storyStructure = chapters.map(ch => {
+    const segmentLines = ch.segments.map(s =>
+      `  Segment ${s.segmentOrder} [${s.id}]:\n    Text: "${s.text}"\n    Current Image Prompt: "${s.imagePrompt || 'none'}"`
+    ).join('\n');
+    return `Chapter ${ch.chapterNumber}: "${ch.title}"\n${segmentLines}`;
+  }).join('\n\n');
+
+  const prompt = `You are a storyboard artist for a children's animated story. Analyze the entire story and create a VISUAL STORYBOARD that plans camera work, locations, and character appearances for each segment.
+
+STORY: "${storyTitle}"
+${storyDescription}
+
+VISUAL STYLE (from Story Bible):
+- Color Palette: ${storyBible.colorPalette || 'Not specified'}
+- Lighting: ${storyBible.lightingStyle || 'Not specified'}
+- Art Direction: ${storyBible.artDirection || 'Not specified'}
+
+AVAILABLE LOCATIONS (use these exact names when applicable):
+${locationList}
+
+AVAILABLE NPCs (use these exact names when they appear):
+${characterList}
+
+IMPORTANT - CHARACTER OVERLAY SYSTEM:
+The [CHILD] and [PET] are rendered as SEPARATE sprite overlays on top of the background image.
+They should NEVER be included in the storyboard planning because they are composited separately.
+- Do NOT include [CHILD] or [PET] in the "characters" array
+- Do NOT focus on [CHILD] or [PET] in the "visualFocus" field
+- The storyboard plans ONLY the background scene and any NPCs
+
+STORY STRUCTURE:
+${storyStructure}
+
+Create a storyboard that:
+1. VARIES camera shots and angles - avoid repetition between adjacent segments
+2. Uses LOCATIONS from the Story Bible when the scene matches (use exact name or null if no match)
+3. Only includes NPCs when they are ACTUALLY in that segment's text/scene
+4. Creates visual FLOW - establishing shots for new locations, then closer shots for action/dialogue
+5. Uses camera angles meaningfully (low-angle for heroic moments, high-angle for vulnerability, etc.)
+
+SHOT TYPES:
+- "wide": Full scene, shows environment and multiple characters
+- "medium": Characters from waist up, good for dialogue and action
+- "close-up": Face/upper body, emotional moments
+- "extreme-close-up": Specific detail (object, expression)
+- "over-shoulder": POV from behind one character looking at another/scene
+
+CAMERA ANGLES:
+- "eye-level": Neutral, standard view
+- "low-angle": Looking up, makes subjects appear powerful/heroic
+- "high-angle": Looking down, makes subjects appear small/vulnerable
+- "birds-eye": Directly above, shows layout/geography
+- "worms-eye": From ground looking up, dramatic
+- "dutch-angle": Tilted, creates unease or dynamic action
+
+Respond with ONLY a JSON array containing ALL segments:
+[
+  {
+    "segmentId": "uuid-here",
+    "segmentOrder": 1,
+    "chapterNumber": 1,
+    "location": "the crystal cavern" or null,
+    "characters": ["the wise owl"] or [],
+    "shotType": "wide",
+    "cameraAngle": "eye-level",
+    "visualFocus": "The glowing crystals illuminating the cavern entrance",
+    "continuityNote": "Establishing shot of new location"
+  },
+  ...
+]
+
+IMPORTANT:
+- Include EVERY segment from the story
+- Use EXACT location/character names from the Story Bible
+- Vary shots between adjacent segments (don't use same shot type twice in a row)
+- "characters" = ONLY NPCs from the Story Bible that appear in the scene (NEVER [CHILD] or [PET])
+- "visualFocus" = What the BACKGROUND image should emphasize (NEVER the child or pet - they are overlaid separately)`;
+
+  const text = await callGemini(prompt);
+  const rawStoryboard = extractJson<Omit<StoryboardSegment, 'locationId' | 'characterIds'>[]>(text);
+
+  // Validate shot types and camera angles
+  const validShotTypes = ['wide', 'medium', 'close-up', 'extreme-close-up', 'over-shoulder'];
+  const validCameraAngles = ['eye-level', 'low-angle', 'high-angle', 'birds-eye', 'worms-eye', 'dutch-angle'];
+
+  // Helper to find location ID by name (fuzzy match)
+  const findLocationId = (name: string | null): string | null => {
+    if (!name) return null;
+    const normalized = name.toLowerCase().replace(/^the\s+/, '');
+    const match = locations.find(l =>
+      l.name.toLowerCase().replace(/^the\s+/, '') === normalized ||
+      l.name.toLowerCase().includes(normalized) ||
+      normalized.includes(l.name.toLowerCase())
+    );
+    return match?.id || null;
+  };
+
+  // Helper to find character IDs by names (fuzzy match)
+  const findCharacterIds = (names: string[]): string[] => {
+    return names.map(name => {
+      const normalized = name.toLowerCase().replace(/^the\s+/, '');
+      const match = characters.find(c =>
+        c.name.toLowerCase().replace(/^the\s+/, '') === normalized ||
+        c.name.toLowerCase().includes(normalized) ||
+        normalized.includes(c.name.toLowerCase())
+      );
+      return match?.id;
+    }).filter((id): id is string => !!id);
+  };
+
+  return rawStoryboard.map(segment => ({
+    ...segment,
+    shotType: validShotTypes.includes(segment.shotType) ? segment.shotType : 'medium',
+    cameraAngle: validCameraAngles.includes(segment.cameraAngle) ? segment.cameraAngle : 'eye-level',
+    characters: Array.isArray(segment.characters) ? segment.characters : [],
+    location: segment.location || null,
+    // Add ID-based references
+    locationId: findLocationId(segment.location),
+    characterIds: findCharacterIds(Array.isArray(segment.characters) ? segment.characters : []),
+  })) as StoryboardSegment[];
 }
 
 export interface GeneratedPet {

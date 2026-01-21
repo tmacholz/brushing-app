@@ -75,9 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 image_url,
                 narration_sequence,
                 child_pose,
-                pet_pose,
-                child_position,
-                pet_position
+                pet_pose
               FROM segments
               WHERE chapter_id = ${chapter.id}
               ORDER BY segment_order
@@ -106,8 +104,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 narrationSequence: seg.narration_sequence,
                 childPose: seg.child_pose || null,
                 petPose: seg.pet_pose || null,
-                childPosition: seg.child_position || 'center',
-                petPosition: seg.pet_position || 'right',
               })),
             };
           })

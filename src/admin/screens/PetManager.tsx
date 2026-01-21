@@ -93,7 +93,7 @@ export function PetManager({ onBack }: PetManagerProps) {
   const handleApproveSuggestion = async (suggestionId: string) => {
     setApprovingId(suggestionId);
     try {
-      const res = await fetch(`/api/admin/pets/${suggestionId}`, {
+      const res = await fetch(`/api/admin/pets?id=${suggestionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'approve' }),
@@ -110,7 +110,7 @@ export function PetManager({ onBack }: PetManagerProps) {
   const handleRejectSuggestion = async (suggestionId: string) => {
     setRejectingId(suggestionId);
     try {
-      const res = await fetch(`/api/admin/pets/${suggestionId}`, {
+      const res = await fetch(`/api/admin/pets?id=${suggestionId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'reject' }),
@@ -128,7 +128,7 @@ export function PetManager({ onBack }: PetManagerProps) {
     if (!confirm('Are you sure you want to delete this pet?')) return;
 
     try {
-      const res = await fetch(`/api/admin/pets/${petId}`, {
+      const res = await fetch(`/api/admin/pets?id=${petId}`, {
         method: 'DELETE',
       });
       if (!res.ok) throw new Error('Failed to delete pet');
@@ -593,7 +593,7 @@ function EditPetModal({
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/pets/${pet.id}`, {
+      const res = await fetch(`/api/admin/pets?id=${pet.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

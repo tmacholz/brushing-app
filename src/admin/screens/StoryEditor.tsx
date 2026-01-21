@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -27,7 +27,11 @@ import {
   Package,
   Plus,
   Maximize2,
-  Tag,
+  BookOpen,
+  Clapperboard,
+  Camera,
+  Video,
+  Ban,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -52,7 +56,25 @@ interface Segment {
   image_history: ImageHistoryItem[] | null;
   narration_sequence: NarrationSequenceItem[] | null;
   reference_ids: string[] | null;
+  // Storyboard fields
+  storyboard_location: string | null;
+  storyboard_characters: string[] | null;
+  storyboard_shot_type: string | null;
+  storyboard_camera_angle: string | null;
+  storyboard_focus: string | null;
+  storyboard_continuity: string | null;
+  storyboard_exclude: string[] | null;
+  // ID-based references to Story Bible visualAssets
+  storyboard_location_id: string | null;
+  storyboard_character_ids: string[] | null;
+  storyboard_object_ids: string[] | null;
+  // Character expression overlays (circle portraits in corners)
+  child_pose: string | null;  // Expression: happy, sad, surprised, worried, determined, excited
+  pet_pose: string | null;    // Expression: happy, sad, surprised, worried, determined, excited
 }
+
+// Valid expressions for character portraits
+const EXPRESSIONS = ['happy', 'sad', 'surprised', 'worried', 'determined', 'excited'] as const;
 
 interface Chapter {
   id: string;
@@ -68,13 +90,45 @@ interface Chapter {
   teaser_narration_sequence: NarrationSequenceItem[] | null;
 }
 
-// Story Bible for visual consistency
+// Visual asset with unique ID for stable referencing
+interface VisualAsset {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  source: 'bible' | 'extracted';
+}
+
+// Story Bible for narrative and visual consistency
 interface StoryBible {
+  // Narrative elements
+  tone?: string;
+  themes?: string[];
+  narrativeStyle?: string;
+  // Character behavior
+  childRole?: string;
+  petRole?: string;
+  characterDynamic?: string;
+  // Consolidated visual assets
+  visualAssets?: {
+    locations: VisualAsset[];
+    characters: VisualAsset[];
+    objects: VisualAsset[];
+  };
+  // DEPRECATED: Keep for backwards compatibility
+  keyLocations?: { name: string; visualDescription: string; mood: string }[];
+  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+  // Visual style guide
   colorPalette?: string;
   lightingStyle?: string;
   artDirection?: string;
-  keyLocations?: { name: string; visualDescription: string; mood: string }[];
-  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
+  // Story-specific elements
+  magicSystem?: string | null;
+  stakes?: string;
+  resolution?: string;
 }
 
 // Visual reference for consistent imagery
@@ -86,6 +140,37 @@ interface StoryReference {
   description: string;
   image_url: string | null;
   sort_order: number;
+}
+
+// Merged visual asset from Story Bible + story_references
+interface MergedLocation {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'keyLocations' | 'story_references';
+}
+
+interface MergedCharacter {
+  id: string;
+  name: string;
+  description: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'recurringCharacters' | 'story_references';
+}
+
+interface MergedObject {
+  id: string;
+  name: string;
+  description: string;
+  referenceImageUrl?: string;
+  refId?: string;
+  source: 'visualAssets' | 'story_references';
 }
 
 interface Story {
@@ -263,7 +348,9 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
-  const hasPrompt = !!segment.image_prompt;
+  const hasStoryboard = !!(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus);
+  const hasPromptOverride = !!segment.image_prompt;
+  const canGenerate = hasStoryboard || hasPromptOverride;
   const imageHistory = segment.image_history || [];
   const hasHistory = imageHistory.length > 1;
 
@@ -286,8 +373,8 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   };
 
   const handleGenerateImage = async () => {
-    if (!segment.image_prompt) {
-      alert('No image prompt for this segment');
+    if (!canGenerate) {
+      alert('No storyboard data or image prompt for this segment. Generate a storyboard first, or add a manual image prompt.');
       return;
     }
 
@@ -301,7 +388,10 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'image',
-          prompt: segment.image_prompt,
+          // Only pass prompt if it exists (manual override)
+          prompt: segment.image_prompt || undefined,
+          // Always pass segment text for storyboard-based generation
+          segmentText: segment.text,
           segmentId: segment.id,
           referenceImageUrl: previousImageUrl || undefined,
           // Don't include characters - using overlay system instead
@@ -309,6 +399,16 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           includePet: false,
           storyBible: storyBible || undefined,
           visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
+          // Storyboard fields for intentional visual planning
+          storyboardLocation: segment.storyboard_location || undefined,
+          storyboardCharacters: segment.storyboard_characters || undefined,
+          storyboardShotType: segment.storyboard_shot_type || undefined,
+          storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
+          storyboardFocus: segment.storyboard_focus || undefined,
+          storyboardExclude: segment.storyboard_exclude || undefined,
+          // ID-based storyboard fields (preferred for lookups)
+          storyboardLocationId: segment.storyboard_location_id || undefined,
+          storyboardCharacterIds: segment.storyboard_character_ids || undefined,
         }),
       });
 
@@ -399,7 +499,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
     }
   };
 
-  if (!hasPrompt) {
+  if (!canGenerate) {
     return null;
   }
 
@@ -586,143 +686,6 @@ function getTimeAgo(date: Date): string {
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
   return date.toLocaleDateString();
-}
-
-// Component for managing reference tags on a segment
-interface SegmentReferenceTagsProps {
-  segment: Segment;
-  storyId: string;
-  references: StoryReference[];
-  onUpdate: (segmentId: string, updates: Partial<Segment>) => void;
-}
-
-function SegmentReferenceTags({ segment, storyId, references, onUpdate }: SegmentReferenceTagsProps) {
-  const [showPicker, setShowPicker] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  const taggedRefs = references.filter(ref =>
-    segment.reference_ids?.includes(ref.id)
-  );
-  const untaggedRefs = references.filter(ref =>
-    !segment.reference_ids?.includes(ref.id)
-  );
-
-  const handleAddRef = async (refId: string) => {
-    setSaving(true);
-    try {
-      const newRefs = [...(segment.reference_ids || []), refId];
-      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenceIds: newRefs }),
-      });
-      if (res.ok) {
-        onUpdate(segment.id, { reference_ids: newRefs });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemoveRef = async (refId: string) => {
-    setSaving(true);
-    try {
-      const newRefs = (segment.reference_ids || []).filter(id => id !== refId);
-      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referenceIds: newRefs }),
-      });
-      if (res.ok) {
-        onUpdate(segment.id, { reference_ids: newRefs });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const getRefIcon = (type: string) => {
-    switch (type) {
-      case 'character': return <Users className="w-3 h-3" />;
-      case 'location': return <MapPin className="w-3 h-3" />;
-      case 'object': return <Package className="w-3 h-3" />;
-      default: return <Tag className="w-3 h-3" />;
-    }
-  };
-
-  if (references.length === 0) return null;
-
-  return (
-    <div className="mt-2 pt-2 border-t border-slate-700/50">
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-slate-500 flex items-center gap-1">
-          <Tag className="w-3 h-3" />
-          References:
-        </span>
-
-        {/* Tagged references */}
-        {taggedRefs.map(ref => (
-          <button
-            key={ref.id}
-            onClick={() => handleRemoveRef(ref.id)}
-            disabled={saving}
-            className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 rounded-full hover:bg-red-500/30 hover:text-red-300 transition-colors disabled:opacity-50"
-            title={`${ref.name} - Click to remove`}
-          >
-            {getRefIcon(ref.type)}
-            {ref.name}
-            <X className="w-2.5 h-2.5" />
-          </button>
-        ))}
-
-        {/* Add button */}
-        {untaggedRefs.length > 0 && (
-          <div className="relative">
-            <button
-              onClick={() => setShowPicker(!showPicker)}
-              disabled={saving}
-              className="flex items-center gap-1 px-2 py-0.5 text-[10px] bg-slate-600/50 text-slate-400 rounded-full hover:bg-slate-600 hover:text-slate-300 transition-colors disabled:opacity-50"
-            >
-              <Plus className="w-2.5 h-2.5" />
-              Add
-            </button>
-
-            {/* Reference picker dropdown */}
-            {showPicker && (
-              <div className="absolute top-full left-0 mt-1 z-20 bg-slate-800 border border-slate-600 rounded-lg shadow-xl min-w-[200px] max-h-[200px] overflow-y-auto">
-                {untaggedRefs.map(ref => (
-                  <button
-                    key={ref.id}
-                    onClick={() => {
-                      handleAddRef(ref.id);
-                      setShowPicker(false);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-slate-700 transition-colors"
-                  >
-                    {ref.image_url ? (
-                      <img src={ref.image_url} alt="" className="w-6 h-6 rounded object-cover" />
-                    ) : (
-                      <div className="w-6 h-6 rounded bg-slate-600 flex items-center justify-center">
-                        {getRefIcon(ref.type)}
-                      </div>
-                    )}
-                    <div>
-                      <div className="text-slate-200">{ref.name}</div>
-                      <div className="text-[10px] text-slate-500">{ref.type}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {taggedRefs.length === 0 && untaggedRefs.length > 0 && (
-          <span className="text-[10px] text-slate-500 italic">No references tagged</span>
-        )}
-      </div>
-    </div>
-  );
 }
 
 // Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
@@ -999,11 +962,162 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
 
   // Reference management state
   const [generatingRefImages, setGeneratingRefImages] = useState<Set<string>>(new Set());
+  const [generatingAssetImages, setGeneratingAssetImages] = useState<Set<string>>(new Set()); // Track by asset ID for assets without refId
   const [generatingAllRefs, setGeneratingAllRefs] = useState(false);
   const [showAddReference, setShowAddReference] = useState(false);
   const [newRefType, setNewRefType] = useState<'character' | 'object' | 'location'>('character');
   const [newRefName, setNewRefName] = useState('');
   const [newRefDescription, setNewRefDescription] = useState('');
+
+  // Story Bible state
+  const [showStoryBible, setShowStoryBible] = useState(false);
+  const [editingStoryBible, setEditingStoryBible] = useState(false);
+  const [storyBibleDraft, setStoryBibleDraft] = useState<StoryBible | null>(null);
+  const [savingStoryBible, setSavingStoryBible] = useState(false);
+  const [generatingStoryBible, setGeneratingStoryBible] = useState(false);
+
+  // Storyboard generation state
+  const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
+
+  // Computed merged visual assets from Story Bible + legacy sources
+  const mergedVisualAssets = useMemo(() => {
+    if (!story) return { locations: [], characters: [], objects: [] };
+
+    const storyBible = story.story_bible;
+    const refs = story.references || [];
+
+    // Helper to find matching reference image from story_references
+    const findRefImage = (type: string, name: string): string | null => {
+      const match = refs.find(r =>
+        r.type === type &&
+        (r.name.toLowerCase() === name.toLowerCase() ||
+         r.name.toLowerCase().includes(name.toLowerCase()) ||
+         name.toLowerCase().includes(r.name.toLowerCase()))
+      );
+      return match?.image_url || null;
+    };
+
+    // Helper to find matching reference ID from story_references
+    const findRefId = (type: string, name: string): string | null => {
+      const match = refs.find(r =>
+        r.type === type &&
+        (r.name.toLowerCase() === name.toLowerCase() ||
+         r.name.toLowerCase().includes(name.toLowerCase()) ||
+         name.toLowerCase().includes(r.name.toLowerCase()))
+      );
+      return match?.id || null;
+    };
+
+    // Locations: prefer visualAssets, fallback to keyLocations, merge with story_references images
+    let locations: MergedLocation[] = [];
+
+    if (storyBible?.visualAssets?.locations?.length) {
+      locations = storyBible.visualAssets.locations.map(loc => ({
+        id: loc.id,
+        name: loc.name,
+        description: loc.description,
+        mood: loc.mood,
+        referenceImageUrl: loc.referenceImageUrl || findRefImage('location', loc.name) || undefined,
+        refId: findRefId('location', loc.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    } else if (storyBible?.keyLocations?.length) {
+      locations = storyBible.keyLocations.map((loc, idx) => ({
+        id: `legacy-loc-${idx}`,
+        name: loc.name,
+        description: loc.visualDescription,
+        mood: loc.mood,
+        referenceImageUrl: findRefImage('location', loc.name) || undefined,
+        refId: findRefId('location', loc.name) || undefined,
+        source: 'keyLocations' as const,
+      }));
+    }
+
+    // Add locations from story_references not already in the list
+    refs.filter(r => r.type === 'location').forEach(ref => {
+      if (!locations.some(l => l.name.toLowerCase() === ref.name.toLowerCase())) {
+        locations.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    // Characters: prefer visualAssets, fallback to recurringCharacters, merge with story_references images
+    let characters: MergedCharacter[] = [];
+
+    if (storyBible?.visualAssets?.characters?.length) {
+      characters = storyBible.visualAssets.characters.map(char => ({
+        id: char.id,
+        name: char.name,
+        description: char.description,
+        personality: char.personality,
+        role: char.role,
+        referenceImageUrl: char.referenceImageUrl || findRefImage('character', char.name) || undefined,
+        refId: findRefId('character', char.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    } else if (storyBible?.recurringCharacters?.length) {
+      characters = storyBible.recurringCharacters.map((char, idx) => ({
+        id: `legacy-char-${idx}`,
+        name: char.name,
+        description: char.visualDescription,
+        personality: char.personality,
+        role: char.role,
+        referenceImageUrl: findRefImage('character', char.name) || undefined,
+        refId: findRefId('character', char.name) || undefined,
+        source: 'recurringCharacters' as const,
+      }));
+    }
+
+    // Add characters from story_references not already in the list
+    refs.filter(r => r.type === 'character').forEach(ref => {
+      if (!characters.some(c => c.name.toLowerCase() === ref.name.toLowerCase())) {
+        characters.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    // Objects: prefer visualAssets, otherwise from story_references only (old Story Bible had no objects)
+    let objects: MergedObject[] = [];
+
+    if (storyBible?.visualAssets?.objects?.length) {
+      objects = storyBible.visualAssets.objects.map(obj => ({
+        id: obj.id,
+        name: obj.name,
+        description: obj.description,
+        referenceImageUrl: obj.referenceImageUrl || findRefImage('object', obj.name) || undefined,
+        refId: findRefId('object', obj.name) || undefined,
+        source: 'visualAssets' as const,
+      }));
+    }
+
+    // Add objects from story_references not already in the list
+    refs.filter(r => r.type === 'object').forEach(ref => {
+      if (!objects.some(o => o.name.toLowerCase() === ref.name.toLowerCase())) {
+        objects.push({
+          id: `ref-${ref.id}`,
+          name: ref.name,
+          description: ref.description,
+          referenceImageUrl: ref.image_url || undefined,
+          refId: ref.id,
+          source: 'story_references' as const,
+        });
+      }
+    });
+
+    return { locations, characters, objects };
+  }, [story]);
 
   const fetchStory = useCallback(async () => {
     try {
@@ -1057,6 +1171,98 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       setError(err instanceof Error ? err.message : 'Failed to save story');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveStoryBible = async () => {
+    if (!storyBibleDraft) return;
+    setSavingStoryBible(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyBible: storyBibleDraft }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save story bible');
+      const data = await res.json();
+      setStory({ ...story!, ...data.story });
+      setEditingStoryBible(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save story bible');
+    } finally {
+      setSavingStoryBible(false);
+    }
+  };
+
+  const startEditingStoryBible = () => {
+    setStoryBibleDraft(story?.story_bible || {});
+    setEditingStoryBible(true);
+  };
+
+  const cancelEditingStoryBible = () => {
+    setStoryBibleDraft(null);
+    setEditingStoryBible(false);
+  };
+
+  const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
+    setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
+  };
+
+  const handleGenerateStoryBible = async () => {
+    setGeneratingStoryBible(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateStoryBible' }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to generate Story Bible');
+      }
+
+      // Refresh story to get updated story bible and storyboard data
+      await fetchStory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate Story Bible');
+    } finally {
+      setGeneratingStoryBible(false);
+    }
+  };
+
+  const handleGenerateStoryboard = async () => {
+    if (!story?.story_bible) {
+      setError('Story Bible required. Add or generate a Story Bible first.');
+      return;
+    }
+
+    setGeneratingStoryboard(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generateStoryboard' }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to generate storyboard');
+      }
+
+      // Refresh story to get updated segment storyboard data
+      await fetchStory();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
+    } finally {
+      setGeneratingStoryboard(false);
     }
   };
 
@@ -1259,6 +1465,102 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
     }
   };
 
+  // Generate image for a visual asset (creates story_references entry if needed)
+  const handleGenerateVisualAssetImage = async (
+    assetId: string,
+    assetType: 'character' | 'object' | 'location',
+    name: string,
+    description: string,
+    existingRefId?: string
+  ) => {
+    if (!story) return;
+
+    // Track by asset ID
+    setGeneratingAssetImages(prev => new Set(prev).add(assetId));
+    setError(null);
+
+    try {
+      let refId = existingRefId;
+
+      // If no existing reference, create one first
+      if (!refId) {
+        const createRes = await fetch(`/api/admin/stories/${storyId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'addReference',
+            type: assetType,
+            name: name,
+            description: description,
+          }),
+        });
+
+        if (!createRes.ok) throw new Error('Failed to create reference entry');
+
+        const createData = await createRes.json();
+        refId = createData.reference.id;
+
+        // Update local state with new reference
+        setStory(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            references: [...prev.references, createData.reference],
+          };
+        });
+      }
+
+      // Now generate the image
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'referenceImage',
+          referenceId: refId,
+          referenceType: assetType,
+          name: name,
+          description: description,
+          storyBible: story.story_bible || undefined,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to generate reference image');
+      }
+
+      const data = await res.json();
+
+      // Save image URL to database
+      const saveRes = await fetch(`/api/admin/stories/${storyId}?reference=${refId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: data.imageUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save reference image URL');
+
+      // Update local state
+      setStory(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          references: prev.references.map(r =>
+            r.id === refId ? { ...r, image_url: data.imageUrl } : r
+          ),
+        };
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+    } finally {
+      setGeneratingAssetImages(prev => {
+        const next = new Set(prev);
+        next.delete(assetId);
+        return next;
+      });
+    }
+  };
+
   // Generate images for all references without images
   const handleGenerateAllReferenceImages = async () => {
     if (!story) return;
@@ -1280,29 +1582,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       }
     } finally {
       setGeneratingAllRefs(false);
-    }
-  };
-
-  // Delete a reference
-  const handleDeleteReference = async (referenceId: string) => {
-    if (!confirm('Are you sure you want to delete this reference?')) return;
-
-    try {
-      const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
-        method: 'DELETE',
-      });
-
-      if (!res.ok) throw new Error('Failed to delete reference');
-
-      setStory(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          references: prev.references.filter(r => r.id !== referenceId),
-        };
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete reference');
     }
   };
 
@@ -1375,34 +1654,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
       setGeneratingAllRefs(false);
     }
   };
-
-  // Update reference field
-  const handleSaveReferenceField = useCallback(async (
-    referenceId: string,
-    field: 'name' | 'description',
-    value: string
-  ) => {
-    const res = await fetch(`/api/admin/stories/${storyId}?reference=${referenceId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ [field]: value }),
-    });
-
-    if (!res.ok) {
-      const error = await res.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(error.details || error.error);
-    }
-
-    setStory(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        references: prev.references.map(r =>
-          r.id === referenceId ? { ...r, [field]: value } : r
-        ),
-      };
-    });
-  }, [storyId]);
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters((prev) => {
@@ -1585,20 +1836,23 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
   }, []);
 
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
-    const segmentsWithPrompts = chapter.segments.filter(s => s.image_prompt);
-    if (segmentsWithPrompts.length === 0) {
-      alert('No segments with image prompts in this chapter');
+    // Segments can be generated if they have storyboard data OR an image prompt
+    const generatableSegments = chapter.segments.filter(s =>
+      s.image_prompt || s.storyboard_shot_type || s.storyboard_location || s.storyboard_focus
+    );
+    if (generatableSegments.length === 0) {
+      alert('No segments with storyboard data or image prompts in this chapter. Generate a storyboard first.');
       return;
     }
 
     setGeneratingImagesForChapter(chapter.id);
-    setImageGenProgress({ current: 0, total: segmentsWithPrompts.length });
+    setImageGenProgress({ current: 0, total: generatableSegments.length });
 
     let previousImageUrl: string | null = null;
 
-    for (let i = 0; i < segmentsWithPrompts.length; i++) {
-      const segment = segmentsWithPrompts[i];
-      setImageGenProgress({ current: i + 1, total: segmentsWithPrompts.length });
+    for (let i = 0; i < generatableSegments.length; i++) {
+      const segment = generatableSegments[i];
+      setImageGenProgress({ current: i + 1, total: generatableSegments.length });
 
       // Find relevant visual references for this segment
       const visualReferences = findRelevantReferences(segment, story?.references || []);
@@ -1611,13 +1865,26 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'image',
-            prompt: segment.image_prompt,
+            // Only pass prompt if it exists (manual override)
+            prompt: segment.image_prompt || undefined,
+            // Always pass segment text for storyboard-based generation
+            segmentText: segment.text,
             segmentId: segment.id,
             referenceImageUrl: previousImageUrl || undefined,
             includeUser: false,
             includePet: false,
             storyBible: story?.story_bible || undefined,
             visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
+            // Storyboard fields for intentional visual planning
+            storyboardLocation: segment.storyboard_location || undefined,
+            storyboardCharacters: segment.storyboard_characters || undefined,
+            storyboardShotType: segment.storyboard_shot_type || undefined,
+            storyboardCameraAngle: segment.storyboard_camera_angle || undefined,
+            storyboardFocus: segment.storyboard_focus || undefined,
+            storyboardExclude: segment.storyboard_exclude || undefined,
+            // ID-based storyboard fields (preferred for lookups)
+            storyboardLocationId: segment.storyboard_location_id || undefined,
+            storyboardCharacterIds: segment.storyboard_character_ids || undefined,
           }),
         });
 
@@ -1776,6 +2043,559 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           </div>
         </section>
 
+        {/* Story Bible Section */}
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => setShowStoryBible(!showStoryBible)}
+              className="flex items-center gap-2 text-lg font-semibold hover:text-cyan-300 transition-colors"
+            >
+              {showStoryBible ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+              <BookOpen className="w-5 h-5 text-amber-400" />
+              Story Bible
+              {story.story_bible ? (
+                <span className="text-xs font-normal text-green-400 ml-2">(configured)</span>
+              ) : (
+                <span className="text-xs font-normal text-slate-500 ml-2">(not set)</span>
+              )}
+            </button>
+
+            {showStoryBible && !editingStoryBible && story.story_bible && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleGenerateStoryboard}
+                  disabled={generatingStoryboard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
+                  title="Generate visual storyboard from Story Bible"
+                >
+                  {generatingStoryboard ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clapperboard className="w-3.5 h-3.5" />}
+                  {generatingStoryboard ? 'Generating...' : 'Generate Storyboard'}
+                </button>
+                <button
+                  onClick={startEditingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  Edit
+                </button>
+              </div>
+            )}
+
+            {showStoryBible && editingStoryBible && (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveStoryBible}
+                  disabled={savingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {savingStoryBible ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Save
+                </button>
+                <button
+                  onClick={cancelEditingStoryBible}
+                  disabled={savingStoryBible}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {showStoryBible && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                {!story.story_bible && !editingStoryBible ? (
+                  <div className="text-center py-8">
+                    <p className="text-slate-400 mb-4">No Story Bible configured. Generate one from the existing story content, or create manually.</p>
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={handleGenerateStoryBible}
+                        disabled={generatingStoryBible}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {generatingStoryBible ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-4 h-4" />
+                        )}
+                        {generatingStoryBible ? 'Generating...' : 'Auto-Generate'}
+                      </button>
+                      <span className="text-slate-500">or</span>
+                      <button
+                        onClick={startEditingStoryBible}
+                        disabled={generatingStoryBible}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create Manually
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Narrative Elements */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-400" />
+                        Narrative Elements
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Tone</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.tone || ''}
+                              onChange={(e) => updateStoryBibleField('tone', e.target.value)}
+                              placeholder="e.g., Whimsical and heartwarming with gentle humor"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.tone || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Themes</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.themes?.join(', ') || ''}
+                              onChange={(e) => updateStoryBibleField('themes', e.target.value.split(',').map(t => t.trim()).filter(Boolean))}
+                              placeholder="e.g., friendship, bravery, helping others"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.themes?.join(', ') || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Narrative Style</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.narrativeStyle || ''}
+                              onChange={(e) => updateStoryBibleField('narrativeStyle', e.target.value)}
+                              placeholder="e.g., Third person, warm narrator voice, simple sentences"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.narrativeStyle || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Character Behavior */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-cyan-400" />
+                        Character Behavior
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">[CHILD]'s Role</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.childRole || ''}
+                              onChange={(e) => updateStoryBibleField('childRole', e.target.value)}
+                              placeholder="e.g., Curious explorer who asks questions"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.childRole || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">[PET]'s Role</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.petRole || ''}
+                              onChange={(e) => updateStoryBibleField('petRole', e.target.value)}
+                              placeholder="e.g., Loyal sidekick who provides comic relief"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.petRole || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Character Dynamic</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.characterDynamic || ''}
+                              onChange={(e) => updateStoryBibleField('characterDynamic', e.target.value)}
+                              placeholder="e.g., [CHILD] leads, [PET] encourages and helps"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.characterDynamic || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Visual Style */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <Image className="w-4 h-4 text-emerald-400" />
+                        Visual Style
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Color Palette</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.colorPalette || ''}
+                              onChange={(e) => updateStoryBibleField('colorPalette', e.target.value)}
+                              placeholder="e.g., Warm golden yellows, soft greens, magical purples"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.colorPalette || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Lighting Style</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.lightingStyle || ''}
+                              onChange={(e) => updateStoryBibleField('lightingStyle', e.target.value)}
+                              placeholder="e.g., Soft dappled sunlight filtering through leaves"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.lightingStyle || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Art Direction</label>
+                          {editingStoryBible ? (
+                            <textarea
+                              value={storyBibleDraft?.artDirection || ''}
+                              onChange={(e) => updateStoryBibleField('artDirection', e.target.value)}
+                              placeholder="Additional visual style notes..."
+                              rows={2}
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500 resize-none"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.artDirection || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Story Elements */}
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-amber-400" />
+                        Story Elements
+                      </h3>
+                      <div className="grid gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Stakes</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.stakes || ''}
+                              onChange={(e) => updateStoryBibleField('stakes', e.target.value)}
+                              placeholder="e.g., The forest animals will lose their home"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.stakes || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Resolution</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.resolution || ''}
+                              onChange={(e) => updateStoryBibleField('resolution', e.target.value)}
+                              placeholder="e.g., The friends work together to save the day"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.resolution || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-500 mb-1">Magic System</label>
+                          {editingStoryBible ? (
+                            <input
+                              type="text"
+                              value={storyBibleDraft?.magicSystem || ''}
+                              onChange={(e) => updateStoryBibleField('magicSystem', e.target.value || null)}
+                              placeholder="e.g., Magic comes from crystals that glow when touched (optional)"
+                              className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-500"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-300">{story.story_bible?.magicSystem || <span className="text-slate-500 italic">Not set</span>}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Visual Assets (Locations, Characters, Objects with Reference Images) */}
+                    {(mergedVisualAssets.locations.length > 0 || mergedVisualAssets.characters.length > 0 || mergedVisualAssets.objects.length > 0) && (
+                      <div className="space-y-6">
+                        {/* Section Header with Actions */}
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-purple-400" />
+                            Visual Assets
+                            <span className="text-xs font-normal text-slate-500">
+                              ({mergedVisualAssets.locations.length + mergedVisualAssets.characters.length + mergedVisualAssets.objects.length} items)
+                            </span>
+                          </h3>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleReExtractReferences}
+                              disabled={generatingAllRefs}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded transition-colors disabled:opacity-50"
+                              title="Re-extract from story"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${generatingAllRefs ? 'animate-spin' : ''}`} />
+                              Re-extract
+                            </button>
+                            <button
+                              onClick={() => setShowAddReference(true)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded transition-colors"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Add
+                            </button>
+                            {(story.references?.some(r => !r.image_url) ||
+                              mergedVisualAssets.locations.some(l => !l.referenceImageUrl) ||
+                              mergedVisualAssets.characters.some(c => !c.referenceImageUrl) ||
+                              mergedVisualAssets.objects.some(o => !o.referenceImageUrl)) && (
+                              <button
+                                onClick={handleGenerateAllReferenceImages}
+                                disabled={generatingAllRefs}
+                                className="flex items-center gap-1 px-2 py-1 text-xs bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded transition-colors disabled:opacity-50"
+                              >
+                                {generatingAllRefs ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                Generate All
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Add Reference Form */}
+                        <AnimatePresence>
+                          {showAddReference && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
+                                <div className="flex gap-2">
+                                  <select
+                                    value={newRefType}
+                                    onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
+                                    className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
+                                  >
+                                    <option value="character">Character</option>
+                                    <option value="object">Object</option>
+                                    <option value="location">Location</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="Name"
+                                    value={newRefName}
+                                    onChange={(e) => setNewRefName(e.target.value)}
+                                    className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
+                                  />
+                                </div>
+                                <textarea
+                                  placeholder="Visual description for image generation..."
+                                  value={newRefDescription}
+                                  onChange={(e) => setNewRefDescription(e.target.value)}
+                                  rows={2}
+                                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
+                                />
+                                <div className="flex gap-2 justify-end">
+                                  <button
+                                    onClick={() => setShowAddReference(false)}
+                                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-300"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    onClick={handleAddReference}
+                                    className="flex items-center gap-1 px-3 py-1.5 text-xs bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                    Add
+                                  </button>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                        {/* Locations */}
+                        {mergedVisualAssets.locations.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-green-400" />
+                              Locations ({mergedVisualAssets.locations.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.locations.map((loc) => {
+                                const isGenerating = generatingAssetImages.has(loc.id) || (loc.refId ? generatingRefImages.has(loc.refId) : false);
+                                return (
+                                  <div key={loc.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {loc.referenceImageUrl ? (
+                                        <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <MapPin className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(loc.id, 'location', loc.name, loc.description, loc.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={loc.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{loc.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{loc.description}</div>
+                                      {loc.mood && <div className="text-xs text-slate-500 mt-1">Mood: {loc.mood}</div>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Characters */}
+                        {mergedVisualAssets.characters.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <Users className="w-3.5 h-3.5 text-blue-400" />
+                              Characters ({mergedVisualAssets.characters.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.characters.map((char) => {
+                                const isGenerating = generatingAssetImages.has(char.id) || (char.refId ? generatingRefImages.has(char.refId) : false);
+                                return (
+                                  <div key={char.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {char.referenceImageUrl ? (
+                                        <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Users className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(char.id, 'character', char.name, char.description, char.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={char.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{char.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{char.description}</div>
+                                      {(char.personality || char.role) && (
+                                        <div className="text-xs text-slate-500 mt-1">
+                                          {[char.personality, char.role].filter(Boolean).join(' • ')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Objects */}
+                        {mergedVisualAssets.objects.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-medium text-slate-400 mb-2 flex items-center gap-1.5">
+                              <Package className="w-3.5 h-3.5 text-amber-400" />
+                              Objects ({mergedVisualAssets.objects.length})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {mergedVisualAssets.objects.map((obj) => {
+                                const isGenerating = generatingAssetImages.has(obj.id) || (obj.refId ? generatingRefImages.has(obj.refId) : false);
+                                return (
+                                  <div key={obj.id} className="bg-slate-700/30 rounded-lg overflow-hidden flex">
+                                    {/* Image */}
+                                    <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
+                                      {obj.referenceImageUrl ? (
+                                        <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Package className="w-6 h-6 text-slate-600" />
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={() => handleGenerateVisualAssetImage(obj.id, 'object', obj.name, obj.description, obj.refId)}
+                                        disabled={isGenerating}
+                                        className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors disabled:opacity-50"
+                                        title={obj.referenceImageUrl ? 'Regenerate' : 'Generate'}
+                                      >
+                                        {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+                                      </button>
+                                    </div>
+                                    {/* Details */}
+                                    <div className="p-2 flex-1 min-w-0">
+                                      <div className="font-medium text-sm text-white truncate">{obj.name}</div>
+                                      <div className="text-xs text-slate-400 line-clamp-2">{obj.description}</div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {(generatingAllRefs || generatingAssetImages.size > 0) && (
+                          <p className="text-xs text-slate-400">
+                            {(generatingRefImages.size + generatingAssetImages.size) > 0
+                              ? `Generating images... (${generatingRefImages.size + generatingAssetImages.size} in progress)`
+                              : 'Extracting visual assets from story...'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+
         {/* Background Music Section */}
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1889,209 +2709,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
           {!story.cover_image_url && !generatingCoverImage && (
             <p className="mt-3 text-sm text-slate-500">
               Generate a cover image for this story. It will use existing segment images as style references if available.
-            </p>
-          )}
-        </section>
-
-        {/* Visual References Section */}
-        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-              Visual References
-              <span className="text-sm font-normal text-slate-400">
-                ({story.references?.length || 0} items)
-              </span>
-            </h2>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleReExtractReferences}
-                disabled={generatingAllRefs}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-slate-600/50 hover:bg-slate-600/70 text-slate-300 rounded-lg transition-colors disabled:opacity-50"
-                title="Re-extract references from story"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${generatingAllRefs ? 'animate-spin' : ''}`} />
-                Re-extract
-              </button>
-
-              <button
-                onClick={() => setShowAddReference(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add
-              </button>
-
-              {story.references && story.references.some(r => !r.image_url) && (
-                <button
-                  onClick={handleGenerateAllReferenceImages}
-                  disabled={generatingAllRefs}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  {generatingAllRefs ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-3.5 h-3.5" />
-                  )}
-                  Generate All Images
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Add Reference Form */}
-          <AnimatePresence>
-            {showAddReference && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden mb-4"
-              >
-                <div className="bg-slate-700/30 rounded-lg p-4 space-y-3">
-                  <div className="flex gap-2">
-                    <select
-                      value={newRefType}
-                      onChange={(e) => setNewRefType(e.target.value as 'character' | 'object' | 'location')}
-                      className="px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm"
-                    >
-                      <option value="character">Character</option>
-                      <option value="object">Object</option>
-                      <option value="location">Location</option>
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Name (e.g., 'the wise owl')"
-                      value={newRefName}
-                      onChange={(e) => setNewRefName(e.target.value)}
-                      className="flex-1 px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400"
-                    />
-                  </div>
-                  <textarea
-                    placeholder="Detailed visual description for image generation..."
-                    value={newRefDescription}
-                    onChange={(e) => setNewRefDescription(e.target.value)}
-                    rows={3}
-                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white text-sm placeholder-slate-400 resize-none"
-                  />
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => setShowAddReference(false)}
-                      className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-300"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleAddReference}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded-lg transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      Add Reference
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* References Grid */}
-          {story.references && story.references.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {story.references.map((ref) => {
-                const isGenerating = generatingRefImages.has(ref.id);
-                const TypeIcon = ref.type === 'character' ? Users : ref.type === 'location' ? MapPin : Package;
-                const typeColor = ref.type === 'character' ? 'text-blue-400' : ref.type === 'location' ? 'text-green-400' : 'text-amber-400';
-
-                return (
-                  <div
-                    key={ref.id}
-                    className="bg-slate-700/30 rounded-lg overflow-hidden"
-                  >
-                    {/* Image Preview */}
-                    <div className="aspect-video bg-slate-800/50 relative">
-                      {ref.image_url ? (
-                        <img
-                          src={ref.image_url}
-                          alt={ref.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center text-slate-500">
-                            <Image className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <span className="text-xs">No image yet</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Overlay buttons */}
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        <button
-                          onClick={() => handleGenerateReferenceImage(ref)}
-                          disabled={isGenerating}
-                          className="p-1.5 bg-black/50 hover:bg-black/70 rounded-lg text-white transition-colors disabled:opacity-50"
-                          title={ref.image_url ? 'Regenerate image' : 'Generate image'}
-                        >
-                          {isGenerating ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Wand2 className="w-4 h-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteReference(ref.id)}
-                          className="p-1.5 bg-black/50 hover:bg-red-500/70 rounded-lg text-white transition-colors"
-                          title="Delete reference"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {/* Type badge */}
-                      <div className={`absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-xs flex items-center gap-1 ${typeColor}`}>
-                        <TypeIcon className="w-3 h-3" />
-                        {ref.type}
-                      </div>
-                    </div>
-
-                    {/* Details */}
-                    <div className="p-3">
-                      <EditableField
-                        value={ref.name}
-                        onSave={(value) => handleSaveReferenceField(ref.id, 'name', value)}
-                        className="font-medium text-white text-sm mb-1"
-                      />
-                      <details className="text-xs text-slate-400">
-                        <summary className="cursor-pointer hover:text-slate-300">
-                          Description (click to edit)
-                        </summary>
-                        <div className="mt-1">
-                          <EditableField
-                            value={ref.description}
-                            onSave={(value) => handleSaveReferenceField(ref.id, 'description', value)}
-                            multiline
-                            className="text-xs text-slate-400"
-                          />
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500 text-center py-8">
-              No visual references yet. References are automatically extracted when a story is generated,
-              or you can add them manually.
-            </p>
-          )}
-
-          {generatingAllRefs && (
-            <p className="mt-3 text-sm text-slate-400">
-              {generatingRefImages.size > 0
-                ? `Generating reference images... (${generatingRefImages.size} in progress)`
-                : 'Extracting visual references from story...'}
             </p>
           )}
         </section>
@@ -2236,19 +2853,492 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               </div>
                             )}
 
-                            {/* Editable image prompt */}
-                            {segment.image_prompt && (
+                            {/* Image prompt override (optional) */}
+                            <details className="mt-2">
+                              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400 flex items-center gap-1">
+                                <Image className="w-3 h-3" />
+                                {segment.image_prompt ? 'Image prompt override (active)' : 'Add image prompt override'}
+                              </summary>
+                              <div className="mt-1 pl-3 border-l border-slate-600">
+                                <p className="text-xs text-slate-500 mb-1">
+                                  {segment.image_prompt
+                                    ? 'This overrides storyboard-based generation:'
+                                    : 'Leave empty to use storyboard data, or add a custom prompt:'}
+                                </p>
+                                <EditableField
+                                  value={segment.image_prompt || ''}
+                                  onSave={(value) => handleSaveSegmentField(segment.id, 'imagePrompt', value.trim() || '')}
+                                  multiline
+                                  className={`text-xs ${segment.image_prompt ? 'text-amber-400' : 'text-slate-400'}`}
+                                />
+                              </div>
+                            </details>
+
+                            {/* Storyboard Info (Editable) */}
+                            {(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_location_id || segment.storyboard_character_ids?.length) && (
                               <details className="mt-2">
-                                <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-400">
-                                  Image prompt (click to edit)
+                                <summary className="text-xs text-cyan-500 cursor-pointer hover:text-cyan-400 flex items-center gap-1">
+                                  <Clapperboard className="w-3 h-3" />
+                                  Storyboard
                                 </summary>
-                                <div className="mt-1 pl-3 border-l border-slate-600">
-                                  <EditableField
-                                    value={segment.image_prompt}
-                                    onSave={(value) => handleSaveSegmentField(segment.id, 'imagePrompt', value)}
-                                    multiline
-                                    className="text-xs text-slate-400"
-                                  />
+                                <div className="mt-1 pl-3 border-l border-cyan-600/50 space-y-2">
+                                  {/* Shot Type & Camera Angle Row */}
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    <div className="flex items-center gap-1">
+                                      <Camera className="w-3 h-3 text-cyan-400" />
+                                      <select
+                                        value={segment.storyboard_shot_type || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ storyboardShotType: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { storyboard_shot_type: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update shot type:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                      >
+                                        <option value="">Shot type...</option>
+                                        <option value="wide shot">Wide shot</option>
+                                        <option value="medium shot">Medium shot</option>
+                                        <option value="close-up">Close-up</option>
+                                        <option value="extreme close-up">Extreme close-up</option>
+                                        <option value="establishing shot">Establishing shot</option>
+                                      </select>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <Video className="w-3 h-3 text-purple-400" />
+                                      <select
+                                        value={segment.storyboard_camera_angle || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ storyboardCameraAngle: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { storyboard_camera_angle: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update camera angle:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                      >
+                                        <option value="">Angle...</option>
+                                        <option value="eye-level">Eye-level</option>
+                                        <option value="low-angle">Low-angle</option>
+                                        <option value="high-angle">High-angle</option>
+                                        <option value="bird's eye">Bird's eye</option>
+                                        <option value="dutch angle">Dutch angle</option>
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Character Expressions Row */}
+                                  <div className="flex flex-wrap gap-2 text-xs">
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-pink-400">👦</span>
+                                      <select
+                                        value={segment.child_pose || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ childPose: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { child_pose: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update child expression:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-pink-500/20 text-pink-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-pink-500"
+                                      >
+                                        <option value="">Child expression...</option>
+                                        {EXPRESSIONS.map(expr => (
+                                          <option key={expr} value={expr}>{expr.charAt(0).toUpperCase() + expr.slice(1)}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-orange-400">🐕</span>
+                                      <select
+                                        value={segment.pet_pose || ''}
+                                        onChange={async (e) => {
+                                          const value = e.target.value || null;
+                                          try {
+                                            const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                              method: 'PUT',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ petPose: value }),
+                                            });
+                                            if (res.ok) {
+                                              handleSegmentUpdate(segment.id, { pet_pose: value });
+                                            }
+                                          } catch (err) {
+                                            console.error('Failed to update pet expression:', err);
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded text-xs border-none focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                      >
+                                        <option value="">Pet expression...</option>
+                                        {EXPRESSIONS.map(expr => (
+                                          <option key={expr} value={expr}>{expr.charAt(0).toUpperCase() + expr.slice(1)}</option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+
+                                  {/* Location (tag selector) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                      <MapPin className="w-3 h-3 text-green-400" />
+                                      Location:
+                                    </span>
+                                    <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                      {segment.storyboard_location_id && (() => {
+                                        const loc = mergedVisualAssets.locations.find(l => l.id === segment.storyboard_location_id);
+                                        return loc ? (
+                                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded flex items-center gap-1 text-xs">
+                                            {loc.referenceImageUrl && (
+                                              <img src={loc.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                            )}
+                                            {loc.name}
+                                            <button
+                                              onClick={async () => {
+                                                try {
+                                                  await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ storyboardLocationId: null, storyboardLocation: null }),
+                                                  });
+                                                  handleSegmentUpdate(segment.id, { storyboard_location_id: null, storyboard_location: null });
+                                                } catch (err) {
+                                                  console.error('Failed to remove location:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        ) : null;
+                                      })()}
+                                      {!segment.storyboard_location_id && (
+                                        <select
+                                          value=""
+                                          onChange={async (e) => {
+                                            const locId = e.target.value;
+                                            if (!locId) return;
+                                            const loc = mergedVisualAssets.locations.find(l => l.id === locId);
+                                            try {
+                                              await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: loc?.name || null }),
+                                              });
+                                              handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: loc?.name || null });
+                                            } catch (err) {
+                                              console.error('Failed to set location:', err);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-green-500/50"
+                                        >
+                                          <option value="">Select location...</option>
+                                          {mergedVisualAssets.locations.map(loc => (
+                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                          ))}
+                                        </select>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* NPCs/Characters (tag selector) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                      <Users className="w-3 h-3 text-blue-400" />
+                                      NPCs:
+                                    </span>
+                                    <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                      {(segment.storyboard_character_ids || []).map(charId => {
+                                        const char = mergedVisualAssets.characters.find(c => c.id === charId);
+                                        if (!char) return null;
+                                        return (
+                                          <span key={charId} className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded flex items-center gap-1 text-xs">
+                                            {char.referenceImageUrl && (
+                                              <img src={char.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                            )}
+                                            {char.name}
+                                            <button
+                                              onClick={async () => {
+                                                const newIds = (segment.storyboard_character_ids || []).filter(id => id !== charId);
+                                                const newNames = newIds.map(id => mergedVisualAssets.characters.find(c => c.id === id)?.name).filter(Boolean);
+                                                try {
+                                                  await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                      storyboardCharacterIds: newIds.length > 0 ? newIds : null,
+                                                      storyboardCharacters: newNames.length > 0 ? newNames : null
+                                                    }),
+                                                  });
+                                                  handleSegmentUpdate(segment.id, {
+                                                    storyboard_character_ids: newIds.length > 0 ? newIds : null,
+                                                    storyboard_characters: newNames.length > 0 ? newNames as string[] : null
+                                                  });
+                                                } catch (err) {
+                                                  console.error('Failed to remove character:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        );
+                                      })}
+                                      {mergedVisualAssets.characters.filter(c => !(segment.storyboard_character_ids || []).includes(c.id)).length > 0 && (
+                                        <select
+                                          value=""
+                                          onChange={async (e) => {
+                                            const charId = e.target.value;
+                                            if (!charId) return;
+                                            const newIds = [...(segment.storyboard_character_ids || []), charId];
+                                            const newNames = newIds.map(id => mergedVisualAssets.characters.find(c => c.id === id)?.name).filter(Boolean);
+                                            try {
+                                              await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                  storyboardCharacterIds: newIds,
+                                                  storyboardCharacters: newNames
+                                                }),
+                                              });
+                                              handleSegmentUpdate(segment.id, {
+                                                storyboard_character_ids: newIds,
+                                                storyboard_characters: newNames as string[]
+                                              });
+                                            } catch (err) {
+                                              console.error('Failed to add character:', err);
+                                            }
+                                          }}
+                                          className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-blue-500/50"
+                                        >
+                                          <option value="">+ Add NPC...</option>
+                                          {mergedVisualAssets.characters
+                                            .filter(c => !(segment.storyboard_character_ids || []).includes(c.id))
+                                            .map(char => (
+                                              <option key={char.id} value={char.id}>{char.name}</option>
+                                            ))}
+                                        </select>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Objects (tag selector) */}
+                                  {mergedVisualAssets.objects.length > 0 && (
+                                    <div className="flex items-start gap-2 text-xs">
+                                      <span className="text-slate-500 whitespace-nowrap pt-0.5 flex items-center gap-1">
+                                        <Package className="w-3 h-3 text-amber-400" />
+                                        Objects:
+                                      </span>
+                                      <div className="flex-1 flex flex-wrap gap-1 items-center">
+                                        {(segment.storyboard_object_ids || []).map(objId => {
+                                          const obj = mergedVisualAssets.objects.find(o => o.id === objId);
+                                          if (!obj) return null;
+                                          return (
+                                            <span key={objId} className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded flex items-center gap-1 text-xs">
+                                              {obj.referenceImageUrl && (
+                                                <img src={obj.referenceImageUrl} alt="" className="w-4 h-4 rounded object-cover" />
+                                              )}
+                                              {obj.name}
+                                              <button
+                                                onClick={async () => {
+                                                  const newIds = (segment.storyboard_object_ids || []).filter(id => id !== objId);
+                                                  try {
+                                                    await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                      method: 'PUT',
+                                                      headers: { 'Content-Type': 'application/json' },
+                                                      body: JSON.stringify({ storyboardObjectIds: newIds.length > 0 ? newIds : null }),
+                                                    });
+                                                    handleSegmentUpdate(segment.id, { storyboard_object_ids: newIds.length > 0 ? newIds : null });
+                                                  } catch (err) {
+                                                    console.error('Failed to remove object:', err);
+                                                  }
+                                                }}
+                                                className="opacity-60 hover:opacity-100"
+                                              >
+                                                <X className="w-3 h-3" />
+                                              </button>
+                                            </span>
+                                          );
+                                        })}
+                                        {mergedVisualAssets.objects.filter(o => !(segment.storyboard_object_ids || []).includes(o.id)).length > 0 && (
+                                          <select
+                                            value=""
+                                            onChange={async (e) => {
+                                              const objId = e.target.value;
+                                              if (!objId) return;
+                                              const newIds = [...(segment.storyboard_object_ids || []), objId];
+                                              try {
+                                                await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                  method: 'PUT',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ storyboardObjectIds: newIds }),
+                                                });
+                                                handleSegmentUpdate(segment.id, { storyboard_object_ids: newIds });
+                                              } catch (err) {
+                                                console.error('Failed to add object:', err);
+                                              }
+                                            }}
+                                            className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-amber-500/50"
+                                          >
+                                            <option value="">+ Add object...</option>
+                                            {mergedVisualAssets.objects
+                                              .filter(o => !(segment.storyboard_object_ids || []).includes(o.id))
+                                              .map(obj => (
+                                                <option key={obj.id} value={obj.id}>{obj.name}</option>
+                                              ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Visual Focus (editable) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5">Focus:</span>
+                                    <input
+                                      type="text"
+                                      value={segment.storyboard_focus || ''}
+                                      onChange={async (e) => {
+                                        const value = e.target.value || null;
+                                        handleSegmentUpdate(segment.id, { storyboard_focus: value });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.trim() || null;
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardFocus: value }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update focus:', err);
+                                        }
+                                      }}
+                                      placeholder="What should the image focus on..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* Continuity Note (editable) */}
+                                  <div className="flex items-start gap-2 text-xs">
+                                    <span className="text-slate-500 whitespace-nowrap pt-0.5 italic">Note:</span>
+                                    <input
+                                      type="text"
+                                      value={segment.storyboard_continuity || ''}
+                                      onChange={async (e) => {
+                                        const value = e.target.value || null;
+                                        handleSegmentUpdate(segment.id, { storyboard_continuity: value });
+                                      }}
+                                      onBlur={async (e) => {
+                                        const value = e.target.value.trim() || null;
+                                        try {
+                                          await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                            method: 'PUT',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ storyboardContinuity: value }),
+                                          });
+                                        } catch (err) {
+                                          console.error('Failed to update continuity:', err);
+                                        }
+                                      }}
+                                      placeholder="Continuity notes..."
+                                      className="flex-1 px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-300 text-xs italic focus:outline-none focus:border-cyan-500/50"
+                                    />
+                                  </div>
+
+                                  {/* Exclusions (with X buttons to remove) */}
+                                  <div className="space-y-1">
+                                    {segment.storyboard_exclude && segment.storyboard_exclude.length > 0 && (
+                                      <div className="text-xs text-red-400 flex items-center gap-1 flex-wrap">
+                                        <Ban className="w-3 h-3" />
+                                        <span className="text-red-500">Exclude:</span>
+                                        {segment.storyboard_exclude.map((item, i) => (
+                                          <span key={i} className="px-1.5 py-0.5 bg-red-500/20 text-red-300 rounded flex items-center gap-1 group">
+                                            {item}
+                                            <button
+                                              onClick={async () => {
+                                                const newExclude = segment.storyboard_exclude!.filter((_, idx) => idx !== i);
+                                                try {
+                                                  const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({ storyboardExclude: newExclude.length > 0 ? newExclude : null }),
+                                                  });
+                                                  if (res.ok) {
+                                                    handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude.length > 0 ? newExclude : null });
+                                                  }
+                                                } catch (err) {
+                                                  console.error('Failed to remove exclusion:', err);
+                                                }
+                                              }}
+                                              className="opacity-60 hover:opacity-100 transition-opacity"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {/* Add exclusion input */}
+                                    <div className="flex items-center gap-2">
+                                      <Ban className="w-3 h-3 text-red-400" />
+                                      <input
+                                        type="text"
+                                        placeholder="Add exclusion (press Enter)"
+                                        className="flex-1 px-2 py-0.5 text-xs bg-slate-700/30 border border-slate-600/50 rounded text-white placeholder-slate-500 focus:outline-none focus:border-red-500/50"
+                                        onKeyDown={async (e) => {
+                                          if (e.key === 'Enter') {
+                                            const input = e.target as HTMLInputElement;
+                                            const value = input.value.trim();
+                                            if (!value) return;
+
+                                            const currentExclude = segment.storyboard_exclude || [];
+                                            const newExclude = [...currentExclude, value];
+
+                                            try {
+                                              const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ storyboardExclude: newExclude }),
+                                              });
+                                              if (res.ok) {
+                                                handleSegmentUpdate(segment.id, { storyboard_exclude: newExclude });
+                                                input.value = '';
+                                              }
+                                            } catch (err) {
+                                              console.error('Failed to add exclusion:', err);
+                                            }
+                                          }
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
                               </details>
                             )}
@@ -2271,15 +3361,6 @@ export function StoryEditor({ storyId, onBack }: StoryEditorProps) {
                               onUpdate={handleSegmentUpdate}
                             />
 
-                            {/* Reference Tags */}
-                            {story?.references && story.references.length > 0 && (
-                              <SegmentReferenceTags
-                                segment={segment}
-                                storyId={storyId}
-                                references={story.references}
-                                onUpdate={handleSegmentUpdate}
-                              />
-                            )}
                           </div>
                         ))}
                       </div>

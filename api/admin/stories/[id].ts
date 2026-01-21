@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
+import { generateStoryBible, generateStoryboard } from '../../../lib/ai.js';
 
 interface ImageHistoryItem {
   url: string;
@@ -77,9 +78,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ===== SEGMENT OPERATIONS (when ?segment=<id> is provided) =====
   if (typeof segmentId === 'string') {
-    // PUT - Update segment (text, prompts, narration, image, and/or reference tags)
+    // PUT - Update segment (text, prompts, narration, image, storyboard, and/or reference tags)
     if (req.method === 'PUT') {
-      const { text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds } = req.body;
+      const {
+        text, brushingPrompt, imagePrompt, narrationSequence, imageUrl, selectImageFromHistory, referenceIds,
+        // Storyboard fields (text-based for backwards compatibility)
+        storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle,
+        storyboardFocus, storyboardContinuity, storyboardExclude,
+        // Storyboard ID-based fields (linked to visualAssets)
+        storyboardLocationId, storyboardCharacterIds, storyboardObjectIds,
+        // Character expression overlays
+        childPose, petPose
+      } = req.body;
       console.log('Updating segment:', segmentId, {
         text: text !== undefined ? 'provided' : 'not provided',
         brushingPrompt: brushingPrompt !== undefined ? 'provided' : 'not provided',
@@ -87,14 +97,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided',
         selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
-        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided'
+        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided',
+        storyboard: (storyboardLocation !== undefined || storyboardCharacters !== undefined ||
+          storyboardShotType !== undefined || storyboardCameraAngle !== undefined ||
+          storyboardFocus !== undefined || storyboardContinuity !== undefined ||
+          storyboardExclude !== undefined) ? 'provided' : 'not provided'
       });
 
       try {
         // Check if any field is provided
         const hasUpdate = text !== undefined || brushingPrompt !== undefined || imagePrompt !== undefined ||
           narrationSequence !== undefined || imageUrl !== undefined || selectImageFromHistory !== undefined ||
-          referenceIds !== undefined;
+          referenceIds !== undefined || storyboardLocation !== undefined || storyboardCharacters !== undefined ||
+          storyboardShotType !== undefined || storyboardCameraAngle !== undefined || storyboardFocus !== undefined ||
+          storyboardContinuity !== undefined || storyboardExclude !== undefined ||
+          storyboardLocationId !== undefined || storyboardCharacterIds !== undefined || storyboardObjectIds !== undefined ||
+          childPose !== undefined || petPose !== undefined;
 
         if (!hasUpdate) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -136,15 +154,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Build and execute update with all fields
+        // Use CASE WHEN to allow explicit null clearing (COALESCE would keep old value)
         const [segment] = await sql`
           UPDATE segments SET
-            text = COALESCE(${text ?? null}, text),
-            brushing_prompt = COALESCE(${brushingPrompt ?? null}, brushing_prompt),
-            image_prompt = COALESCE(${imagePrompt ?? null}, image_prompt),
-            narration_sequence = COALESCE(${narrationSequence ? JSON.stringify(narrationSequence) : null}, narration_sequence),
-            image_url = COALESCE(${imageUrl ?? null}, image_url),
-            image_history = COALESCE(${imageHistoryUpdate}, image_history),
-            reference_ids = COALESCE(${referenceIds ?? null}, reference_ids)
+            text = CASE WHEN ${text !== undefined} THEN ${text ?? null} ELSE text END,
+            brushing_prompt = CASE WHEN ${brushingPrompt !== undefined} THEN ${brushingPrompt ?? null} ELSE brushing_prompt END,
+            image_prompt = CASE WHEN ${imagePrompt !== undefined} THEN ${imagePrompt ?? null} ELSE image_prompt END,
+            narration_sequence = CASE WHEN ${narrationSequence !== undefined} THEN ${narrationSequence ? JSON.stringify(narrationSequence) : null} ELSE narration_sequence END,
+            image_url = CASE WHEN ${imageUrl !== undefined} THEN ${imageUrl ?? null} ELSE image_url END,
+            image_history = CASE WHEN ${imageHistoryUpdate !== null} THEN ${imageHistoryUpdate} ELSE image_history END,
+            reference_ids = CASE WHEN ${referenceIds !== undefined} THEN ${referenceIds ?? null} ELSE reference_ids END,
+            storyboard_location = CASE WHEN ${storyboardLocation !== undefined} THEN ${storyboardLocation ?? null} ELSE storyboard_location END,
+            storyboard_characters = CASE WHEN ${storyboardCharacters !== undefined} THEN ${storyboardCharacters ?? null} ELSE storyboard_characters END,
+            storyboard_shot_type = CASE WHEN ${storyboardShotType !== undefined} THEN ${storyboardShotType ?? null} ELSE storyboard_shot_type END,
+            storyboard_camera_angle = CASE WHEN ${storyboardCameraAngle !== undefined} THEN ${storyboardCameraAngle ?? null} ELSE storyboard_camera_angle END,
+            storyboard_focus = CASE WHEN ${storyboardFocus !== undefined} THEN ${storyboardFocus ?? null} ELSE storyboard_focus END,
+            storyboard_continuity = CASE WHEN ${storyboardContinuity !== undefined} THEN ${storyboardContinuity ?? null} ELSE storyboard_continuity END,
+            storyboard_exclude = CASE WHEN ${storyboardExclude !== undefined} THEN ${storyboardExclude ?? null} ELSE storyboard_exclude END,
+            storyboard_location_id = CASE WHEN ${storyboardLocationId !== undefined} THEN ${storyboardLocationId ?? null} ELSE storyboard_location_id END,
+            storyboard_character_ids = CASE WHEN ${storyboardCharacterIds !== undefined} THEN ${storyboardCharacterIds ?? null} ELSE storyboard_character_ids END,
+            storyboard_object_ids = CASE WHEN ${storyboardObjectIds !== undefined} THEN ${storyboardObjectIds ?? null} ELSE storyboard_object_ids END,
+            child_pose = CASE WHEN ${childPose !== undefined} THEN ${childPose ?? null} ELSE child_pose END,
+            pet_pose = CASE WHEN ${petPose !== undefined} THEN ${petPose ?? null} ELSE pet_pose END
           WHERE id = ${segmentId} RETURNING *
         `;
 
@@ -250,6 +281,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('Reference updated:', reference?.id);
         if (!reference) return res.status(404).json({ error: 'Reference not found' });
+
+        // Also sync image URL to Story Bible visualAssets if imageUrl was updated
+        if (imageUrl && reference) {
+          try {
+            const [story] = await sql`SELECT story_bible FROM stories WHERE id = ${id}`;
+            if (story?.story_bible?.visualAssets) {
+              const visualAssets = story.story_bible.visualAssets;
+              let updated = false;
+
+              // Find and update matching asset based on type and name
+              const assetArrays = [
+                { key: 'locations', type: 'location' },
+                { key: 'characters', type: 'character' },
+                { key: 'objects', type: 'object' },
+              ] as const;
+
+              for (const { key, type } of assetArrays) {
+                if (reference.type === type && visualAssets[key]) {
+                  for (const asset of visualAssets[key]) {
+                    // Match by name (fuzzy)
+                    const refNameLower = reference.name.toLowerCase().replace(/^the\s+/, '');
+                    const assetNameLower = asset.name.toLowerCase().replace(/^the\s+/, '');
+                    if (refNameLower === assetNameLower ||
+                        refNameLower.includes(assetNameLower) ||
+                        assetNameLower.includes(refNameLower)) {
+                      asset.referenceImageUrl = imageUrl;
+                      updated = true;
+                      console.log(`[Reference] Synced image to Story Bible visualAssets.${key}: ${asset.name}`);
+                      break;
+                    }
+                  }
+                }
+              }
+
+              if (updated) {
+                await sql`UPDATE stories SET story_bible = ${JSON.stringify(story.story_bible)} WHERE id = ${id}`;
+              }
+            }
+          } catch (syncError) {
+            // Don't fail the main operation if sync fails
+            console.error('[Reference] Failed to sync to Story Bible (non-fatal):', syncError);
+          }
+        }
+
         return res.status(200).json({ reference });
       } catch (error) {
         console.error('Error updating reference:', error);
@@ -313,7 +388,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // PUT - Update story metadata
   if (req.method === 'PUT') {
-    const { title, description, status, isPublished, backgroundMusicUrl, coverImageUrl } = req.body;
+    const { title, description, status, isPublished, backgroundMusicUrl, coverImageUrl, storyBible } = req.body;
 
     try {
       const [story] = await sql`
@@ -323,7 +398,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           status = COALESCE(${status}, status),
           is_published = COALESCE(${isPublished}, is_published),
           background_music_url = COALESCE(${backgroundMusicUrl}, background_music_url),
-          cover_image_url = COALESCE(${coverImageUrl}, cover_image_url)
+          cover_image_url = COALESCE(${coverImageUrl}, cover_image_url),
+          story_bible = COALESCE(${storyBible ? JSON.stringify(storyBible) : null}, story_bible)
         WHERE id = ${id} RETURNING *
       `;
       if (!story) return res.status(404).json({ error: 'Story not found' });
@@ -378,11 +454,145 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // Generate Story Bible from existing story content (for legacy stories)
+    if (action === 'generateStoryBible') {
+      try {
+        // Get story with world
+        const [story] = await sql`SELECT s.*, w.display_name as world_name, w.description as world_description
+          FROM stories s
+          JOIN worlds w ON s.world_id = w.id
+          WHERE s.id = ${id}`;
+        if (!story) return res.status(404).json({ error: 'Story not found' });
+
+        // Get chapters to build outline
+        const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+
+        // Build outline from existing chapters
+        const outline = await Promise.all(chapters.map(async (ch) => {
+          const segments = await sql`SELECT text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order LIMIT 2`;
+          const summary = segments.map(s => s.text).join(' ').slice(0, 150) + '...';
+          return {
+            chapter: ch.chapter_number,
+            title: ch.title,
+            summary,
+          };
+        }));
+
+        console.log('[StoryBible] Generating Story Bible for legacy story:', story.title);
+        const storyBible = await generateStoryBible(
+          story.world_name,
+          story.world_description,
+          story.title,
+          story.description,
+          outline
+        );
+        console.log('[StoryBible] Generated with', storyBible.keyLocations?.length || 0, 'locations and', storyBible.recurringCharacters?.length || 0, 'characters');
+
+        // Save to database
+        await sql`UPDATE stories SET story_bible = ${JSON.stringify(storyBible)} WHERE id = ${id}`;
+
+        // Also generate storyboard if segments don't have storyboard data
+        const [segmentCheck] = await sql`
+          SELECT COUNT(*) as count FROM segments s
+          JOIN chapters c ON s.chapter_id = c.id
+          WHERE c.story_id = ${id} AND s.storyboard_shot_type IS NOT NULL
+        `;
+
+        if (parseInt(segmentCheck.count) === 0) {
+          console.log('[StoryBible] Also generating storyboard for segments...');
+          try {
+            const chaptersForStoryboard = await Promise.all(
+              chapters.map(async (ch) => {
+                const segs = await sql`SELECT id, segment_order, text FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+                return {
+                  chapterNumber: ch.chapter_number,
+                  title: ch.title,
+                  segments: segs.map(s => ({
+                    id: s.id,
+                    segmentOrder: s.segment_order,
+                    text: s.text,
+                    imagePrompt: null,
+                  })),
+                };
+              })
+            );
+
+            const storyboard = await generateStoryboard({
+              storyTitle: story.title,
+              storyDescription: story.description,
+              storyBible,
+              chapters: chaptersForStoryboard,
+            });
+
+            // Update segments with storyboard data (including ID-based references)
+            for (const entry of storyboard) {
+              await sql`
+                UPDATE segments SET
+                  storyboard_location = ${entry.location},
+                  storyboard_characters = ${entry.characters},
+                  storyboard_shot_type = ${entry.shotType},
+                  storyboard_camera_angle = ${entry.cameraAngle},
+                  storyboard_focus = ${entry.visualFocus},
+                  storyboard_continuity = ${entry.continuityNote},
+                  storyboard_location_id = ${entry.locationId},
+                  storyboard_character_ids = ${entry.characterIds}
+                WHERE id = ${entry.segmentId}
+              `;
+            }
+            console.log('[StoryBible] Storyboard generated for', storyboard.length, 'segments');
+
+            // Auto-tag references based on storyboard
+            const savedReferences = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${id}`;
+            if (savedReferences.length > 0) {
+              console.log('[StoryBible] Auto-tagging references based on storyboard...');
+              for (const entry of storyboard) {
+                const matchingRefIds: string[] = [];
+
+                for (const charName of entry.characters || []) {
+                  const matchingRef = savedReferences.find(r =>
+                    r.type === 'character' &&
+                    (r.name.toLowerCase().includes(charName.toLowerCase()) ||
+                     charName.toLowerCase().includes(r.name.toLowerCase()))
+                  );
+                  if (matchingRef) matchingRefIds.push(matchingRef.id);
+                }
+
+                if (entry.location) {
+                  const matchingRef = savedReferences.find(r =>
+                    r.type === 'location' &&
+                    (r.name.toLowerCase().includes(entry.location!.toLowerCase()) ||
+                     entry.location!.toLowerCase().includes(r.name.toLowerCase()))
+                  );
+                  if (matchingRef) matchingRefIds.push(matchingRef.id);
+                }
+
+                if (matchingRefIds.length > 0) {
+                  await sql`
+                    UPDATE segments SET reference_ids = ${matchingRefIds}
+                    WHERE id = ${entry.segmentId}
+                  `;
+                }
+              }
+              console.log('[StoryBible] Reference tags applied');
+            }
+          } catch (storyboardError) {
+            console.error('[StoryBible] Storyboard generation failed (non-fatal):', storyboardError);
+          }
+        }
+
+        return res.status(200).json({ storyBible });
+      } catch (error) {
+        console.error('Error generating Story Bible:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to generate Story Bible', details: message });
+      }
+    }
+
     // Re-extract references from story
     if (action === 'extractReferences') {
       try {
         // Import the extraction and tagging functions
-        const { extractStoryReferences, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
+        const { extractStoryReferences, mergeExtractedReferencesIntoStoryBible, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
 
         // Get story with bible
         const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
@@ -416,8 +626,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 brushingPrompt: s.brushing_prompt,
                 childPose: s.child_pose,
                 petPose: s.pet_pose,
-                childPosition: s.child_position,
-                petPosition: s.pet_position,
               })),
             };
           })
@@ -431,7 +639,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           story.story_bible || undefined
         );
 
-        // Delete existing references and insert new ones
+        // Merge extracted references into Story Bible if it exists
+        if (story.story_bible) {
+          const updatedStoryBible = mergeExtractedReferencesIntoStoryBible(story.story_bible, references);
+          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${id}`;
+          console.log('[extractReferences] Merged references into Story Bible visualAssets');
+        }
+
+        // Delete existing references and insert new ones (backwards compatibility)
         await sql`DELETE FROM story_references WHERE story_id = ${id}`;
 
         const savedRefs = [];
@@ -481,6 +696,115 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('Error extracting references:', error);
         const message = error instanceof Error ? error.message : 'Unknown error';
         return res.status(500).json({ error: 'Failed to extract references', details: message });
+      }
+    }
+
+    // Generate storyboard for visual planning
+    if (action === 'generateStoryboard') {
+      try {
+        const { generateStoryboard } = await import('../../../lib/ai.js');
+
+        // Get story with bible
+        const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
+        if (!story) return res.status(404).json({ error: 'Story not found' });
+
+        if (!story.story_bible) {
+          return res.status(400).json({ error: 'Story Bible required. Generate or add a Story Bible first.' });
+        }
+
+        // Get all chapters with segments
+        const chapters = await sql`SELECT * FROM chapters WHERE story_id = ${id} ORDER BY chapter_number`;
+        const chaptersWithSegments = await Promise.all(
+          chapters.map(async (ch) => {
+            const segments = await sql`SELECT id, segment_order, text, image_prompt FROM segments WHERE chapter_id = ${ch.id} ORDER BY segment_order`;
+            return {
+              chapterNumber: ch.chapter_number,
+              title: ch.title,
+              segments: segments.map(s => ({
+                id: s.id,
+                segmentOrder: s.segment_order,
+                text: s.text,
+                imagePrompt: s.image_prompt,
+              })),
+            };
+          })
+        );
+
+        console.log('[generateStoryboard] Generating storyboard for', chaptersWithSegments.length, 'chapters');
+
+        // Generate storyboard
+        const storyboard = await generateStoryboard({
+          storyTitle: story.title,
+          storyDescription: story.description,
+          storyBible: story.story_bible,
+          chapters: chaptersWithSegments,
+        });
+
+        console.log('[generateStoryboard] Generated', storyboard.length, 'segment entries');
+
+        // Update segments with storyboard data (including ID-based references)
+        let updatedCount = 0;
+        for (const entry of storyboard) {
+          const result = await sql`
+            UPDATE segments SET
+              storyboard_location = ${entry.location},
+              storyboard_characters = ${entry.characters},
+              storyboard_shot_type = ${entry.shotType},
+              storyboard_camera_angle = ${entry.cameraAngle},
+              storyboard_focus = ${entry.visualFocus},
+              storyboard_continuity = ${entry.continuityNote},
+              storyboard_location_id = ${entry.locationId},
+              storyboard_character_ids = ${entry.characterIds}
+            WHERE id = ${entry.segmentId}
+          `;
+          if (result.count > 0) updatedCount++;
+        }
+
+        console.log('[generateStoryboard] Updated', updatedCount, 'segments');
+
+        // Auto-tag references based on storyboard characters and locations
+        const references = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${id}`;
+        if (references.length > 0) {
+          console.log('[generateStoryboard] Auto-tagging references based on storyboard');
+          for (const entry of storyboard) {
+            const matchingRefIds: string[] = [];
+
+            // Match characters
+            for (const charName of entry.characters || []) {
+              const matchingRef = references.find(r =>
+                r.type === 'character' &&
+                r.name.toLowerCase().includes(charName.toLowerCase())
+              );
+              if (matchingRef) matchingRefIds.push(matchingRef.id);
+            }
+
+            // Match location
+            if (entry.location) {
+              const matchingRef = references.find(r =>
+                r.type === 'location' &&
+                r.name.toLowerCase().includes(entry.location!.toLowerCase())
+              );
+              if (matchingRef) matchingRefIds.push(matchingRef.id);
+            }
+
+            if (matchingRefIds.length > 0) {
+              await sql`
+                UPDATE segments SET reference_ids = ${matchingRefIds}
+                WHERE id = ${entry.segmentId}
+              `;
+            }
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          storyboard,
+          updatedSegments: updatedCount
+        });
+      } catch (error) {
+        console.error('Error generating storyboard:', error);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        return res.status(500).json({ error: 'Failed to generate storyboard', details: message });
       }
     }
 
