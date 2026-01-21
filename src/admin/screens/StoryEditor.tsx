@@ -983,6 +983,9 @@ export function StoryEditor() {
   // Storyboard generation state
   const [generatingStoryboard, setGeneratingStoryboard] = useState(false);
 
+  // Visual assets lightbox
+  const [visualAssetLightboxUrl, setVisualAssetLightboxUrl] = useState<string | null>(null);
+
   // Computed merged visual assets from Story Bible + legacy sources
   const mergedVisualAssets = useMemo(() => {
     if (!story) return { locations: [], characters: [], objects: [] };
@@ -2467,7 +2470,16 @@ export function StoryEditor() {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {loc.referenceImageUrl ? (
-                                        <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={loc.referenceImageUrl} alt={loc.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(loc.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <MapPin className="w-6 h-6 text-slate-600" />
@@ -2510,7 +2522,16 @@ export function StoryEditor() {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {char.referenceImageUrl ? (
-                                        <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={char.referenceImageUrl} alt={char.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(char.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <Users className="w-6 h-6 text-slate-600" />
@@ -2557,7 +2578,16 @@ export function StoryEditor() {
                                     {/* Image */}
                                     <div className="w-24 h-24 bg-slate-800/50 relative flex-shrink-0">
                                       {obj.referenceImageUrl ? (
-                                        <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                        <>
+                                          <img src={obj.referenceImageUrl} alt={obj.name} className="w-full h-full object-cover" />
+                                          <button
+                                            onClick={() => setVisualAssetLightboxUrl(obj.referenceImageUrl!)}
+                                            className="absolute bottom-1 left-1 p-1 bg-black/50 hover:bg-black/70 rounded text-white transition-colors"
+                                            title="View full size"
+                                          >
+                                            <Maximize2 className="w-3 h-3" />
+                                          </button>
+                                        </>
                                       ) : (
                                         <div className="w-full h-full flex items-center justify-center">
                                           <Package className="w-6 h-6 text-slate-600" />
@@ -3422,6 +3452,40 @@ export function StoryEditor() {
           ))}
         </section>
       </main>
+
+      {/* Visual Assets Lightbox */}
+      <AnimatePresence>
+        {visualAssetLightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setVisualAssetLightboxUrl(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img
+                src={visualAssetLightboxUrl}
+                alt="Visual asset"
+                className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setVisualAssetLightboxUrl(null)}
+                className="absolute -top-3 -right-3 bg-white text-slate-900 p-2 rounded-full shadow-lg hover:bg-slate-100 transition-colors"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
