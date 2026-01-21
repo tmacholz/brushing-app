@@ -4,6 +4,8 @@ import type { NarrationSequenceItem } from '../types';
 interface AudioSplicingOptions {
   childNameAudioUrl: string | null;
   petNameAudioUrl: string | null;
+  // Optional external AudioContext (e.g., from AudioProvider) - helps with iOS unlock
+  externalAudioContext?: AudioContext | null;
 }
 
 interface UseAudioSplicingReturn {
@@ -47,9 +49,13 @@ async function getAudioBuffer(
 /**
  * Hook for playing narration sequences with gapless audio.
  * Uses Web Audio API to schedule clips precisely without gaps.
+ *
+ * On iOS, the AudioContext must be created/resumed during a user gesture.
+ * Pass an externalAudioContext from AudioProvider (which handles iOS unlocking)
+ * to ensure audio works on mobile devices.
  */
 export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicingReturn {
-  const { childNameAudioUrl, petNameAudioUrl } = options;
+  const { childNameAudioUrl, petNameAudioUrl, externalAudioContext } = options;
 
   const [isLoading, setIsLoading] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -62,6 +68,9 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
   const startTimeRef = useRef<number>(0);
   const totalDurationRef = useRef<number>(0);
   const animationFrameRef = useRef<number | null>(null);
+
+  // Track whether we created our own context (vs using external)
+  const ownsContextRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -76,7 +85,8 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           // Already stopped
         }
       });
-      if (audioContextRef.current) {
+      // Only close if we created the context ourselves
+      if (audioContextRef.current && ownsContextRef.current) {
         audioContextRef.current.close();
       }
     };
@@ -119,9 +129,13 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
       setProgress(0);
 
       try {
-        // Create or reuse audio context
-        if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
+        // Use external AudioContext if provided (better for iOS), otherwise create our own
+        if (externalAudioContext && externalAudioContext.state !== 'closed') {
+          audioContextRef.current = externalAudioContext;
+          ownsContextRef.current = false;
+        } else if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
           audioContextRef.current = new AudioContext();
+          ownsContextRef.current = true;
         }
         const ctx = audioContextRef.current;
 
@@ -234,7 +248,7 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         setIsPlaying(false);
       }
     },
-    [childNameAudioUrl, petNameAudioUrl, updateProgress]
+    [childNameAudioUrl, petNameAudioUrl, externalAudioContext, updateProgress]
   );
 
   const stop = useCallback(() => {

@@ -36,7 +36,7 @@ interface BrushingScreenProps {
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward } = useChild();
-  const { playSound } = useAudio();
+  const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
   const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
@@ -62,6 +62,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const backgroundMusicRef = useRef<HTMLAudioElement | null>(null);
 
   // Audio splicing hook for pre-recorded narration with name insertion
+  // Pass the shared Web Audio context for better iOS compatibility
   const {
     play: playSplicedAudio,
     stop: stopSplicedAudio,
@@ -72,6 +73,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   } = useAudioSplicing({
     childNameAudioUrl: child?.nameAudioUrl ?? null,
     petNameAudioUrl,
+    externalAudioContext: getWebAudioContext(),
   });
 
   // Always use the current active pet for stories
