@@ -38,9 +38,12 @@ interface SpriteStatus {
   generatedAt: string | null;
 }
 
-export function SpriteManager() {
+interface SpriteManagerProps {
+  type: 'characters' | 'pets';
+}
+
+export function SpriteManager({ type }: SpriteManagerProps) {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'characters' | 'pets'>('characters');
   const [characters, setCharacters] = useState<Character[]>([]);
   const [pets, setPets] = useState<Pet[]>([]);
   const [loading, setLoading] = useState(true);
@@ -293,6 +296,12 @@ export function SpriteManager() {
     ? selectedCharacter?.displayName
     : selectedPet?.display_name;
 
+  const backPath = type === 'pets' ? '/admin/pets' : '/admin/worlds';
+  const title = type === 'pets' ? 'Pet Sprites' : 'Character Sprites';
+  const subtitle = type === 'pets'
+    ? 'Generate and manage pet expression sprites'
+    : 'Generate and manage child character sprites';
+
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-5xl mx-auto">
@@ -304,7 +313,7 @@ export function SpriteManager() {
                 setSelectedCharacterType(null);
                 setSelectedPet(null);
               } else {
-                navigate('/admin/worlds');
+                navigate(backPath);
               }
             }}
             className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
@@ -313,12 +322,12 @@ export function SpriteManager() {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-white">
-              {selectedName ? `Sprites: ${selectedName}` : 'Sprite Manager'}
+              {selectedName ? `Sprites: ${selectedName}` : title}
             </h1>
             <p className="text-slate-400 text-sm">
               {selectedName
-                ? 'Generate and manage character sprites'
-                : 'Select a character type or pet to manage their sprites'}
+                ? 'Generate and manage expression sprites'
+                : subtitle}
             </p>
           </div>
         </div>
@@ -343,35 +352,9 @@ export function SpriteManager() {
         {/* Character/Pet Selection or Sprite Management */}
         {!selectedCharacterType && !selectedPet ? (
           <>
-            {/* Tabs */}
-            <div className="flex gap-2 mb-6">
-              <button
-                onClick={() => setActiveTab('characters')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'characters'
-                    ? 'bg-cyan-500 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <User className="w-4 h-4" />
-                Character Types ({characters.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('pets')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                  activeTab === 'pets'
-                    ? 'bg-purple-500 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:text-white'
-                }`}
-              >
-                <Cat className="w-4 h-4" />
-                Pets ({pets.length})
-              </button>
-            </div>
-
             {/* Selection Grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {activeTab === 'characters' &&
+              {type === 'characters' &&
                 characters.map((character) => (
                   <motion.button
                     key={character.id}
@@ -400,7 +383,7 @@ export function SpriteManager() {
                   </motion.button>
                 ))}
 
-              {activeTab === 'pets' &&
+              {type === 'pets' &&
                 pets.map((pet) => (
                   <motion.button
                     key={pet.id}
@@ -429,7 +412,7 @@ export function SpriteManager() {
                   </motion.button>
                 ))}
 
-              {activeTab === 'pets' && pets.length === 0 && (
+              {type === 'pets' && pets.length === 0 && (
                 <div className="col-span-full text-center py-12 text-slate-500">
                   <Cat className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No pets found</p>
@@ -438,7 +421,7 @@ export function SpriteManager() {
             </div>
 
             {/* Info box about character sprites */}
-            {activeTab === 'characters' && (
+            {type === 'characters' && (
               <div className="mt-6 p-4 bg-slate-800/30 border border-slate-700/50 rounded-xl">
                 <p className="text-sm text-slate-400">
                   <strong className="text-slate-300">Note:</strong> Character sprites are shared across all children

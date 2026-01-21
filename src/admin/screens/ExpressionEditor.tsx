@@ -14,7 +14,7 @@ import {
   Image,
 } from 'lucide-react';
 
-interface PoseDefinition {
+interface ExpressionDefinition {
   id: string;
   characterType: 'child' | 'pet';
   poseKey: string;
@@ -24,43 +24,50 @@ interface PoseDefinition {
   isActive: boolean;
 }
 
-export function PoseEditor() {
+interface ExpressionEditorProps {
+  type: 'characters' | 'pets';
+}
+
+export function ExpressionEditor({ type }: ExpressionEditorProps) {
   const navigate = useNavigate();
-  const [poses, setPoses] = useState<PoseDefinition[]>([]);
+  const [expressions, setExpressions] = useState<ExpressionDefinition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'child' | 'pet'>('child');
 
-  // New pose form
+  // For characters, show both tabs. For pets, only show pet expressions
+  const characterType = type === 'pets' ? 'pet' : 'child';
+  const [activeTab, setActiveTab] = useState<'child' | 'pet'>(characterType);
+
+  // New expression form
   const [showNewForm, setShowNewForm] = useState(false);
-  const [newPoseKey, setNewPoseKey] = useState('');
+  const [newExpressionKey, setNewExpressionKey] = useState('');
   const [newDisplayName, setNewDisplayName] = useState('');
   const [newPrompt, setNewPrompt] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Edit state
-  const [editingPose, setEditingPose] = useState<PoseDefinition | null>(null);
+  const [editingExpression, setEditingExpression] = useState<ExpressionDefinition | null>(null);
 
-  const fetchPoses = useCallback(async () => {
+  const fetchExpressions = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/characters?entity=poses');
-      if (!res.ok) throw new Error('Failed to fetch poses');
+      if (!res.ok) throw new Error('Failed to fetch expressions');
       const data = await res.json();
-      setPoses(data.poses);
+      setExpressions(data.poses);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load poses');
+      setError(err instanceof Error ? err.message : 'Failed to load expressions');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchPoses();
-  }, [fetchPoses]);
+    fetchExpressions();
+  }, [fetchExpressions]);
 
-  const handleCreatePose = async (e: React.FormEvent) => {
+  const handleCreateExpression = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPoseKey || !newDisplayName || !newPrompt) return;
+    if (!newExpressionKey || !newDisplayName || !newPrompt) return;
 
     setSaving(true);
     try {
@@ -69,70 +76,70 @@ export function PoseEditor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           characterType: activeTab,
-          poseKey: newPoseKey.toLowerCase().replace(/\s+/g, '-'),
+          poseKey: newExpressionKey.toLowerCase().replace(/\s+/g, '-'),
           displayName: newDisplayName,
           generationPrompt: newPrompt,
-          sortOrder: poses.filter((p) => p.characterType === activeTab).length + 1,
+          sortOrder: expressions.filter((p) => p.characterType === activeTab).length + 1,
           isActive: true,
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to create pose');
+      if (!res.ok) throw new Error('Failed to create expression');
 
-      await fetchPoses();
+      await fetchExpressions();
       setShowNewForm(false);
-      setNewPoseKey('');
+      setNewExpressionKey('');
       setNewDisplayName('');
       setNewPrompt('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create pose');
+      setError(err instanceof Error ? err.message : 'Failed to create expression');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleUpdatePose = async (pose: PoseDefinition) => {
+  const handleUpdateExpression = async (expression: ExpressionDefinition) => {
     setSaving(true);
     try {
       const res = await fetch('/api/admin/characters?entity=poses', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: pose.id,
-          displayName: pose.displayName,
-          generationPrompt: pose.generationPrompt,
-          isActive: pose.isActive,
+          id: expression.id,
+          displayName: expression.displayName,
+          generationPrompt: expression.generationPrompt,
+          isActive: expression.isActive,
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to update pose');
+      if (!res.ok) throw new Error('Failed to update expression');
 
-      await fetchPoses();
-      setEditingPose(null);
+      await fetchExpressions();
+      setEditingExpression(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update pose');
+      setError(err instanceof Error ? err.message : 'Failed to update expression');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeletePose = async (poseId: string) => {
+  const handleDeleteExpression = async (expressionId: string) => {
     if (!confirm('Are you sure you want to delete this expression?')) return;
 
     try {
-      const res = await fetch(`/api/admin/characters?entity=poses&id=${poseId}`, {
+      const res = await fetch(`/api/admin/characters?entity=poses&id=${expressionId}`, {
         method: 'DELETE',
       });
 
-      if (!res.ok) throw new Error('Failed to delete pose');
+      if (!res.ok) throw new Error('Failed to delete expression');
 
-      await fetchPoses();
+      await fetchExpressions();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete pose');
+      setError(err instanceof Error ? err.message : 'Failed to delete expression');
     }
   };
 
-  const filteredPoses = poses.filter((p) => p.characterType === activeTab);
+  const filteredExpressions = expressions.filter((p) => p.characterType === activeTab);
 
   if (loading) {
     return (
@@ -142,22 +149,26 @@ export function PoseEditor() {
     );
   }
 
+  const backPath = type === 'pets' ? '/admin/pets' : '/admin/worlds';
+  const title = type === 'pets' ? 'Pet Expression Definitions' : 'Character Expression Definitions';
+  const subtitle = type === 'pets'
+    ? 'Manage pet expressions for the portrait overlay system'
+    : 'Manage child character expressions for the portrait overlay system';
+
   return (
     <div className="min-h-screen bg-slate-900 p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <button
-            onClick={() => navigate('/admin/worlds')}
+            onClick={() => navigate(backPath)}
             className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">Expression Definitions</h1>
-            <p className="text-slate-400 text-sm">
-              Manage character expressions for the portrait overlay system
-            </p>
+            <h1 className="text-2xl font-bold text-white">{title}</h1>
+            <p className="text-slate-400 text-sm">{subtitle}</p>
           </div>
         </div>
 
@@ -177,59 +188,61 @@ export function PoseEditor() {
           </motion.div>
         )}
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setActiveTab('child')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'child'
-                ? 'bg-cyan-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <User className="w-4 h-4" />
-            Child Expressions ({poses.filter((p) => p.characterType === 'child').length})
-          </button>
-          <button
-            onClick={() => setActiveTab('pet')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              activeTab === 'pet'
-                ? 'bg-purple-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Cat className="w-4 h-4" />
-            Pet Expressions ({poses.filter((p) => p.characterType === 'pet').length})
-          </button>
-        </div>
+        {/* Tabs - only show for characters section */}
+        {type === 'characters' && (
+          <div className="flex gap-2 mb-6">
+            <button
+              onClick={() => setActiveTab('child')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'child'
+                  ? 'bg-cyan-500 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <User className="w-4 h-4" />
+              Child Expressions ({expressions.filter((p) => p.characterType === 'child').length})
+            </button>
+            <button
+              onClick={() => setActiveTab('pet')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+                activeTab === 'pet'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-white'
+              }`}
+            >
+              <Cat className="w-4 h-4" />
+              Pet Expressions ({expressions.filter((p) => p.characterType === 'pet').length})
+            </button>
+          </div>
+        )}
 
-        {/* Poses List */}
+        {/* Expressions List */}
         <div className="space-y-3 mb-6">
-          {filteredPoses.map((pose) => (
+          {filteredExpressions.map((expression) => (
             <motion.div
-              key={pose.id}
+              key={expression.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className={`bg-slate-800/50 border rounded-xl p-4 ${
-                pose.isActive ? 'border-slate-700/50' : 'border-red-500/30 opacity-60'
+                expression.isActive ? 'border-slate-700/50' : 'border-red-500/30 opacity-60'
               }`}
             >
-              {editingPose?.id === pose.id ? (
+              {editingExpression?.id === expression.id ? (
                 // Edit form
                 <div className="space-y-3">
                   <input
                     type="text"
-                    value={editingPose.displayName}
+                    value={editingExpression.displayName}
                     onChange={(e) =>
-                      setEditingPose({ ...editingPose, displayName: e.target.value })
+                      setEditingExpression({ ...editingExpression, displayName: e.target.value })
                     }
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                     placeholder="Display Name"
                   />
                   <textarea
-                    value={editingPose.generationPrompt}
+                    value={editingExpression.generationPrompt}
                     onChange={(e) =>
-                      setEditingPose({ ...editingPose, generationPrompt: e.target.value })
+                      setEditingExpression({ ...editingExpression, generationPrompt: e.target.value })
                     }
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white resize-none"
                     rows={3}
@@ -239,9 +252,9 @@ export function PoseEditor() {
                     <label className="flex items-center gap-2 text-slate-300">
                       <input
                         type="checkbox"
-                        checked={editingPose.isActive}
+                        checked={editingExpression.isActive}
                         onChange={(e) =>
-                          setEditingPose({ ...editingPose, isActive: e.target.checked })
+                          setEditingExpression({ ...editingExpression, isActive: e.target.checked })
                         }
                         className="rounded"
                       />
@@ -249,13 +262,13 @@ export function PoseEditor() {
                     </label>
                     <div className="flex-1" />
                     <button
-                      onClick={() => setEditingPose(null)}
+                      onClick={() => setEditingExpression(null)}
                       className="px-3 py-1.5 text-slate-400 hover:text-white"
                     >
                       Cancel
                     </button>
                     <button
-                      onClick={() => handleUpdatePose(editingPose)}
+                      onClick={() => handleUpdateExpression(editingExpression)}
                       disabled={saving}
                       className="flex items-center gap-2 px-4 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-white rounded-lg"
                     >
@@ -273,11 +286,11 @@ export function PoseEditor() {
                 <div className="flex items-start gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium text-white">{pose.displayName}</h3>
+                      <h3 className="font-medium text-white">{expression.displayName}</h3>
                       <span className="text-xs px-2 py-0.5 bg-slate-700 rounded text-slate-400">
-                        {pose.poseKey}
+                        {expression.poseKey}
                       </span>
-                      {pose.isActive ? (
+                      {expression.isActive ? (
                         <span className="text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded flex items-center gap-1">
                           <CheckCircle className="w-3 h-3" />
                           Active
@@ -290,19 +303,19 @@ export function PoseEditor() {
                       )}
                     </div>
                     <p className="text-sm text-slate-400 line-clamp-2">
-                      {pose.generationPrompt}
+                      {expression.generationPrompt}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setEditingPose(pose)}
+                      onClick={() => setEditingExpression(expression)}
                       className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg"
                       title="Edit"
                     >
                       <Save className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeletePose(pose.id)}
+                      onClick={() => handleDeleteExpression(expression.id)}
                       className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg"
                       title="Delete"
                     >
@@ -314,7 +327,7 @@ export function PoseEditor() {
             </motion.div>
           ))}
 
-          {filteredPoses.length === 0 && (
+          {filteredExpressions.length === 0 && (
             <div className="text-center py-12 text-slate-500">
               <Image className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No {activeTab} expressions defined yet</p>
@@ -322,7 +335,7 @@ export function PoseEditor() {
           )}
         </div>
 
-        {/* Add New Pose */}
+        {/* Add New Expression */}
         {showNewForm ? (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -332,14 +345,14 @@ export function PoseEditor() {
             <h3 className="text-lg font-medium text-white mb-4">
               Add New {activeTab === 'child' ? 'Child' : 'Pet'} Expression
             </h3>
-            <form onSubmit={handleCreatePose} className="space-y-4">
+            <form onSubmit={handleCreateExpression} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-slate-400 mb-1">Expression Key</label>
                   <input
                     type="text"
-                    value={newPoseKey}
-                    onChange={(e) => setNewPoseKey(e.target.value)}
+                    value={newExpressionKey}
+                    onChange={(e) => setNewExpressionKey(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                     placeholder="e.g., excited"
                   />
@@ -372,7 +385,7 @@ export function PoseEditor() {
                   type="button"
                   onClick={() => {
                     setShowNewForm(false);
-                    setNewPoseKey('');
+                    setNewExpressionKey('');
                     setNewDisplayName('');
                     setNewPrompt('');
                   }}
@@ -382,7 +395,7 @@ export function PoseEditor() {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving || !newPoseKey || !newDisplayName || !newPrompt}
+                  disabled={saving || !newExpressionKey || !newDisplayName || !newPrompt}
                   className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-400 disabled:bg-slate-600 text-white rounded-lg"
                 >
                   {saving ? (
@@ -408,5 +421,3 @@ export function PoseEditor() {
     </div>
   );
 }
-
-export default PoseEditor;

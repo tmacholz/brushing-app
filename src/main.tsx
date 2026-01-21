@@ -9,7 +9,7 @@ import { WorldEditor } from './admin/screens/WorldEditor.tsx'
 import { StoryEditor } from './admin/screens/StoryEditor.tsx'
 import { PetManager } from './admin/screens/PetManager.tsx'
 import { PetAudioManager } from './admin/screens/PetAudioManager.tsx'
-import { PoseEditor } from './admin/screens/PoseEditor.tsx'
+import { ExpressionEditor } from './admin/screens/ExpressionEditor.tsx'
 import { SpriteManager } from './admin/screens/SpriteManager.tsx'
 import { CollectiblesManager } from './admin/screens/CollectiblesManager.tsx'
 
@@ -23,10 +23,18 @@ createRoot(document.getElementById('root')!).render(
           <Route path="worlds" element={<WorldList />} />
           <Route path="worlds/:worldId" element={<WorldEditor />} />
           <Route path="worlds/:worldId/stories/:storyId" element={<StoryEditor />} />
+
+          {/* Character management */}
+          <Route path="characters/expressions" element={<ExpressionEditor type="characters" />} />
+          <Route path="characters/sprites" element={<SpriteManager type="characters" />} />
+
+          {/* Pet management */}
           <Route path="pets" element={<PetManager />} />
+          <Route path="pets/expressions" element={<ExpressionEditor type="pets" />} />
+          <Route path="pets/sprites" element={<SpriteManager type="pets" />} />
           <Route path="pets/audio" element={<PetAudioManager />} />
-          <Route path="characters/poses" element={<PoseEditor />} />
-          <Route path="characters/sprites" element={<SpriteManager />} />
+
+          {/* Assets */}
           <Route path="collectibles" element={<CollectiblesManager />} />
         </Route>
 

@@ -14,7 +14,8 @@ import {
   ChevronRight,
   Lock,
   Menu,
-  X
+  X,
+  Smile
 } from 'lucide-react';
 
 interface NavSection {
@@ -40,21 +41,23 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    id: 'characters',
+    label: 'Characters',
+    icon: <User className="w-4 h-4" />,
+    items: [
+      { label: 'Expression Definitions', path: '/admin/characters/expressions', icon: <Smile className="w-4 h-4" /> },
+      { label: 'Sprites', path: '/admin/characters/sprites', icon: <Image className="w-4 h-4" /> },
+    ],
+  },
+  {
     id: 'pets',
     label: 'Pets',
     icon: <PawPrint className="w-4 h-4" />,
     items: [
       { label: 'Manage Pets', path: '/admin/pets', icon: <PawPrint className="w-4 h-4" /> },
-      { label: 'Pet Audio', path: '/admin/pets/audio', icon: <Volume2 className="w-4 h-4" /> },
-    ],
-  },
-  {
-    id: 'characters',
-    label: 'Characters',
-    icon: <User className="w-4 h-4" />,
-    items: [
-      { label: 'Pose Definitions', path: '/admin/characters/poses', icon: <User className="w-4 h-4" /> },
-      { label: 'Sprites', path: '/admin/characters/sprites', icon: <Image className="w-4 h-4" /> },
+      { label: 'Expression Definitions', path: '/admin/pets/expressions', icon: <Smile className="w-4 h-4" /> },
+      { label: 'Sprites', path: '/admin/pets/sprites', icon: <Image className="w-4 h-4" /> },
+      { label: 'Name Audio', path: '/admin/pets/audio', icon: <Volume2 className="w-4 h-4" /> },
     ],
   },
   {
