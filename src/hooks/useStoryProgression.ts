@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import type { StoryChapter, StorySegment } from '../types';
 
 export interface StoryProgressionState {
@@ -13,23 +13,20 @@ export interface StoryProgressionState {
 
 export interface UseStoryProgressionReturn extends StoryProgressionState {
   advanceToSegment: (segmentIndex: number) => void;
+  advanceToNext: () => void;
+  // Legacy function - kept for compatibility but now only initializes the phase
   getSegmentForTime: (elapsedSeconds: number) => void;
 }
 
-// Timeline breakdown for 2-minute session:
-// 0:00-0:15  → Recap (if not chapter 1)
-// 0:15-0:25  → Chapter title reveal
-// 0:25-1:45  → Story segments (~80 seconds)
-// 1:45-1:55  → Cliffhanger
-// 1:55-2:00  → Teaser
-
-const RECAP_END = 15;
-const TITLE_END = 25;
-const STORY_START = 25;
-const STORY_END = 105; // 1:45
-const CLIFFHANGER_END = 115;
-const TEASER_END = 120;
-
+/**
+ * Hook for managing story progression through phases and segments.
+ *
+ * Progression is now audio-driven: call advanceToNext() when audio completes
+ * to move to the next phase or segment. The 2-minute timer continues to run
+ * for progress display, but no longer controls segment timing.
+ *
+ * Phase order: recap (optional) → title → story segments → cliffhanger → teaser → complete
+ */
 export function useStoryProgression(
   chapter: StoryChapter | null
 ): UseStoryProgressionReturn {
@@ -42,75 +39,95 @@ export function useStoryProgression(
   const segments = chapter?.segments ?? [];
   const totalSegments = segments.length;
 
-  // Calculate segment timing within story phase
-  const segmentTimings = useMemo(() => {
-    if (totalSegments === 0) return [];
+  /**
+   * Advance to the next phase or segment.
+   * Call this when audio for the current phase/segment completes.
+   */
+  const advanceToNext = useCallback(() => {
+    setPhase((currentPhase) => {
+      switch (currentPhase) {
+        case 'recap':
+          return 'title';
 
-    const storyDuration = STORY_END - STORY_START; // 80 seconds
-    const timings: { start: number; end: number }[] = [];
+        case 'title':
+          if (totalSegments > 0) {
+            setCurrentSegmentIndex(0);
+            return 'story';
+          }
+          // No segments, skip to cliffhanger
+          return 'cliffhanger';
 
-    // Calculate total duration from segments
-    const totalDuration = segments.reduce((acc, seg) => acc + seg.durationSeconds, 0);
+        case 'story':
+          // Check if there are more segments
+          setCurrentSegmentIndex((prevIndex) => {
+            const nextIndex = prevIndex + 1;
+            if (nextIndex < totalSegments) {
+              // Stay in story phase, just advance segment
+              return nextIndex;
+            }
+            // No more segments, will transition to cliffhanger below
+            return prevIndex;
+          });
 
-    // Scale segments to fit in the story window
-    const scale = totalDuration > 0 ? storyDuration / totalDuration : 1;
+          // Check if we're at the last segment
+          // We need to read the current index, but since setCurrentSegmentIndex
+          // is async, we use a different approach
+          return currentPhase; // Stay in story, the index update handles it
 
-    let currentTime = STORY_START;
-    segments.forEach((segment) => {
-      const duration = segment.durationSeconds * scale;
-      timings.push({
-        start: currentTime,
-        end: currentTime + duration,
-      });
-      currentTime += duration;
+        case 'cliffhanger':
+          return 'teaser';
+
+        case 'teaser':
+          return 'complete';
+
+        case 'complete':
+          return 'complete';
+
+        default:
+          return currentPhase;
+      }
     });
+  }, [totalSegments]);
 
-    return timings;
-  }, [segments, totalSegments]);
-
-  const getSegmentForTime = useCallback(
-    (elapsedSeconds: number) => {
-      // Determine phase based on elapsed time
-      if (hasRecap && elapsedSeconds < RECAP_END) {
-        setPhase('recap');
-        return;
-      }
-
-      if (elapsedSeconds < TITLE_END) {
-        setPhase('title');
-        return;
-      }
-
-      if (elapsedSeconds < STORY_END) {
-        setPhase('story');
-
-        // Find the current segment
-        const segmentIndex = segmentTimings.findIndex(
-          (timing) => elapsedSeconds >= timing.start && elapsedSeconds < timing.end
-        );
-
-        if (segmentIndex !== -1) {
-          setCurrentSegmentIndex(segmentIndex);
-        } else if (segmentTimings.length > 0) {
-          // If past all segments, show the last one
-          setCurrentSegmentIndex(totalSegments - 1);
-        }
-        return;
-      }
-
-      if (elapsedSeconds < CLIFFHANGER_END) {
+  /**
+   * Special advance function for story phase that checks if we should
+   * move to cliffhanger. Called after segment index is updated.
+   */
+  const advanceFromStory = useCallback(() => {
+    setCurrentSegmentIndex((prevIndex) => {
+      const nextIndex = prevIndex + 1;
+      if (nextIndex < totalSegments) {
+        return nextIndex;
+      } else {
+        // Last segment done, move to cliffhanger
         setPhase('cliffhanger');
-        return;
+        return prevIndex;
       }
+    });
+  }, [totalSegments]);
 
-      if (elapsedSeconds < TEASER_END) {
-        setPhase('teaser');
-        return;
-      }
+  /**
+   * Combined advance function that handles all phases correctly.
+   */
+  const advanceToNextCombined = useCallback(() => {
+    if (phase === 'story') {
+      advanceFromStory();
+    } else {
+      advanceToNext();
+    }
+  }, [phase, advanceFromStory, advanceToNext]);
 
-      setPhase('complete');
+  /**
+   * Legacy function - now only used to initialize the starting phase.
+   * Segment timing is no longer based on elapsed time.
+   */
+  const getSegmentForTime = useCallback(
+    (_elapsedSeconds: number) => {
+      // This function is kept for API compatibility but no longer
+      // controls segment timing. Progression is now audio-driven.
+      // The initial phase is set in useState based on hasRecap.
     },
-    [hasRecap, segmentTimings, totalSegments]
+    []
   );
 
   const advanceToSegment = useCallback((index: number) => {
@@ -128,6 +145,7 @@ export function useStoryProgression(
     isShowingTeaser: phase === 'teaser',
     phase,
     advanceToSegment,
+    advanceToNext: advanceToNextCombined,
     getSegmentForTime,
   };
 }

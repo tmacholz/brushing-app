@@ -39,7 +39,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
-  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking } = useTextToSpeech();
+  const { speak, stop: stopSpeaking, pause: pauseSpeaking, resume: resumeSpeaking, isLoading: isTTSLoading, isSpeaking, error: ttsError } = useTextToSpeech();
   const [showCountdown, setShowCountdown] = useState(true);
   const [countdown, setCountdown] = useState(3);
   const [pointsEarned, setPointsEarned] = useState(0);
@@ -70,6 +70,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     resume: resumeSplicedAudio,
     isPlaying: isSplicedAudioPlaying,
     isLoading: isSplicedAudioLoading,
+    error: splicedAudioError,
   } = useAudioSplicing({
     childNameAudioUrl: child?.nameAudioUrl ?? null,
     petNameAudioUrl,
@@ -257,7 +258,6 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   };
 
   const {
-    elapsedSeconds,
     remainingSeconds,
     progress,
     isRunning,
@@ -270,15 +270,143 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const {
     currentSegment,
     phase,
-    getSegmentForTime,
+    advanceToNext,
   } = useStoryProgression(currentChapter);
 
-  // Update story progression based on timer
+  // Track audio state for segment advancement
+  const advanceTimerRef = useRef<number | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
+  const audioStartedForPhaseRef = useRef<string | null>(null);
+  const SEGMENT_BUFFER_MS = 2000; // 2 second buffer between segments
+  const AUDIO_FALLBACK_MS = 10000; // 10 second fallback if audio never starts/fails
+
+  // Create a unique key for current phase + segment
+  const currentPhaseKey = phase === 'story'
+    ? `story-${currentSegment?.id ?? 'unknown'}`
+    : phase;
+
+  // Track when audio starts for the current phase
   useEffect(() => {
-    if (isRunning) {
-      getSegmentForTime(elapsedSeconds);
+    const isAudioActive = isSpeaking || isSplicedAudioPlaying || isTTSLoading || isSplicedAudioLoading;
+
+    if (isAudioActive && audioStartedForPhaseRef.current !== currentPhaseKey) {
+      audioStartedForPhaseRef.current = currentPhaseKey;
+      console.log('[Progression] Audio started for:', currentPhaseKey);
+
+      // Clear fallback timer since audio started
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
     }
-  }, [elapsedSeconds, isRunning, getSegmentForTime]);
+  }, [isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, currentPhaseKey]);
+
+  // Fallback: advance if audio fails to start or errors occur
+  useEffect(() => {
+    if (!isRunning || !narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // If there's an audio error, advance after a short delay
+    const hasAudioError = ttsError || splicedAudioError;
+    if (hasAudioError && audioStartedForPhaseRef.current !== currentPhaseKey) {
+      console.log('[Progression] Audio error detected, advancing after buffer:', hasAudioError);
+
+      if (!advanceTimerRef.current) {
+        advanceTimerRef.current = window.setTimeout(() => {
+          console.log('[Progression] Advancing due to audio error from', currentPhaseKey);
+          advanceTimerRef.current = null;
+          audioStartedForPhaseRef.current = null;
+          advanceToNext();
+        }, SEGMENT_BUFFER_MS);
+      }
+      return;
+    }
+
+    // Start fallback timer when entering a new phase (in case audio never starts)
+    if (audioStartedForPhaseRef.current !== currentPhaseKey && !fallbackTimerRef.current) {
+      console.log('[Progression] Starting fallback timer for', currentPhaseKey);
+
+      fallbackTimerRef.current = window.setTimeout(() => {
+        // Only trigger if audio still hasn't started
+        if (audioStartedForPhaseRef.current !== currentPhaseKey) {
+          console.log('[Progression] Fallback: audio never started for', currentPhaseKey, ', advancing');
+          fallbackTimerRef.current = null;
+          audioStartedForPhaseRef.current = currentPhaseKey; // Mark as "handled"
+          advanceToNext();
+        }
+      }, AUDIO_FALLBACK_MS);
+    }
+
+    return () => {
+      if (fallbackTimerRef.current) {
+        clearTimeout(fallbackTimerRef.current);
+        fallbackTimerRef.current = null;
+      }
+    };
+  }, [isRunning, narrationEnabled, phase, currentPhaseKey, ttsError, splicedAudioError, advanceToNext]);
+
+  // Detect when audio completes and schedule advancement to next segment
+  useEffect(() => {
+    // Only advance if we're running and narration is enabled
+    if (!isRunning || !narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // Clear timer if we're still loading/playing
+    const isAudioPlaying = isSpeaking || isSplicedAudioPlaying;
+    const isAudioLoading = isTTSLoading || isSplicedAudioLoading;
+
+    if (isAudioPlaying || isAudioLoading) {
+      // Clear any pending advance timer
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Audio has finished - but only advance if audio actually started for this phase
+    if (audioStartedForPhaseRef.current !== currentPhaseKey) {
+      // Audio hasn't started yet for this phase, wait (fallback timer will handle)
+      return;
+    }
+
+    // Audio has completed for this phase - start the buffer timer
+    if (!advanceTimerRef.current) {
+      console.log('[Progression] Audio complete for', currentPhaseKey, ', waiting', SEGMENT_BUFFER_MS, 'ms');
+
+      advanceTimerRef.current = window.setTimeout(() => {
+        console.log('[Progression] Advancing from', currentPhaseKey);
+        advanceTimerRef.current = null;
+        audioStartedForPhaseRef.current = null; // Reset for next phase
+        advanceToNext();
+      }, SEGMENT_BUFFER_MS);
+    }
+
+    return () => {
+      if (advanceTimerRef.current) {
+        clearTimeout(advanceTimerRef.current);
+        advanceTimerRef.current = null;
+      }
+    };
+  }, [isRunning, narrationEnabled, isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, phase, currentPhaseKey, advanceToNext]);
+
+  // Also advance if narration is disabled (no audio to wait for)
+  useEffect(() => {
+    if (!isRunning || narrationEnabled) return;
+    if (phase === 'complete') return;
+
+    // With narration disabled, advance after a fixed delay per phase
+    const NO_NARRATION_DELAY = 5000; // 5 seconds when no narration
+
+    console.log('[Progression] No narration mode - will advance from', currentPhaseKey, 'in', NO_NARRATION_DELAY, 'ms');
+
+    const timer = window.setTimeout(() => {
+      console.log('[Progression] No narration mode - advancing from', currentPhaseKey);
+      advanceToNext();
+    }, NO_NARRATION_DELAY);
+
+    return () => clearTimeout(timer);
+  }, [isRunning, narrationEnabled, phase, currentPhaseKey, advanceToNext]);
 
   // Play sounds on phase changes
   useEffect(() => {
