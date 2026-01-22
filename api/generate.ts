@@ -1236,20 +1236,22 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
 
     // Generate 3 versions of regular and 3 versions of possessive (6 total)
     // Using different voice settings for natural variation
-    const allPromises = [
-      // Regular versions (v1, v2, v3)
-      ...voiceVariations.map((settings, i) =>
+    // Batch requests to avoid ElevenLabs concurrent request limit (max 4)
+    // First batch: regular versions
+    console.log('Generating regular name versions...');
+    const audioUrls = await Promise.all(
+      voiceVariations.map((settings, i) =>
         generateSingleAudio(name, `${baseStoragePath}-v${i + 1}.mp3`, settings)
-      ),
-      // Possessive versions (v1, v2, v3)
-      ...voiceVariations.map((settings, i) =>
-        generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive-v${i + 1}.mp3`, settings)
-      ),
-    ];
+      )
+    );
 
-    const results = await Promise.all(allPromises);
-    const audioUrls = results.slice(0, 3);
-    const possessiveAudioUrls = results.slice(3, 6);
+    // Second batch: possessive versions
+    console.log('Generating possessive name versions...');
+    const possessiveAudioUrls = await Promise.all(
+      voiceVariations.map((settings, i) =>
+        generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive-v${i + 1}.mp3`, settings)
+      )
+    );
 
     // For backwards compatibility, also set the main URLs to the first version
     const audioUrl = audioUrls[0];
