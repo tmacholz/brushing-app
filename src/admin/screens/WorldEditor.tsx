@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useToast } from '../../context/ToastContext';
 import {
   ArrowLeft,
   Save,
@@ -54,6 +55,7 @@ interface StoryPitch {
 export function WorldEditor() {
   const params = useParams<{ worldId: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   // Guaranteed by the route definition
   const worldId = params.worldId!;
   const [world, setWorld] = useState<World | null>(null);
@@ -129,8 +131,10 @@ export function WorldEditor() {
       if (!res.ok) throw new Error('Failed to save world');
       const data = await res.json();
       setWorld(data.world);
+      showToast('World saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save world');
+      showToast('Failed to save world', 'error');
     } finally {
       setSaving(false);
     }
@@ -161,8 +165,10 @@ export function WorldEditor() {
       if (!res.ok) throw new Error('Failed to update publish status');
       const data = await res.json();
       setWorld(data.world);
+      showToast(publish ? 'World published' : 'World unpublished');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update publish status');
+      showToast('Failed to update publish status', 'error');
     }
   };
 
@@ -180,8 +186,10 @@ export function WorldEditor() {
       if (!res.ok) throw new Error('Failed to regenerate world image');
       const data = await res.json();
       setWorld(data.world);
+      showToast('Image regenerated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to regenerate world image');
+      showToast('Failed to regenerate image', 'error');
     } finally {
       setRegeneratingImage(false);
     }
@@ -218,8 +226,10 @@ export function WorldEditor() {
       if (!saveRes.ok) throw new Error('Failed to save music URL');
       const saveData = await saveRes.json();
       setWorld(saveData.world);
+      showToast('Music generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate music');
+      showToast('Failed to generate music', 'error');
     } finally {
       setGeneratingMusic(false);
     }
@@ -258,8 +268,10 @@ export function WorldEditor() {
       const data = await res.json();
       setSelectedPitch(data.pitch);
       setStoryIdea('');
+      showToast('Outline generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate outline');
+      showToast('Failed to generate outline', 'error');
     } finally {
       setGeneratingOutline(false);
     }
@@ -279,8 +291,10 @@ export function WorldEditor() {
       if (!res.ok) throw new Error('Failed to generate pitches');
       const data = await res.json();
       setPitches(data.pitches);
+      showToast('Story ideas generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pitches');
+      showToast('Failed to generate ideas', 'error');
     } finally {
       setGeneratingPitches(false);
     }
@@ -302,8 +316,10 @@ export function WorldEditor() {
       setSelectedPitch(null);
       setPitches([]);
       await fetchWorld();
+      showToast('Story generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate story');
+      showToast('Failed to generate story', 'error');
     } finally {
       setGeneratingStory(false);
     }

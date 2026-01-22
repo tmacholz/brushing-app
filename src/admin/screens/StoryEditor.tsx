@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../../context/ToastContext';
 import {
   ArrowLeft,
   Save,
@@ -937,6 +938,7 @@ function EditableField({ value, onSave, multiline = false, className = '', label
 export function StoryEditor() {
   const params = useParams<{ worldId: string; storyId: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   // These are guaranteed by the route definition
   const worldId = params.worldId!;
   const storyId = params.storyId!;
@@ -1179,8 +1181,10 @@ export function StoryEditor() {
       if (!res.ok) throw new Error('Failed to save story');
       const data = await res.json();
       setStory({ ...story!, ...data.story });
+      showToast('Story saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save story');
+      showToast('Failed to save story', 'error');
     } finally {
       setSaving(false);
     }
@@ -1202,8 +1206,10 @@ export function StoryEditor() {
       const data = await res.json();
       setStory({ ...story!, ...data.story });
       setEditingStoryBible(false);
+      showToast('Story bible saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save story bible');
+      showToast('Failed to save story bible', 'error');
     } finally {
       setSavingStoryBible(false);
     }
@@ -1272,8 +1278,10 @@ export function StoryEditor() {
       setStory({ ...story, ...data.story });
       setEditingAssetId(null);
       setEditingAssetDescription('');
+      showToast('Description saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save asset description');
+      showToast('Failed to save description', 'error');
     } finally {
       setSavingAssetDescription(false);
     }
@@ -1297,8 +1305,10 @@ export function StoryEditor() {
 
       // Refresh story to get updated story bible and storyboard data
       await fetchStory();
+      showToast('Story bible generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate Story Bible');
+      showToast('Failed to generate story bible', 'error');
     } finally {
       setGeneratingStoryBible(false);
     }
@@ -1307,6 +1317,7 @@ export function StoryEditor() {
   const handleGenerateStoryboard = async () => {
     if (!story?.story_bible) {
       setError('Story Bible required. Add or generate a Story Bible first.');
+      showToast('Story Bible required first', 'error');
       return;
     }
 
@@ -1327,8 +1338,10 @@ export function StoryEditor() {
 
       // Refresh story to get updated segment storyboard data
       await fetchStory();
+      showToast('Storyboard generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
+      showToast('Failed to generate storyboard', 'error');
     } finally {
       setGeneratingStoryboard(false);
     }
@@ -1345,8 +1358,10 @@ export function StoryEditor() {
       if (!res.ok) throw new Error('Failed to update publish status');
       const data = await res.json();
       setStory({ ...story!, ...data.story });
+      showToast(publish ? 'Story published' : 'Story unpublished');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update publish status');
+      showToast('Failed to update publish status', 'error');
     }
   };
 
@@ -1398,8 +1413,10 @@ export function StoryEditor() {
       if (!saveRes.ok) throw new Error('Failed to save music URL');
 
       setStory({ ...story, background_music_url: data.musicUrl });
+      showToast('Music generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate music');
+      showToast('Failed to generate music', 'error');
     } finally {
       setGeneratingMusic(false);
     }
@@ -1468,8 +1485,10 @@ export function StoryEditor() {
       if (!saveRes.ok) throw new Error('Failed to save cover image URL');
 
       setStory({ ...story, cover_image_url: data.coverImageUrl });
+      showToast('Cover image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate cover image');
+      showToast('Failed to generate cover image', 'error');
     } finally {
       setGeneratingCoverImage(false);
     }
@@ -1522,8 +1541,10 @@ export function StoryEditor() {
           ),
         };
       });
+      showToast('Reference image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+      showToast('Failed to generate reference image', 'error');
     } finally {
       setGeneratingRefImages(prev => {
         const next = new Set(prev);
@@ -1618,8 +1639,10 @@ export function StoryEditor() {
           ),
         };
       });
+      showToast('Asset image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+      showToast('Failed to generate asset image', 'error');
     } finally {
       setGeneratingAssetImages(prev => {
         const next = new Set(prev);
