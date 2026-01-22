@@ -4,10 +4,22 @@ import type { NarrationSequenceItem } from '../types';
 interface AudioSplicingOptions {
   childNameAudioUrl: string | null;
   childNamePossessiveAudioUrl: string | null; // Possessive form (e.g., "Tim's")
+  childNameAudioUrls?: string[]; // Array of 3 versions for variety
+  childNamePossessiveAudioUrls?: string[]; // Array of 3 possessive versions for variety
   petNameAudioUrl: string | null;
   petNamePossessiveAudioUrl: string | null; // Possessive form (e.g., "Sparkle's")
+  petNameAudioUrls?: string[]; // Array of 3 versions for variety
+  petNamePossessiveAudioUrls?: string[]; // Array of 3 possessive versions for variety
   // Optional external AudioContext (e.g., from AudioProvider) - helps with iOS unlock
   externalAudioContext?: AudioContext | null;
+}
+
+// Helper to randomly select from an array (or fallback to single URL)
+function selectRandomUrl(urls: string[] | undefined, fallbackUrl: string | null): string | null {
+  if (urls && urls.length > 0) {
+    return urls[Math.floor(Math.random() * urls.length)];
+  }
+  return fallbackUrl;
 }
 
 interface UseAudioSplicingReturn {
@@ -60,8 +72,12 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
   const {
     childNameAudioUrl,
     childNamePossessiveAudioUrl,
+    childNameAudioUrls,
+    childNamePossessiveAudioUrls,
     petNameAudioUrl,
     petNamePossessiveAudioUrl,
+    petNameAudioUrls,
+    petNamePossessiveAudioUrls,
     externalAudioContext,
   } = options;
 
@@ -152,6 +168,13 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           await ctx.resume();
         }
 
+        // Select random URLs for this playback session (from arrays if available, otherwise single URL)
+        // This ensures variety while using the same clip consistently within a single segment
+        const selectedChildUrl = selectRandomUrl(childNameAudioUrls, childNameAudioUrl);
+        const selectedChildPossessiveUrl = selectRandomUrl(childNamePossessiveAudioUrls, childNamePossessiveAudioUrl) || selectedChildUrl;
+        const selectedPetUrl = selectRandomUrl(petNameAudioUrls, petNameAudioUrl);
+        const selectedPetPossessiveUrl = selectRandomUrl(petNamePossessiveAudioUrls, petNamePossessiveAudioUrl) || selectedPetUrl;
+
         // Collect all URLs we need to load
         const urlsToLoad = new Set<string>();
 
@@ -159,21 +182,19 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           if (item.type === 'audio') {
             urlsToLoad.add(item.url);
           } else if (item.type === 'name') {
-            // Handle both regular and possessive name forms
+            // Handle both regular and possessive name forms using selected URLs
             switch (item.placeholder) {
               case 'CHILD':
-                if (childNameAudioUrl) urlsToLoad.add(childNameAudioUrl);
+                if (selectedChildUrl) urlsToLoad.add(selectedChildUrl);
                 break;
               case 'CHILD_POSSESSIVE':
-                if (childNamePossessiveAudioUrl) urlsToLoad.add(childNamePossessiveAudioUrl);
-                else if (childNameAudioUrl) urlsToLoad.add(childNameAudioUrl); // Fallback
+                if (selectedChildPossessiveUrl) urlsToLoad.add(selectedChildPossessiveUrl);
                 break;
               case 'PET':
-                if (petNameAudioUrl) urlsToLoad.add(petNameAudioUrl);
+                if (selectedPetUrl) urlsToLoad.add(selectedPetUrl);
                 break;
               case 'PET_POSSESSIVE':
-                if (petNamePossessiveAudioUrl) urlsToLoad.add(petNamePossessiveAudioUrl);
-                else if (petNameAudioUrl) urlsToLoad.add(petNameAudioUrl); // Fallback
+                if (selectedPetPossessiveUrl) urlsToLoad.add(selectedPetPossessiveUrl);
                 break;
             }
           }
@@ -192,8 +213,10 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
 
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         // Use overlap around name clips to reduce perceived gaps from audio silence padding
-        const NAME_OVERLAP_BEFORE = 0.25; // Overlap before name clips (tighten lead-in)
-        const NAME_OVERLAP_AFTER = 0.30; // Overlap after name clips (tighten follow-up) - increased for tighter transitions
+        // Values reduced to give more breathing room around names
+        const NAME_OVERLAP_BEFORE = 0.15; // Overlap before name clips (tighten lead-in)
+        const NAME_OVERLAP_AFTER = 0.18; // Overlap after name clips (tighten follow-up)
+        const COMMA_PAUSE = 0.15; // Extra pause when name is followed by comma/punctuation
         let scheduleTime = ctx.currentTime;
         const sources: AudioBufferSourceNode[] = [];
 
@@ -205,20 +228,20 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           if (item.type === 'audio') {
             buffer = bufferMap.get(item.url);
           } else if (item.type === 'name') {
-            // Get the appropriate URL based on placeholder type (regular or possessive)
+            // Get the appropriate URL based on placeholder type (using pre-selected random URLs)
             let url: string | null = null;
             switch (item.placeholder) {
               case 'CHILD':
-                url = childNameAudioUrl;
+                url = selectedChildUrl;
                 break;
               case 'CHILD_POSSESSIVE':
-                url = childNamePossessiveAudioUrl || childNameAudioUrl; // Fallback to regular
+                url = selectedChildPossessiveUrl;
                 break;
               case 'PET':
-                url = petNameAudioUrl;
+                url = selectedPetUrl;
                 break;
               case 'PET_POSSESSIVE':
-                url = petNamePossessiveAudioUrl || petNameAudioUrl; // Fallback to regular
+                url = selectedPetPossessiveUrl;
                 break;
             }
             if (url) {
@@ -230,14 +253,20 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
             // Apply overlap to tighten transitions around names
             const isName = item.type === 'name';
             const followsName = prevItem?.type === 'name';
+            // Check if previous name was followed by punctuation (comma, period, etc.)
+            const prevNameHadPause = prevItem?.type === 'name' && prevItem.followedByPause;
 
             // Overlap before name clips (name starts sooner after previous audio)
             if (isName && scheduleTime > ctx.currentTime + NAME_OVERLAP_BEFORE) {
               scheduleTime -= NAME_OVERLAP_BEFORE;
             }
             // Overlap after name clips (next audio starts sooner after name)
-            else if (followsName && scheduleTime > ctx.currentTime + NAME_OVERLAP_AFTER) {
+            // BUT skip the overlap if the name was followed by punctuation - add a pause instead
+            else if (followsName && !prevNameHadPause && scheduleTime > ctx.currentTime + NAME_OVERLAP_AFTER) {
               scheduleTime -= NAME_OVERLAP_AFTER;
+            } else if (prevNameHadPause) {
+              // Add extra pause after names followed by commas/punctuation
+              scheduleTime += COMMA_PAUSE;
             }
 
             const source = ctx.createBufferSource();

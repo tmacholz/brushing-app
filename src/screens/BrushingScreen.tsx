@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Volume2, VolumeX, Pause, Play, X, Subtitles } from 'lucide-react';
 import { useBrushingTimer } from '../hooks/useBrushingTimer';
@@ -17,7 +17,7 @@ import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 // Image generation is now done in admin, images come pre-populated from database
-import { getPetAudioUrl, getPetAudioPossessiveUrl } from '../services/petAudio';
+import { getPetAudioUrl, getPetAudioPossessiveUrl, getPetAudioUrls, getPetAudioPossessiveUrls } from '../services/petAudio';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
 
@@ -44,8 +44,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [pointsEarned, setPointsEarned] = useState(0);
   const [narrationEnabled, setNarrationEnabled] = useState(true);
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false);
+  const [audioFailedForPhase, setAudioFailedForPhase] = useState<string | null>(null); // Track phases where audio failed
   const [petNameAudioUrl, setPetNameAudioUrl] = useState<string | null>(null);
   const [petNamePossessiveAudioUrl, setPetNamePossessiveAudioUrl] = useState<string | null>(null);
+  const [petNameAudioUrls, setPetNameAudioUrls] = useState<string[]>([]);
+  const [petNamePossessiveAudioUrls, setPetNamePossessiveAudioUrls] = useState<string[]>([]);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
   // New task bonus flow state
   const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
@@ -74,8 +77,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   } = useAudioSplicing({
     childNameAudioUrl: child?.nameAudioUrl ?? null,
     childNamePossessiveAudioUrl: child?.namePossessiveAudioUrl ?? null,
+    childNameAudioUrls: child?.nameAudioUrls,
+    childNamePossessiveAudioUrls: child?.namePossessiveAudioUrls,
     petNameAudioUrl,
     petNamePossessiveAudioUrl,
+    petNameAudioUrls,
+    petNamePossessiveAudioUrls,
     externalAudioContext: getWebAudioContext(),
   });
 
@@ -88,8 +95,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       const pet = getPetById(storyPetId);
       const audioLookupKey = pet?.name ?? storyPetId;
       console.log('[Audio] Fetching pet audio for:', { storyPetId, petName: pet?.name, audioLookupKey });
+      // Fetch single URLs (fallback)
       getPetAudioUrl(audioLookupKey).then(setPetNameAudioUrl);
       getPetAudioPossessiveUrl(audioLookupKey).then(setPetNamePossessiveAudioUrl);
+      // Fetch URL arrays for variety
+      getPetAudioUrls(audioLookupKey).then(setPetNameAudioUrls);
+      getPetAudioPossessiveUrls(audioLookupKey).then(setPetNamePossessiveAudioUrls);
     }
   }, [storyPetId, getPetById]);
 
@@ -279,13 +290,22 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const fallbackTimerRef = useRef<number | null>(null);
   const audioStartedForPhaseRef = useRef<string | null>(null);
   const SEGMENT_BUFFER_MS = 2000; // 2 second buffer between segments after audio completes
-  const AUDIO_ERROR_BUFFER_MS = 8000; // 8 second delay when audio errors (give time to read)
-  const AUDIO_FALLBACK_MS = 10000; // 10 second fallback if audio never starts
+  const DEFAULT_PHASE_DURATION_MS = 8000; // Default reading time for phases without duration
+  const MIN_FALLBACK_MS = 5000; // Minimum fallback time to give user time to read
 
   // Create a unique key for current phase + segment
   const currentPhaseKey = phase === 'story'
     ? `story-${currentSegment?.id ?? 'unknown'}`
     : phase;
+
+  // Calculate fallback duration based on segment/phase (use segment.durationSeconds when available)
+  const getFallbackDuration = useCallback(() => {
+    if (phase === 'story' && currentSegment?.durationSeconds) {
+      // Use segment's intended duration, with a minimum floor
+      return Math.max(currentSegment.durationSeconds * 1000, MIN_FALLBACK_MS);
+    }
+    return DEFAULT_PHASE_DURATION_MS;
+  }, [phase, currentSegment?.durationSeconds]);
 
   // Track when audio starts for the current phase
   useEffect(() => {
@@ -295,23 +315,35 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       audioStartedForPhaseRef.current = currentPhaseKey;
       console.log('[Progression] Audio started for:', currentPhaseKey);
 
+      // Clear audio failed flag since audio is working
+      if (audioFailedForPhase === currentPhaseKey) {
+        setAudioFailedForPhase(null);
+      }
+
       // Clear fallback timer since audio started
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
       }
     }
-  }, [isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, currentPhaseKey]);
+  }, [isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, currentPhaseKey, audioFailedForPhase]);
 
   // Fallback: advance if audio fails to start or errors occur
   useEffect(() => {
     if (!isRunning || !narrationEnabled) return;
     if (phase === 'complete') return;
 
-    // If there's an audio error, give user time to read the text before advancing
+    const fallbackDuration = getFallbackDuration();
+
+    // If there's an audio error, mark audio as failed and give user time to read
     const hasAudioError = ttsError || splicedAudioError;
     if (hasAudioError && audioStartedForPhaseRef.current !== currentPhaseKey) {
-      console.log('[Progression] Audio error detected, advancing after', AUDIO_ERROR_BUFFER_MS, 'ms:', hasAudioError);
+      console.log('[Progression] Audio error detected, showing captions and advancing after', fallbackDuration, 'ms:', hasAudioError);
+
+      // Mark audio as failed to auto-show captions
+      if (audioFailedForPhase !== currentPhaseKey) {
+        setAudioFailedForPhase(currentPhaseKey);
+      }
 
       if (!advanceTimerRef.current) {
         advanceTimerRef.current = window.setTimeout(() => {
@@ -319,24 +351,26 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           advanceTimerRef.current = null;
           audioStartedForPhaseRef.current = null;
           advanceToNext();
-        }, AUDIO_ERROR_BUFFER_MS);
+        }, fallbackDuration);
       }
       return;
     }
 
     // Start fallback timer when entering a new phase (in case audio never starts)
     if (audioStartedForPhaseRef.current !== currentPhaseKey && !fallbackTimerRef.current) {
-      console.log('[Progression] Starting fallback timer for', currentPhaseKey);
+      console.log('[Progression] Starting fallback timer for', currentPhaseKey, '(', fallbackDuration, 'ms)');
 
       fallbackTimerRef.current = window.setTimeout(() => {
         // Only trigger if audio still hasn't started
         if (audioStartedForPhaseRef.current !== currentPhaseKey) {
-          console.log('[Progression] Fallback: audio never started for', currentPhaseKey, ', advancing');
+          console.log('[Progression] Fallback: audio never started for', currentPhaseKey, ', showing captions and advancing');
           fallbackTimerRef.current = null;
           audioStartedForPhaseRef.current = currentPhaseKey; // Mark as "handled"
+          // Mark audio as failed to auto-show captions
+          setAudioFailedForPhase(currentPhaseKey);
           advanceToNext();
         }
-      }, AUDIO_FALLBACK_MS);
+      }, fallbackDuration);
     }
 
     return () => {
@@ -345,7 +379,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         fallbackTimerRef.current = null;
       }
     };
-  }, [isRunning, narrationEnabled, phase, currentPhaseKey, ttsError, splicedAudioError, advanceToNext]);
+  }, [isRunning, narrationEnabled, phase, currentPhaseKey, ttsError, splicedAudioError, advanceToNext, getFallbackDuration, audioFailedForPhase]);
 
   // Detect when audio completes and schedule advancement to next segment
   useEffect(() => {
@@ -750,7 +784,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }
 
   // Render initial completion screen ("Amazing job!" first)
-  if (isComplete && showInitialCompletion) {
+  // Note: showInitialCompletion is set in handleBrushingComplete, which can be triggered by
+  // either the timer completing (isComplete) OR the story phase reaching 'complete'
+  if (showInitialCompletion) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
         <motion.div
@@ -792,7 +828,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }
 
   // Render task check-in overlay
-  if (isComplete && showTaskCheckIn) {
+  if (showTaskCheckIn) {
     const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
     return (
       <TaskCheckIn
@@ -804,7 +840,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }
 
   // Render bonus wheel overlay
-  if (isComplete && showBonusWheel) {
+  if (showBonusWheel) {
     return (
       <BonusWheel
         tokensAvailable={tokensEarned}
@@ -818,7 +854,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }
 
   // Render mystery chest overlay (legacy fallback when task bonus is disabled)
-  if (isComplete && showMysteryChest) {
+  if (showMysteryChest) {
     return (
       <MysteryChest
         worldId={child?.activeWorldId}
@@ -895,8 +931,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
             exit={{ opacity: 0 }}
             className="text-center flex flex-col items-center justify-start flex-1 w-full"
           >
-            {/* Only hide subtitles if toggle is off AND there's a background image */}
-            {(subtitlesEnabled || !backgroundImage) && (
+            {/* Only hide subtitles if toggle is off AND there's a background image AND audio is working */}
+            {(subtitlesEnabled || !backgroundImage || audioFailedForPhase === currentPhaseKey) && (
               <div className="bg-black/40 backdrop-blur-sm rounded-xl sm:rounded-2xl p-2 sm:p-4 w-[95%] sm:w-[90%] max-w-2xl landscape:max-w-[70%] landscape:p-2">
                 <p className="text-white text-sm sm:text-xl landscape:text-xs leading-snug sm:leading-relaxed mb-1 sm:mb-2 drop-shadow-lg">
                   {currentSegment?.text}
@@ -953,21 +989,30 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
   };
 
-  // Get background image for story phase and cliffhanger
+  // Get background image for story phase, cliffhanger, and recap
   // During cliffhanger, persist the last segment's image
+  // During recap, show the previous chapter's last segment image as a visual cue
   const lastSegment = currentChapter?.segments[currentChapter.segments.length - 1];
+  const previousChapter = chapterIndex > 0 ? child?.currentStoryArc?.chapters[chapterIndex - 1] : null;
+  const previousChapterLastSegment = previousChapter?.segments[previousChapter.segments.length - 1];
+
   const backgroundImage = phase === 'story' && currentSegment?.imageUrl
     ? currentSegment.imageUrl
     : phase === 'cliffhanger' && lastSegment?.imageUrl
       ? lastSegment.imageUrl
-      : null;
+      : phase === 'recap' && previousChapterLastSegment?.imageUrl
+        ? previousChapterLastSegment.imageUrl
+        : null;
 
   // Determine if we should use character overlay compositing
   // Use compositing if sprites are ready and segment has pose data
   // For cliffhanger, use the last segment's pose data
-  const segmentForCompositing = phase === 'cliffhanger' ? lastSegment : currentSegment;
+  // For recap, use the previous chapter's last segment's pose data
+  const segmentForCompositing = phase === 'cliffhanger' ? lastSegment
+    : phase === 'recap' ? previousChapterLastSegment
+    : currentSegment;
   const useCompositing = spritesReady &&
-    (phase === 'story' || phase === 'cliffhanger') &&
+    (phase === 'story' || phase === 'cliffhanger' || phase === 'recap') &&
     segmentForCompositing?.childPose &&
     backgroundImage;
 

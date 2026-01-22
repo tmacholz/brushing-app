@@ -261,7 +261,7 @@ export async function generateStoryBible(
 ): Promise<StoryBible> {
   const outlineText = outline.map(ch => `  Chapter ${ch.chapter}: "${ch.title}" - ${ch.summary}`).join('\n');
 
-  const prompt = `Create a comprehensive "Story Bible" for a children's story (ages 4-8) in a toothbrushing app.
+  const prompt = `Create a comprehensive "Story Bible" for a children's adventure story (ages 4-8).
 
 STORY DETAILS:
 World: ${worldName} - ${worldDescription}
@@ -322,6 +322,12 @@ IMPORTANT for visualAssets:
 - locations: Include 2-4 key places that appear multiple times
 - characters: Include NPCs (allies, mentors, creatures) that appear multiple times. Do NOT include [CHILD] or [PET].
 - objects: Include 1-3 important items central to the plot (magical items, tools, treasures)
+
+CRITICAL SAFETY REQUIREMENT for character descriptions:
+- This is a children's app (ages 4-8). ALL characters must be described with appropriate clothing.
+- For aquatic characters (mermaids, sea creatures): describe them wearing shirts, vests, or decorative chest coverings (like colorful scaled armor, seaweed wraps, coral jewelry covering the torso).
+- Never describe characters as topless, bare-chested, or with exposed torsos.
+- Think Disney/Pixar character design - always family-friendly.
 
 Be specific and detailed - this bible will be the source of truth for the entire story!`;
 
@@ -403,10 +409,19 @@ ${existingStories.map((s, i) => `${i + 1}. "${s.title}" - ${s.description}`).joi
 IMPORTANT: Each new story must have a DISTINCT premise, different conflict type, and explore different aspects of the world. Avoid rehashing similar adventures.`
     : '';
 
-  const prompt = `Generate ${count} unique story ideas for a children's toothbrushing app (ages 4-8).
+  const prompt = `Generate ${count} unique story ideas for a children's adventure app (ages 4-8).
 World: ${worldName} - ${worldDescription}
 Each story: 5-chapter adventure with [CHILD] and [PET] as main characters.
 ${existingStoriesSection}
+
+STORY VARIETY GUIDELINES:
+- Focus on engaging adventures, mysteries, friendships, and discoveries
+- Do NOT make stories about brushing teeth or dental hygiene (the app handles that separately)
+- Avoid overused tropes: chosen one prophecies, "believe in yourself" lessons, predictable hero's journeys
+- Instead explore: unexpected friendships, clever problem-solving, funny misunderstandings, creative collaborations, mysteries with surprising twists
+- Each story should feel fresh and surprising, not formulaic
+- Characters should have quirky personalities and genuine challenges
+
 Respond with ONLY a JSON array:
 [{"title": "Story Title", "description": "1-2 sentence hook", "outline": [{"chapter": 1, "title": "Ch Title", "summary": "Brief summary"}, ...for all 5 chapters]}]`;
 
@@ -426,11 +441,17 @@ ${existingStories.map((s, i) => `${i + 1}. "${s.title}" - ${s.description}`).joi
 `
     : '';
 
-  const prompt = `Create a 5-chapter story outline based on this idea for a children's toothbrushing app (ages 4-8).
+  const prompt = `Create a 5-chapter story outline based on this idea for a children's adventure app (ages 4-8).
 World: ${worldName} - ${worldDescription}
 User's idea: "${userIdea}"
 Features [CHILD] and [PET] as main characters.
 ${existingStoriesSection}
+
+STORY GUIDELINES:
+- Focus on the adventure, not on brushing teeth (the app handles that separately)
+- Avoid formulaic plots - surprise the reader with unexpected twists
+- Characters should feel real with quirky traits, not just archetypes
+
 Respond with ONLY a JSON object:
 {"title": "Story Title", "description": "1-2 sentence hook", "outline": [{"chapter": 1, "title": "Ch Title", "summary": "Brief summary"}, ...for all 5 chapters]}`;
 
@@ -521,7 +542,7 @@ ${storyBible.magicSystem ? `- Magic System: ${storyBible.magicSystem}` : ''}
       ? `\nPREVIOUS CHAPTERS SUMMARY:\n${chapters.map(ch => `- Chapter ${ch.chapterNumber} "${ch.title}": ${ch.segments.map(s => s.text).join(' ').slice(0, 150)}...`).join('\n')}`
       : '';
 
-    const prompt = `Write Chapter ${chapterOutline.chapter} of a children's story for a toothbrushing app (ages 4-8).
+    const prompt = `Write Chapter ${chapterOutline.chapter} of a children's adventure story (ages 4-8).
 Story: "${storyTitle}" - ${storyDescription}
 World: ${worldName} - ${worldDescription}
 Chapter ${chapterOutline.chapter}: "${chapterOutline.title}" - ${chapterOutline.summary}
@@ -530,6 +551,13 @@ ${previousChapter ? `Previous chapter ended with: "${previousChapter.cliffhanger
 
 Write exactly 5 segments (each ~15 seconds to read, 2-3 sentences, 40-60 words).
 Use [CHILD] and [PET] as placeholders in the story text.
+
+STORY QUALITY GUIDELINES:
+- Focus on the adventure - do NOT mention brushing, teeth, or dental hygiene
+- Avoid clichés: no "believed in themselves", "learned the real treasure was friendship"
+- Make characters react in surprising but believable ways
+- Include specific, vivid details rather than generic descriptions
+- Show characters being clever, creative, or resourceful
 
 IMPORTANT - [PET] DESCRIPTIONS:
 The pet companion could be ANY type of creature (animal, robot, magical being, fish, etc.).
@@ -664,6 +692,11 @@ DO INCLUDE (up to 8 total, prioritize by frequency in the story):
 3. LOCATIONS: Specific places that are revisited (e.g., "the crystal cavern entrance", "the ancient bridge", "the meadow clearing")
 
 For CHARACTERS, provide descriptions suitable for generating a CHARACTER REFERENCE SHEET (showing the character from multiple angles).
+
+CRITICAL SAFETY REQUIREMENT: This is for a children's app (ages 4-8).
+- ALL characters must be described wearing appropriate clothing covering their torso.
+- For aquatic characters (mermaids, sea creatures, etc.): describe them wearing shirts, vests, decorative scaled armor, seaweed wraps, or coral jewelry that covers the chest.
+- Never describe characters as topless or with exposed torsos.
 
 Respond with ONLY a JSON array (max 8 items, sorted by importance to the story):
 [

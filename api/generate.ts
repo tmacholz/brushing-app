@@ -14,7 +14,9 @@ const STYLE_PREFIX = `Children's book illustration style, soft watercolor and di
 warm and inviting colors, gentle lighting, whimsical and magical atmosphere,
 suitable for ages 4-8, no text in image, dreamlike quality,
 Studio Ghibli inspired soft aesthetic, rounded friendly shapes,
-pastel color palette with vibrant accents.`;
+pastel color palette with vibrant accents.
+
+IMPORTANT SAFETY REQUIREMENTS: This is for a children's app. All characters must be fully clothed and appropriate for young children. No nudity, no exposed skin beyond face/hands/arms. For any aquatic or fantasy characters (mermaids, etc.), ensure they wear child-appropriate clothing covering their torso (shirts, vests, scales that look like clothing, etc.). All content must be G-rated and family-friendly.`;
 
 // Helper to fetch and convert image to base64
 async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
@@ -683,13 +685,20 @@ interface ChapterAudioRequest {
 
 type NarrationSequenceItem =
   | { type: 'audio'; url: string }
-  | { type: 'name'; placeholder: 'CHILD' | 'PET' };
+  | { type: 'name'; placeholder: 'CHILD' | 'PET'; followedByPause?: boolean };
 
 /**
  * Parse segment text and split into parts at [CHILD] and [PET] placeholders.
+ * Detects if a placeholder is followed by punctuation (comma, period) for pause timing.
  */
-function parseTextIntoParts(text: string): Array<{ type: 'text'; content: string } | { type: 'placeholder'; name: 'CHILD' | 'PET' }> {
-  const parts: Array<{ type: 'text'; content: string } | { type: 'placeholder'; name: 'CHILD' | 'PET' }> = [];
+function parseTextIntoParts(text: string): Array<
+  | { type: 'text'; content: string }
+  | { type: 'placeholder'; name: 'CHILD' | 'PET'; followedByPause: boolean }
+> {
+  const parts: Array<
+    | { type: 'text'; content: string }
+    | { type: 'placeholder'; name: 'CHILD' | 'PET'; followedByPause: boolean }
+  > = [];
   const regex = /\[(CHILD|PET)\]/g;
   let lastIndex = 0;
   let match;
@@ -701,7 +710,10 @@ function parseTextIntoParts(text: string): Array<{ type: 'text'; content: string
         parts.push({ type: 'text', content });
       }
     }
-    parts.push({ type: 'placeholder', name: match[1] as 'CHILD' | 'PET' });
+    // Check if placeholder is followed by punctuation that would cause a pause
+    const charAfter = text[regex.lastIndex];
+    const followedByPause = charAfter === ',' || charAfter === '.' || charAfter === '!' || charAfter === '?';
+    parts.push({ type: 'placeholder', name: match[1] as 'CHILD' | 'PET', followedByPause });
     lastIndex = regex.lastIndex;
   }
 
@@ -769,7 +781,11 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
 
     for (const part of parts) {
       if (part.type === 'placeholder') {
-        narrationSequence.push({ type: 'name', placeholder: part.name });
+        narrationSequence.push({
+          type: 'name',
+          placeholder: part.name,
+          ...(part.followedByPause && { followedByPause: true }),
+        });
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
@@ -826,7 +842,11 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
 
     for (const part of parts) {
       if (part.type === 'placeholder') {
-        narrationSequence.push({ type: 'name', placeholder: part.name });
+        narrationSequence.push({
+          type: 'name',
+          placeholder: part.name,
+          ...(part.followedByPause && { followedByPause: true }),
+        });
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
@@ -916,6 +936,12 @@ REQUIREMENTS:
 - The style should be suitable for children's book illustration
 - Make the character expressive, friendly, and appealing to children ages 4-8
 - Ensure the design is clear enough to be used as a reference for future illustrations
+
+CRITICAL CLOTHING REQUIREMENTS (children's app):
+- The character MUST be fully clothed in ALL views - appropriate for ages 4-8
+- For aquatic/fantasy characters (mermaids, sea creatures, etc.): use shirts, vests, or decorative scales/patterns that look like clothing covering the entire torso
+- No exposed torsos, no bikini tops, no bare chests - all characters wear proper tops/shirts
+- Think Disney/Pixar character design - always family-friendly and fully dressed
 
 CRITICAL - NO TEXT except the view labels:
 - Do NOT include the character's name in the image
@@ -1160,8 +1186,16 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Name too long (max 50 characters)' });
   }
 
-  // Helper to generate TTS for a single text
-  const generateSingleAudio = async (text: string, storagePath: string): Promise<string> => {
+  // Voice setting variations for natural-sounding variety
+  // Each version has slightly different stability/style to create natural intonation differences
+  const voiceVariations = [
+    { stability: 0.5, similarity_boost: 0.75, style: 0.5 },   // neutral
+    { stability: 0.4, similarity_boost: 0.80, style: 0.6 },   // slightly more expressive
+    { stability: 0.55, similarity_boost: 0.70, style: 0.4 },  // slightly calmer
+  ];
+
+  // Helper to generate TTS for a single text with specific voice settings
+  const generateSingleAudio = async (text: string, storagePath: string, voiceSettings: typeof voiceVariations[0]): Promise<string> => {
     const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
       method: 'POST',
       headers: {
@@ -1172,9 +1206,7 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
         text,
         model_id: 'eleven_turbo_v2_5',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.5,
+          ...voiceSettings,
           use_speaker_boost: true,
         },
       }),
@@ -1196,22 +1228,39 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   };
 
   try {
-    console.log('Calling ElevenLabs API for both regular and possessive forms...');
+    console.log('Calling ElevenLabs API for multiple versions of regular and possessive forms...');
 
     const baseStoragePath = nameType === 'child'
       ? `name-audio/children/${id}`
       : `name-audio/pets/${id}`;
 
-    // Generate both regular and possessive forms in parallel
-    const [audioUrl, possessiveAudioUrl] = await Promise.all([
-      generateSingleAudio(name, `${baseStoragePath}.mp3`),
-      generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive.mp3`),
-    ]);
+    // Generate 3 versions of regular and 3 versions of possessive (6 total)
+    // Using different voice settings for natural variation
+    const allPromises = [
+      // Regular versions (v1, v2, v3)
+      ...voiceVariations.map((settings, i) =>
+        generateSingleAudio(name, `${baseStoragePath}-v${i + 1}.mp3`, settings)
+      ),
+      // Possessive versions (v1, v2, v3)
+      ...voiceVariations.map((settings, i) =>
+        generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive-v${i + 1}.mp3`, settings)
+      ),
+    ];
 
-    console.log('Blob upload success:', { audioUrl, possessiveAudioUrl });
+    const results = await Promise.all(allPromises);
+    const audioUrls = results.slice(0, 3);
+    const possessiveAudioUrls = results.slice(3, 6);
+
+    // For backwards compatibility, also set the main URLs to the first version
+    const audioUrl = audioUrls[0];
+    const possessiveAudioUrl = possessiveAudioUrls[0];
+
+    console.log('Blob upload success:', { audioUrls, possessiveAudioUrls });
     return res.status(200).json({
       audioUrl,
       possessiveAudioUrl,
+      audioUrls,           // Array of 3 versions
+      possessiveAudioUrls, // Array of 3 versions
       name,
       type: nameType,
       id

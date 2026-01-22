@@ -986,6 +986,11 @@ export function StoryEditor() {
   // Visual assets lightbox
   const [visualAssetLightboxUrl, setVisualAssetLightboxUrl] = useState<string | null>(null);
 
+  // Visual asset editing state
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [editingAssetDescription, setEditingAssetDescription] = useState('');
+  const [savingAssetDescription, setSavingAssetDescription] = useState(false);
+
   // Computed merged visual assets from Story Bible + legacy sources
   const mergedVisualAssets = useMemo(() => {
     if (!story) return { locations: [], characters: [], objects: [] };
@@ -1216,6 +1221,62 @@ export function StoryEditor() {
 
   const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
     setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
+  };
+
+  // Start editing a visual asset description
+  const startEditingAsset = (assetId: string, currentDescription: string) => {
+    setEditingAssetId(assetId);
+    setEditingAssetDescription(currentDescription);
+  };
+
+  // Cancel editing visual asset
+  const cancelEditingAsset = () => {
+    setEditingAssetId(null);
+    setEditingAssetDescription('');
+  };
+
+  // Save visual asset description
+  const handleSaveAssetDescription = async (assetType: 'locations' | 'characters' | 'objects', assetId: string) => {
+    if (!story?.story_bible?.visualAssets) return;
+
+    setSavingAssetDescription(true);
+    setError(null);
+
+    try {
+      // Create updated visual assets
+      const updatedVisualAssets = { ...story.story_bible.visualAssets };
+      const assetList = [...(updatedVisualAssets[assetType] || [])];
+      const assetIndex = assetList.findIndex(a => a.id === assetId);
+
+      if (assetIndex !== -1) {
+        assetList[assetIndex] = {
+          ...assetList[assetIndex],
+          description: editingAssetDescription,
+        };
+        updatedVisualAssets[assetType] = assetList;
+      }
+
+      const updatedStoryBible = {
+        ...story.story_bible,
+        visualAssets: updatedVisualAssets,
+      };
+
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyBible: updatedStoryBible }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save asset description');
+      const data = await res.json();
+      setStory({ ...story, ...data.story });
+      setEditingAssetId(null);
+      setEditingAssetDescription('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save asset description');
+    } finally {
+      setSavingAssetDescription(false);
+    }
   };
 
   const handleGenerateStoryBible = async () => {
@@ -2497,7 +2558,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{loc.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{loc.description}</div>
+                                      {editingAssetId === loc.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('locations', loc.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => loc.source === 'visualAssets' && startEditingAsset(loc.id, loc.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${loc.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={loc.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {loc.description}
+                                        </div>
+                                      )}
                                       {loc.mood && <div className="text-xs text-slate-500 mt-1">Mood: {loc.mood}</div>}
                                     </div>
                                   </div>
@@ -2549,7 +2643,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{char.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{char.description}</div>
+                                      {editingAssetId === char.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('characters', char.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => char.source === 'visualAssets' && startEditingAsset(char.id, char.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${char.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={char.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {char.description}
+                                        </div>
+                                      )}
                                       {(char.personality || char.role) && (
                                         <div className="text-xs text-slate-500 mt-1">
                                           {[char.personality, char.role].filter(Boolean).join(' • ')}
@@ -2605,7 +2732,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{obj.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{obj.description}</div>
+                                      {editingAssetId === obj.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('objects', obj.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => obj.source === 'visualAssets' && startEditingAsset(obj.id, obj.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${obj.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={obj.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {obj.description}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );

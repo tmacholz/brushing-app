@@ -28,6 +28,8 @@ export interface Child {
   characterId: string; // Selected character ('boy' or 'girl')
   nameAudioUrl: string | null; // Pre-generated TTS of child's name for audio splicing
   namePossessiveAudioUrl: string | null; // Pre-generated TTS of child's name possessive (e.g., "Tim's")
+  nameAudioUrls: string[]; // Array of 3 versions for variety
+  namePossessiveAudioUrls: string[]; // Array of 3 possessive versions for variety
   // Collectibles
   collectedStickers: string[]; // Array of collectible IDs
   collectedAccessories: string[]; // Array of collectible IDs
@@ -153,9 +155,10 @@ export interface StoryChapter {
 
 // Item in the narration sequence - either an audio clip or a name placeholder
 // Possessive forms (e.g., "Tim's") are separate placeholders to avoid splicing issues
+// followedByPause indicates the name is followed by punctuation (comma, period) requiring extra pause
 export type NarrationSequenceItem =
   | { type: 'audio'; url: string }
-  | { type: 'name'; placeholder: 'CHILD' | 'PET' | 'CHILD_POSSESSIVE' | 'PET_POSSESSIVE' };
+  | { type: 'name'; placeholder: 'CHILD' | 'PET' | 'CHILD_POSSESSIVE' | 'PET_POSSESSIVE'; followedByPause?: boolean };
 
 // Character expression for portrait overlay circles
 export type Expression = 'happy' | 'sad' | 'surprised' | 'worried' | 'determined' | 'excited';
