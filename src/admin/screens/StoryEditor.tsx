@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '../../context/ToastContext';
 import {
   ArrowLeft,
   Save,
@@ -937,6 +938,7 @@ function EditableField({ value, onSave, multiline = false, className = '', label
 export function StoryEditor() {
   const params = useParams<{ worldId: string; storyId: string }>();
   const navigate = useNavigate();
+  const { showToast } = useToast();
   // These are guaranteed by the route definition
   const worldId = params.worldId!;
   const storyId = params.storyId!;
@@ -985,6 +987,11 @@ export function StoryEditor() {
 
   // Visual assets lightbox
   const [visualAssetLightboxUrl, setVisualAssetLightboxUrl] = useState<string | null>(null);
+
+  // Visual asset editing state
+  const [editingAssetId, setEditingAssetId] = useState<string | null>(null);
+  const [editingAssetDescription, setEditingAssetDescription] = useState('');
+  const [savingAssetDescription, setSavingAssetDescription] = useState(false);
 
   // Computed merged visual assets from Story Bible + legacy sources
   const mergedVisualAssets = useMemo(() => {
@@ -1174,8 +1181,10 @@ export function StoryEditor() {
       if (!res.ok) throw new Error('Failed to save story');
       const data = await res.json();
       setStory({ ...story!, ...data.story });
+      showToast('Story saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save story');
+      showToast('Failed to save story', 'error');
     } finally {
       setSaving(false);
     }
@@ -1197,8 +1206,10 @@ export function StoryEditor() {
       const data = await res.json();
       setStory({ ...story!, ...data.story });
       setEditingStoryBible(false);
+      showToast('Story bible saved');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save story bible');
+      showToast('Failed to save story bible', 'error');
     } finally {
       setSavingStoryBible(false);
     }
@@ -1216,6 +1227,64 @@ export function StoryEditor() {
 
   const updateStoryBibleField = (field: keyof StoryBible, value: string | string[] | null) => {
     setStoryBibleDraft(prev => prev ? { ...prev, [field]: value } : { [field]: value });
+  };
+
+  // Start editing a visual asset description
+  const startEditingAsset = (assetId: string, currentDescription: string) => {
+    setEditingAssetId(assetId);
+    setEditingAssetDescription(currentDescription);
+  };
+
+  // Cancel editing visual asset
+  const cancelEditingAsset = () => {
+    setEditingAssetId(null);
+    setEditingAssetDescription('');
+  };
+
+  // Save visual asset description
+  const handleSaveAssetDescription = async (assetType: 'locations' | 'characters' | 'objects', assetId: string) => {
+    if (!story?.story_bible?.visualAssets) return;
+
+    setSavingAssetDescription(true);
+    setError(null);
+
+    try {
+      // Create updated visual assets
+      const updatedVisualAssets = { ...story.story_bible.visualAssets };
+      const assetList = [...(updatedVisualAssets[assetType] || [])];
+      const assetIndex = assetList.findIndex(a => a.id === assetId);
+
+      if (assetIndex !== -1) {
+        assetList[assetIndex] = {
+          ...assetList[assetIndex],
+          description: editingAssetDescription,
+        };
+        updatedVisualAssets[assetType] = assetList;
+      }
+
+      const updatedStoryBible = {
+        ...story.story_bible,
+        visualAssets: updatedVisualAssets,
+      };
+
+      const res = await fetch(`/api/admin/stories/${storyId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyBible: updatedStoryBible }),
+      });
+
+      if (!res.ok) throw new Error('Failed to save asset description');
+      const data = await res.json();
+      setStory({ ...story, ...data.story });
+      setEditingAssetId(null);
+      setEditingAssetDescription('');
+      showToast('Description saved');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save asset description');
+      showToast('Failed to save description', 'error');
+    } finally {
+      setSavingAssetDescription(false);
+    }
   };
 
   const handleGenerateStoryBible = async () => {
@@ -1236,8 +1305,10 @@ export function StoryEditor() {
 
       // Refresh story to get updated story bible and storyboard data
       await fetchStory();
+      showToast('Story bible generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate Story Bible');
+      showToast('Failed to generate story bible', 'error');
     } finally {
       setGeneratingStoryBible(false);
     }
@@ -1246,6 +1317,7 @@ export function StoryEditor() {
   const handleGenerateStoryboard = async () => {
     if (!story?.story_bible) {
       setError('Story Bible required. Add or generate a Story Bible first.');
+      showToast('Story Bible required first', 'error');
       return;
     }
 
@@ -1266,8 +1338,10 @@ export function StoryEditor() {
 
       // Refresh story to get updated segment storyboard data
       await fetchStory();
+      showToast('Storyboard generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate storyboard');
+      showToast('Failed to generate storyboard', 'error');
     } finally {
       setGeneratingStoryboard(false);
     }
@@ -1284,8 +1358,10 @@ export function StoryEditor() {
       if (!res.ok) throw new Error('Failed to update publish status');
       const data = await res.json();
       setStory({ ...story!, ...data.story });
+      showToast(publish ? 'Story published' : 'Story unpublished');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update publish status');
+      showToast('Failed to update publish status', 'error');
     }
   };
 
@@ -1337,8 +1413,10 @@ export function StoryEditor() {
       if (!saveRes.ok) throw new Error('Failed to save music URL');
 
       setStory({ ...story, background_music_url: data.musicUrl });
+      showToast('Music generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate music');
+      showToast('Failed to generate music', 'error');
     } finally {
       setGeneratingMusic(false);
     }
@@ -1407,8 +1485,10 @@ export function StoryEditor() {
       if (!saveRes.ok) throw new Error('Failed to save cover image URL');
 
       setStory({ ...story, cover_image_url: data.coverImageUrl });
+      showToast('Cover image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate cover image');
+      showToast('Failed to generate cover image', 'error');
     } finally {
       setGeneratingCoverImage(false);
     }
@@ -1461,8 +1541,10 @@ export function StoryEditor() {
           ),
         };
       });
+      showToast('Reference image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+      showToast('Failed to generate reference image', 'error');
     } finally {
       setGeneratingRefImages(prev => {
         const next = new Set(prev);
@@ -1557,8 +1639,10 @@ export function StoryEditor() {
           ),
         };
       });
+      showToast('Asset image generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate reference image');
+      showToast('Failed to generate asset image', 'error');
     } finally {
       setGeneratingAssetImages(prev => {
         const next = new Set(prev);
@@ -2497,7 +2581,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{loc.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{loc.description}</div>
+                                      {editingAssetId === loc.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('locations', loc.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => loc.source === 'visualAssets' && startEditingAsset(loc.id, loc.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${loc.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={loc.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {loc.description}
+                                        </div>
+                                      )}
                                       {loc.mood && <div className="text-xs text-slate-500 mt-1">Mood: {loc.mood}</div>}
                                     </div>
                                   </div>
@@ -2549,7 +2666,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{char.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{char.description}</div>
+                                      {editingAssetId === char.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('characters', char.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => char.source === 'visualAssets' && startEditingAsset(char.id, char.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${char.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={char.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {char.description}
+                                        </div>
+                                      )}
                                       {(char.personality || char.role) && (
                                         <div className="text-xs text-slate-500 mt-1">
                                           {[char.personality, char.role].filter(Boolean).join(' • ')}
@@ -2605,7 +2755,40 @@ export function StoryEditor() {
                                     {/* Details */}
                                     <div className="p-2 flex-1 min-w-0">
                                       <div className="font-medium text-sm text-white truncate">{obj.name}</div>
-                                      <div className="text-xs text-slate-400 line-clamp-2">{obj.description}</div>
+                                      {editingAssetId === obj.id ? (
+                                        <div className="mt-1">
+                                          <textarea
+                                            value={editingAssetDescription}
+                                            onChange={(e) => setEditingAssetDescription(e.target.value)}
+                                            className="w-full text-xs bg-slate-700 text-slate-200 rounded px-2 py-1 resize-none"
+                                            rows={3}
+                                            autoFocus
+                                          />
+                                          <div className="flex gap-1 mt-1">
+                                            <button
+                                              onClick={() => handleSaveAssetDescription('objects', obj.id)}
+                                              disabled={savingAssetDescription}
+                                              className="p-1 bg-green-500/20 hover:bg-green-500/30 text-green-300 rounded transition-colors disabled:opacity-50"
+                                            >
+                                              {savingAssetDescription ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            </button>
+                                            <button
+                                              onClick={cancelEditingAsset}
+                                              className="p-1 bg-slate-600/50 hover:bg-slate-600 text-slate-300 rounded transition-colors"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div
+                                          onClick={() => obj.source === 'visualAssets' && startEditingAsset(obj.id, obj.description)}
+                                          className={`text-xs text-slate-400 line-clamp-2 ${obj.source === 'visualAssets' ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                                          title={obj.source === 'visualAssets' ? 'Click to edit' : 'Edit in story references'}
+                                        >
+                                          {obj.description}
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
                                 );

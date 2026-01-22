@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Check, Trash2, ToggleLeft, ToggleRight, RefreshCw, Loader2 } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
+import { useToast } from '../context/ToastContext';
 import { characters, getCharacterById } from '../data/characters';
 import { DEFAULT_TASKS } from '../types';
 import type { TaskConfig } from '../types';
@@ -119,6 +120,7 @@ function TaskBonusSettings({
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig, refreshChildren } = useChild();
   const { playSound } = useAudio();
+  const { showToast } = useToast();
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showResetAllConfirm, setShowResetAllConfirm] = useState(false);
@@ -168,15 +170,18 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         setAudioRegenerateStatus('success');
         // Refresh child data to get updated audio URLs
         refreshChildren();
+        showToast('Audio regenerated');
         // Clear success status after 3 seconds
         setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
       } else {
         setAudioRegenerateStatus('error');
+        showToast('Failed to regenerate audio', 'error');
         setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
       }
     } catch (error) {
       console.error('Failed to regenerate audio:', error);
       setAudioRegenerateStatus('error');
+      showToast('Failed to regenerate audio', 'error');
       setTimeout(() => setAudioRegenerateStatus('idle'), 3000);
     } finally {
       setRegeneratingAudio(false);

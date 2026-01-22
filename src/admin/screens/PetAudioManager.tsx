@@ -92,7 +92,7 @@ export function PetAudioManager() {
 
       const data = await res.json();
 
-      // Save both regular and possessive audio to database
+      // Save all audio versions (regular, possessive, and their arrays) to database
       await fetch('/api/admin/pets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -101,6 +101,8 @@ export function PetAudioManager() {
           petId,
           audioUrl: data.audioUrl,
           possessiveAudioUrl: data.possessiveAudioUrl,
+          audioUrls: data.audioUrls,
+          possessiveAudioUrls: data.possessiveAudioUrls,
         }),
       });
 

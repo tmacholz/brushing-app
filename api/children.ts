@@ -28,6 +28,8 @@ function toChild(row: Record<string, unknown>) {
     lastBrushDate: row.last_brush_date,
     nameAudioUrl: row.name_audio_url,
     namePossessiveAudioUrl: row.name_possessive_audio_url,
+    nameAudioUrls: row.name_audio_urls || [],           // Array of 3 versions for variety
+    namePossessiveAudioUrls: row.name_possessive_audio_urls || [], // Array of 3 possessive versions
     createdAt: row.created_at,
     // Collectibles
     collectedStickers: row.collected_stickers || [],
@@ -227,20 +229,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           console.log('[Children API] Regenerating audio for child:', id, child.name);
-          const { regular, possessive } = await generateNameAudio(child.name as string, id);
 
-          if (regular || possessive) {
-            await sql`
-              UPDATE children
-              SET name_audio_url = ${regular}, name_possessive_audio_url = ${possessive}
-              WHERE id = ${id}
-            `;
+          // Call the generate API to get multiple audio versions
+          const generateRes = await fetch(`${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'nameAudio',
+              name: child.name,
+              nameType: 'child',
+              id,
+            }),
+          });
+
+          if (!generateRes.ok) {
+            const error = await generateRes.text();
+            throw new Error(`Generate API error: ${error}`);
           }
+
+          const data = await generateRes.json();
+
+          // Save all versions to database
+          await sql`
+            UPDATE children
+            SET
+              name_audio_url = ${data.audioUrl},
+              name_possessive_audio_url = ${data.possessiveAudioUrl},
+              name_audio_urls = ${data.audioUrls || []},
+              name_possessive_audio_urls = ${data.possessiveAudioUrls || []}
+            WHERE id = ${id}
+          `;
 
           return res.status(200).json({
             success: true,
-            nameAudioUrl: regular,
-            namePossessiveAudioUrl: possessive,
+            nameAudioUrl: data.audioUrl,
+            namePossessiveAudioUrl: data.possessiveAudioUrl,
+            nameAudioUrls: data.audioUrls,
+            namePossessiveAudioUrls: data.possessiveAudioUrls,
           });
         } catch (error) {
           console.error('[Children API] Error regenerating audio:', error);
