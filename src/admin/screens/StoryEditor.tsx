@@ -34,6 +34,7 @@ import {
   Camera,
   Video,
   Ban,
+  Volume2,
 } from 'lucide-react';
 
 // Narration sequence item - matches the type in src/types/index.ts
@@ -964,6 +965,8 @@ export function StoryEditor() {
   // Chapter image generation state
   const [generatingImagesForChapter, setGeneratingImagesForChapter] = useState<string | null>(null);
   const [imageGenProgress, setImageGenProgress] = useState<{ current: number; total: number } | null>(null);
+  const [generatingAudioForChapter, setGeneratingAudioForChapter] = useState<string | null>(null);
+  const [audioGenProgress, setAudioGenProgress] = useState<{ current: number; total: number } | null>(null);
 
   // Cover image generation state
   const [generatingCoverImage, setGeneratingCoverImage] = useState(false);
@@ -2008,6 +2011,64 @@ export function StoryEditor() {
     setImageGenProgress(null);
   }, [storyId, handleSegmentUpdate, findRelevantReferences, story?.references, story?.story_bible]);
 
+  const handleGenerateChapterAudio = useCallback(async (chapter: Chapter) => {
+    // Find segments without audio
+    const segmentsWithoutAudio = chapter.segments.filter(s =>
+      !s.narration_sequence || s.narration_sequence.length === 0
+    );
+
+    if (segmentsWithoutAudio.length === 0) {
+      alert('All segments in this chapter already have audio.');
+      return;
+    }
+
+    setGeneratingAudioForChapter(chapter.id);
+    setAudioGenProgress({ current: 0, total: segmentsWithoutAudio.length });
+
+    for (let i = 0; i < segmentsWithoutAudio.length; i++) {
+      const segment = segmentsWithoutAudio[i];
+      setAudioGenProgress({ current: i + 1, total: segmentsWithoutAudio.length });
+
+      try {
+        const res = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'segmentAudio',
+            segmentId: segment.id,
+            text: segment.text,
+            storyId,
+            chapterNumber: chapter.chapter_number,
+            segmentOrder: segment.segment_order,
+          }),
+        });
+
+        if (!res.ok) {
+          const error = await res.text();
+          console.error(`Failed to generate audio for segment ${segment.id}:`, error);
+          continue;
+        }
+
+        const data = await res.json();
+
+        // Save to database
+        await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ narrationSequence: data.narrationSequence }),
+        });
+
+        handleSegmentUpdate(segment.id, { narration_sequence: data.narrationSequence });
+      } catch (error) {
+        console.error(`Error generating audio for segment ${segment.id}:`, error);
+      }
+    }
+
+    setGeneratingAudioForChapter(null);
+    setAudioGenProgress(null);
+    showToast(`Generated audio for ${segmentsWithoutAudio.length} segments`);
+  }, [storyId, handleSegmentUpdate, showToast]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
@@ -3011,7 +3072,7 @@ export function StoryEditor() {
                         </div>
                       )}
 
-                      {/* Chapter Actions - Generate All Images */}
+                      {/* Chapter Actions - Generate All Images & Audio */}
                       <div className="mb-4 flex items-center gap-3 flex-wrap">
                         <button
                           onClick={() => handleGenerateChapterImages(chapter)}
@@ -3026,16 +3087,36 @@ export function StoryEditor() {
                           {chapter.segments.every(s => s.image_url) ? 'Regenerate All Images' : 'Generate All Images'}
                         </button>
 
+                        <button
+                          onClick={() => handleGenerateChapterAudio(chapter)}
+                          disabled={generatingAudioForChapter === chapter.id}
+                          className="flex items-center gap-2 px-4 py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {generatingAudioForChapter === chapter.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Volume2 className="w-4 h-4" />
+                          )}
+                          {chapter.segments.every(s => s.narration_sequence?.length) ? 'Regenerate All Audio' : 'Generate All Audio'}
+                        </button>
+
                         {generatingImagesForChapter === chapter.id && imageGenProgress && (
                           <span className="text-sm text-slate-400">
                             Generating image {imageGenProgress.current} of {imageGenProgress.total}...
                           </span>
                         )}
 
-                        {/* Image status summary */}
-                        {!generatingImagesForChapter && (
+                        {generatingAudioForChapter === chapter.id && audioGenProgress && (
+                          <span className="text-sm text-slate-400">
+                            Generating audio {audioGenProgress.current} of {audioGenProgress.total}...
+                          </span>
+                        )}
+
+                        {/* Status summary */}
+                        {!generatingImagesForChapter && !generatingAudioForChapter && (
                           <span className="ml-auto text-xs text-slate-500">
-                            {chapter.segments.filter(s => s.image_url).length}/{chapter.segments.length} images ready
+                            {chapter.segments.filter(s => s.image_url).length}/{chapter.segments.length} images,{' '}
+                            {chapter.segments.filter(s => s.narration_sequence?.length).length}/{chapter.segments.length} audio
                           </span>
                         )}
                       </div>

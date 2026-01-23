@@ -86,6 +86,35 @@ export function WorldEditor() {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
+  const [musicPrompt, setMusicPrompt] = useState('');
+  const [showMusicPrompt, setShowMusicPrompt] = useState(false);
+
+  // Generate default music prompt based on world context
+  const generateDefaultMusicPrompt = useCallback(() => {
+    if (!world) return '';
+
+    // Theme-specific musical elements
+    const themeElements: Record<string, string> = {
+      'magical-forest': 'woodland flutes, gentle harps, bird-like melodies, rustling leaves ambiance, fairy-tale wonder',
+      'space': 'synthesizers, celestial pads, twinkling stars sounds, cosmic whooshes, futuristic wonder',
+      'underwater': 'flowing water sounds, bubble effects, whale-song inspired melodies, oceanic swells, deep sea mystery',
+      'dinosaurs': 'tribal drums, prehistoric atmosphere, bold brass, stomping rhythms, ancient jungle vibes',
+      'pirates': 'sea shanty rhythms, accordion flourishes, ocean waves, adventurous fiddle, nautical adventure',
+    };
+
+    const themeMusic = world.theme ? themeElements[world.theme] || '' : '';
+
+    return `Upbeat, adventurous instrumental background music for a children's story world.
+
+World: ${world.display_name}
+Description: ${world.description || 'A magical adventure world'}
+Theme elements: ${themeMusic || 'whimsical and magical'}
+
+Style: Energetic yet gentle, exciting adventure vibes suitable for ages 4-8. No vocals or lyrics. Loopable.
+Mood: Sense of adventure, excitement, discovery, and fun! Should feel like embarking on an epic quest.
+Tempo: Medium-upbeat, driving but not frantic
+Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythmic percussion, ${themeMusic ? 'plus ' + themeMusic : 'magical chimes'}`;
+  }, [world]);
 
   const fetchWorld = useCallback(async () => {
     if (!worldId) return;
@@ -201,6 +230,9 @@ export function WorldEditor() {
     setError(null);
 
     try {
+      // Use custom prompt if provided, otherwise let API generate default
+      const promptToUse = musicPrompt.trim() || undefined;
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,6 +242,7 @@ export function WorldEditor() {
           worldName: world.display_name,
           worldDescription: world.description,
           worldTheme: world.theme,
+          musicPrompt: promptToUse,
         }),
       });
 
@@ -226,6 +259,7 @@ export function WorldEditor() {
       if (!saveRes.ok) throw new Error('Failed to save music URL');
       const saveData = await saveRes.json();
       setWorld(saveData.world);
+      setShowMusicPrompt(false);
       showToast('Music generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate music');
@@ -460,23 +494,62 @@ export function WorldEditor() {
               <Music className="w-5 h-5 text-purple-400" />
               Background Music
             </h2>
-            <button
-              onClick={handleGenerateMusic}
-              disabled={generatingMusic}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {generatingMusic ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
+            <div className="flex items-center gap-2">
+              {!showMusicPrompt && (
+                <button
+                  onClick={() => {
+                    setMusicPrompt(generateDefaultMusicPrompt());
+                    setShowMusicPrompt(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Edit Prompt
+                </button>
               )}
-              {generatingMusic ? 'Generating...' : world.background_music_url ? 'Regenerate' : 'Generate Music'}
-            </button>
+              <button
+                onClick={handleGenerateMusic}
+                disabled={generatingMusic}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {generatingMusic ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {generatingMusic ? 'Generating...' : world.background_music_url ? 'Regenerate' : 'Generate Music'}
+              </button>
+            </div>
           </div>
 
           <p className="text-sm text-slate-400 mb-4">
             Background music plays during all stories in this world. Shared across stories to reduce costs.
           </p>
+
+          {/* Editable Music Prompt */}
+          {showMusicPrompt && (
+            <div className="mb-4 p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-slate-300 font-medium">Music Generation Prompt</label>
+                <button
+                  onClick={() => setShowMusicPrompt(false)}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Hide
+                </button>
+              </div>
+              <textarea
+                value={musicPrompt}
+                onChange={(e) => setMusicPrompt(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none font-mono"
+                placeholder="Describe the music you want..."
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Customize the prompt to generate different styles. The music will be 2 minutes and loopable.
+              </p>
+            </div>
+          )}
 
           {world.background_music_url ? (
             <div className="flex items-center gap-4">
