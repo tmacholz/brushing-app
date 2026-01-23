@@ -1,4 +1,4 @@
-import type { StoryArc, StorySegment, StoryBible, VisualAsset, Child, Pet } from '../types';
+import type { StoryArc, StorySegment, StoryBible, Child, Pet } from '../types';
 import { getCharacterById } from '../data/characters';
 
 interface GenerateImageResult {
