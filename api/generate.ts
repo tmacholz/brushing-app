@@ -657,6 +657,7 @@ interface BackgroundMusicRequest {
   worldName?: string;
   worldDescription?: string;
   worldTheme?: string;
+  musicPrompt?: string; // Optional custom prompt from admin
   // Legacy story-level fields (deprecated)
   storyId?: string;
   storyTitle?: string;
@@ -1274,7 +1275,7 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
 }
 
 async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelResponse) {
-  const { worldId, worldName, worldDescription, worldTheme, storyId, storyTitle, storyDescription } = req;
+  const { worldId, worldName, worldDescription, worldTheme, musicPrompt: customPrompt, storyId, storyTitle, storyDescription } = req;
 
   // Support both world-level and story-level (legacy) music generation
   const isWorldLevel = !!worldId;
@@ -1282,7 +1283,7 @@ async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelRes
   const name = worldName || storyTitle;
   const description = worldDescription || storyDescription;
 
-  console.log('handleBackgroundMusic called with:', { worldId, worldName, storyId, storyTitle, worldTheme });
+  console.log('handleBackgroundMusic called with:', { worldId, worldName, storyId, storyTitle, worldTheme, hasCustomPrompt: !!customPrompt });
 
   if (!id || !name) {
     return res.status(400).json({ error: 'Missing required fields: worldId/storyId, worldName/storyTitle' });
@@ -1297,20 +1298,22 @@ async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelRes
   }
 
   try {
-    // Generate prompt for instrumental music
-    const musicPrompt = isWorldLevel
-      ? `Gentle, whimsical instrumental background music for a children's story world.
+    // Use custom prompt if provided, otherwise generate default upbeat adventure prompt
+    const musicPrompt = customPrompt || (isWorldLevel
+      ? `Upbeat, adventurous instrumental background music for a children's story world.
 World: ${name} - ${description || ''}
 Theme: ${worldTheme || 'magical adventure'}
-Style: Soft, enchanting, loopable background music suitable for ages 4-8. No vocals or lyrics.
-Mood: Wonder, gentle excitement, cozy and safe feeling. Should work as ambient background for multiple stories.
-Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`
-      : `Gentle, whimsical instrumental music for a children's story.
+Style: Energetic yet gentle, exciting adventure vibes suitable for ages 4-8. No vocals or lyrics. Loopable.
+Mood: Sense of adventure, excitement, discovery, and fun! Should feel like embarking on an epic quest while remaining child-friendly.
+Tempo: Medium-upbeat, driving but not frantic
+Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythmic percussion, magical chimes.`
+      : `Upbeat, adventurous instrumental music for a children's story.
 Theme: ${worldTheme || 'magical adventure'}
 Story: ${name} - ${description || ''}
-Style: Soft, enchanting, suitable for ages 4-8. No vocals or lyrics.
-Mood: Wonder, gentle excitement, cozy and safe feeling.
-Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
+Style: Energetic yet gentle, exciting adventure vibes suitable for ages 4-8. No vocals or lyrics.
+Mood: Sense of adventure, excitement, discovery, and fun!
+Tempo: Medium-upbeat, driving but not frantic
+Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythmic percussion.`);
 
     console.log('Calling ElevenLabs Music API...');
     const response = await fetch('https://api.elevenlabs.io/v1/music/generate', {

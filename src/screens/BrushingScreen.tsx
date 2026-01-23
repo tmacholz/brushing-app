@@ -501,6 +501,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
           narrationKey = `recap-${currentChapter.id}`;
         }
         break;
+      case 'title':
+        if (currentChapter?.titleNarrationSequence && currentChapter.titleNarrationSequence.length > 0) {
+          narrationSequence = currentChapter.titleNarrationSequence;
+          narrationKey = `title-${currentChapter.id}`;
+        }
+        break;
       case 'story':
         if (currentSegment?.narrationSequence && currentSegment.narrationSequence.length > 0) {
           narrationSequence = currentSegment.narrationSequence;

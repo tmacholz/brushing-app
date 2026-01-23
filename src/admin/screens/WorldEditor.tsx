@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useToast } from '../../context/ToastContext';
@@ -19,6 +19,9 @@ import {
   Music,
   Play,
   Pause,
+  Upload,
+  Library,
+  X,
 } from 'lucide-react';
 
 interface World {
@@ -86,6 +89,203 @@ export function WorldEditor() {
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [musicAudio, setMusicAudio] = useState<HTMLAudioElement | null>(null);
+  const [musicPrompt, setMusicPrompt] = useState('');
+  const [showMusicPrompt, setShowMusicPrompt] = useState(false);
+
+  // Music upload state
+  const [uploadingMusic, setUploadingMusic] = useState(false);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // Music library state
+  const [showMusicLibrary, setShowMusicLibrary] = useState(false);
+  const [musicLibrary, setMusicLibrary] = useState<Array<{
+    id: string;
+    name: string;
+    url: string;
+    theme: string | null;
+    source: 'world';
+  }>>([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(false);
+  const [previewingMusicId, setPreviewingMusicId] = useState<string | null>(null);
+  const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
+
+  // Generate default music prompt based on world context
+  const generateDefaultMusicPrompt = useCallback(() => {
+    if (!world) return '';
+
+    // Theme-specific musical elements
+    const themeElements: Record<string, string> = {
+      'magical-forest': 'woodland flutes, gentle harps, bird-like melodies, rustling leaves ambiance, fairy-tale wonder',
+      'space': 'synthesizers, celestial pads, twinkling stars sounds, cosmic whooshes, futuristic wonder',
+      'underwater': 'flowing water sounds, bubble effects, whale-song inspired melodies, oceanic swells, deep sea mystery',
+      'dinosaurs': 'tribal drums, prehistoric atmosphere, bold brass, stomping rhythms, ancient jungle vibes',
+      'pirates': 'sea shanty rhythms, accordion flourishes, ocean waves, adventurous fiddle, nautical adventure',
+    };
+
+    const themeMusic = world.theme ? themeElements[world.theme] || '' : '';
+
+    return `Upbeat, adventurous instrumental background music for a children's story world.
+
+World: ${world.display_name}
+Description: ${world.description || 'A magical adventure world'}
+Theme elements: ${themeMusic || 'whimsical and magical'}
+
+Style: Energetic yet gentle, exciting adventure vibes suitable for ages 4-8. No vocals or lyrics. Loopable.
+Mood: Sense of adventure, excitement, discovery, and fun! Should feel like embarking on an epic quest.
+Tempo: Medium-upbeat, driving but not frantic
+Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythmic percussion, ${themeMusic ? 'plus ' + themeMusic : 'magical chimes'}`;
+  }, [world]);
+
+  // Handle audio file upload
+  const handleAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !world) return;
+
+    // Validate file type
+    const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav', 'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm'];
+    if (!validTypes.includes(file.type)) {
+      showToast('Please upload a valid audio file (MP3, WAV, OGG, AAC, M4A)', 'error');
+      return;
+    }
+
+    // Validate file size (50MB max)
+    if (file.size > 50 * 1024 * 1024) {
+      showToast('File too large. Maximum size is 50MB', 'error');
+      return;
+    }
+
+    setUploadingMusic(true);
+    setError(null);
+
+    try {
+      // Convert file to base64
+      const reader = new FileReader();
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          // Remove data URL prefix to get just the base64 data
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Upload to server via consolidated admin endpoint
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'uploadAudio',
+          fileName: file.name,
+          fileData: base64Data,
+          fileType: file.type,
+          worldId: world.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to upload audio');
+      }
+
+      const data = await res.json();
+
+      // Save music URL to world
+      const saveRes = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backgroundMusicUrl: data.url }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save music URL');
+      const saveData = await saveRes.json();
+      setWorld(saveData.world);
+      showToast('Music uploaded successfully');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload audio');
+      showToast('Failed to upload audio', 'error');
+    } finally {
+      setUploadingMusic(false);
+      if (audioInputRef.current) {
+        audioInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Fetch music library via consolidated admin endpoint
+  const fetchMusicLibrary = async () => {
+    setLoadingLibrary(true);
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'musicLibrary' }),
+      });
+      if (!res.ok) throw new Error('Failed to fetch music library');
+      const data = await res.json();
+      // Filter out current world's music
+      setMusicLibrary(data.music.filter((m: { id: string }) => m.id !== worldId));
+    } catch (err) {
+      console.error('Failed to fetch music library:', err);
+      showToast('Failed to load music library', 'error');
+    } finally {
+      setLoadingLibrary(false);
+    }
+  };
+
+  // Open music library
+  const handleOpenMusicLibrary = () => {
+    setShowMusicLibrary(true);
+    fetchMusicLibrary();
+  };
+
+  // Preview music in library
+  const handlePreviewLibraryMusic = (musicItem: { id: string; url: string }) => {
+    // Stop any current preview
+    if (previewAudio) {
+      previewAudio.pause();
+      if (previewingMusicId === musicItem.id) {
+        setPreviewingMusicId(null);
+        return;
+      }
+    }
+
+    const audio = new Audio(musicItem.url);
+    audio.addEventListener('ended', () => setPreviewingMusicId(null));
+    audio.play();
+    setPreviewAudio(audio);
+    setPreviewingMusicId(musicItem.id);
+  };
+
+  // Select music from library
+  const handleSelectLibraryMusic = async (musicUrl: string) => {
+    if (!world) return;
+
+    try {
+      const saveRes = await fetch(`/api/admin/worlds/${worldId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backgroundMusicUrl: musicUrl }),
+      });
+
+      if (!saveRes.ok) throw new Error('Failed to save music URL');
+      const saveData = await saveRes.json();
+      setWorld(saveData.world);
+      setShowMusicLibrary(false);
+
+      // Stop preview if playing
+      if (previewAudio) {
+        previewAudio.pause();
+        setPreviewingMusicId(null);
+      }
+
+      showToast('Music selected');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select music');
+      showToast('Failed to select music', 'error');
+    }
+  };
 
   const fetchWorld = useCallback(async () => {
     if (!worldId) return;
@@ -201,6 +401,9 @@ export function WorldEditor() {
     setError(null);
 
     try {
+      // Use custom prompt if provided, otherwise let API generate default
+      const promptToUse = musicPrompt.trim() || undefined;
+
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,6 +413,7 @@ export function WorldEditor() {
           worldName: world.display_name,
           worldDescription: world.description,
           worldTheme: world.theme,
+          musicPrompt: promptToUse,
         }),
       });
 
@@ -226,6 +430,7 @@ export function WorldEditor() {
       if (!saveRes.ok) throw new Error('Failed to save music URL');
       const saveData = await saveRes.json();
       setWorld(saveData.world);
+      setShowMusicPrompt(false);
       showToast('Music generated');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate music');
@@ -460,23 +665,92 @@ export function WorldEditor() {
               <Music className="w-5 h-5 text-purple-400" />
               Background Music
             </h2>
-            <button
-              onClick={handleGenerateMusic}
-              disabled={generatingMusic}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {generatingMusic ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Upload Audio Button */}
+              <button
+                onClick={() => audioInputRef.current?.click()}
+                disabled={uploadingMusic}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {uploadingMusic ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                Upload
+              </button>
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/mp4,audio/x-m4a,audio/webm,.mp3,.wav,.ogg,.aac,.m4a,.webm"
+                onChange={handleAudioUpload}
+                className="hidden"
+              />
+
+              {/* Music Library Button */}
+              <button
+                onClick={handleOpenMusicLibrary}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors"
+              >
+                <Library className="w-4 h-4" />
+                Library
+              </button>
+
+              {!showMusicPrompt && (
+                <button
+                  onClick={() => {
+                    setMusicPrompt(generateDefaultMusicPrompt());
+                    setShowMusicPrompt(true);
+                  }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Edit Prompt
+                </button>
               )}
-              {generatingMusic ? 'Generating...' : world.background_music_url ? 'Regenerate' : 'Generate Music'}
-            </button>
+              <button
+                onClick={handleGenerateMusic}
+                disabled={generatingMusic}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {generatingMusic ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                {generatingMusic ? 'Generating...' : world.background_music_url ? 'Regenerate' : 'Generate'}
+              </button>
+            </div>
           </div>
 
           <p className="text-sm text-slate-400 mb-4">
-            Background music plays during all stories in this world. Shared across stories to reduce costs.
+            Background music plays during all stories in this world. Upload your own, choose from the library, or generate new music.
           </p>
+
+          {/* Editable Music Prompt */}
+          {showMusicPrompt && (
+            <div className="mb-4 p-4 bg-slate-700/30 border border-slate-600/50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-slate-300 font-medium">Music Generation Prompt</label>
+                <button
+                  onClick={() => setShowMusicPrompt(false)}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Hide
+                </button>
+              </div>
+              <textarea
+                value={musicPrompt}
+                onChange={(e) => setMusicPrompt(e.target.value)}
+                rows={8}
+                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none font-mono"
+                placeholder="Describe the music you want..."
+              />
+              <p className="text-xs text-slate-500 mt-2">
+                Customize the prompt to generate different styles. The music will be 2 minutes and loopable.
+              </p>
+            </div>
+          )}
 
           {world.background_music_url ? (
             <div className="flex items-center gap-4">
@@ -504,10 +778,90 @@ export function WorldEditor() {
           ) : (
             <div className="flex items-center gap-2 text-slate-500 text-sm">
               <Music className="w-4 h-4" />
-              <span>No music yet. Click "Generate Music" to create background music for this world.</span>
+              <span>No music yet. Upload, select from library, or generate new music.</span>
             </div>
           )}
         </section>
+
+        {/* Music Library Modal */}
+        {showMusicLibrary && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Library className="w-5 h-5 text-purple-400" />
+                  Music Library
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowMusicLibrary(false);
+                    if (previewAudio) {
+                      previewAudio.pause();
+                      setPreviewingMusicId(null);
+                    }
+                  }}
+                  className="p-1 hover:bg-slate-700 rounded transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto flex-1">
+                {loadingLibrary ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                  </div>
+                ) : musicLibrary.length === 0 ? (
+                  <p className="text-center text-slate-500 py-8">
+                    No other worlds have music yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {musicLibrary.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center gap-3 p-3 bg-slate-700/30 hover:bg-slate-700/50 rounded-lg transition-colors"
+                      >
+                        <button
+                          onClick={() => handlePreviewLibraryMusic(item)}
+                          className="p-2 bg-slate-600/50 hover:bg-slate-500/50 rounded-lg transition-colors"
+                        >
+                          {previewingMusicId === item.id ? (
+                            <Pause className="w-4 h-4 text-purple-400" />
+                          ) : (
+                            <Play className="w-4 h-4 text-purple-400" />
+                          )}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{item.name}</p>
+                          {item.theme && (
+                            <p className="text-xs text-slate-400 capitalize">{item.theme.replace('-', ' ')}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleSelectLibraryMusic(item.url)}
+                          className="px-3 py-1.5 text-sm bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 rounded-lg transition-colors"
+                        >
+                          Use
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-slate-700">
+                <p className="text-xs text-slate-500 text-center">
+                  Select music from another world to reuse it here
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
 
         {/* World Details */}
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 mb-8">

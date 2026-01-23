@@ -1,7 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { put } from '@vercel/blob';
 import { getDb } from '../../lib/db.js';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'brushquest-admin';
+
+// Supported audio MIME types for upload
+const SUPPORTED_AUDIO_TYPES = [
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/wave', 'audio/x-wav',
+  'audio/ogg', 'audio/aac', 'audio/mp4', 'audio/x-m4a', 'audio/webm',
+];
+const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Static data for migration
 const worlds = [
@@ -193,6 +201,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, results });
     } catch (error) {
       return res.status(500).json({ error: 'Migration failed', details: String(error) });
+    }
+  }
+
+  // Upload audio action
+  if (action === 'uploadAudio') {
+    const { fileName, fileData, fileType, worldId } = req.body;
+
+    if (!fileName || !fileData || !fileType) {
+      return res.status(400).json({ error: 'Missing required fields: fileName, fileData, fileType' });
+    }
+
+    if (!SUPPORTED_AUDIO_TYPES.includes(fileType)) {
+      return res.status(400).json({ error: 'Unsupported audio format. Supported: MP3, WAV, OGG, AAC, M4A, WebM' });
+    }
+
+    const buffer = Buffer.from(fileData, 'base64');
+    if (buffer.length > MAX_AUDIO_SIZE) {
+      return res.status(400).json({ error: 'File too large. Maximum size is 50MB' });
+    }
+
+    try {
+      const timestamp = Date.now();
+      const safeName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const storagePath = worldId
+        ? `world-music/${worldId}-${timestamp}-${safeName}`
+        : `uploaded-music/${timestamp}-${safeName}`;
+
+      const blob = await put(storagePath, buffer, {
+        access: 'public',
+        contentType: fileType,
+        allowOverwrite: true,
+      });
+
+      return res.status(200).json({ url: blob.url, fileName, fileType, size: buffer.length });
+    } catch (error) {
+      console.error('Audio upload error:', error);
+      return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to upload audio' });
+    }
+  }
+
+  // Music library action
+  if (action === 'musicLibrary') {
+    const sql = getDb();
+    try {
+      const worldsWithMusic = await sql`
+        SELECT id, display_name, background_music_url, theme
+        FROM worlds
+        WHERE background_music_url IS NOT NULL
+        ORDER BY display_name
+      `;
+
+      const musicLibrary = worldsWithMusic.map((world) => ({
+        id: world.id,
+        name: world.display_name,
+        url: world.background_music_url,
+        theme: world.theme,
+        source: 'world',
+      }));
+
+      return res.status(200).json({ music: musicLibrary });
+    } catch (error) {
+      console.error('Error fetching music library:', error);
+      return res.status(500).json({ error: 'Failed to fetch music library' });
     }
   }
 

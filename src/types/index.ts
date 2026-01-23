@@ -109,6 +109,29 @@ export interface StoryWorld {
   isStarter: boolean;
 }
 
+// Visual asset from Story Bible for consistent imagery
+export interface VisualAsset {
+  id: string;
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+  referenceImageUrl?: string;
+}
+
+// Story Bible for visual consistency across chapters
+export interface StoryBible {
+  colorPalette?: string;
+  lightingStyle?: string;
+  artDirection?: string;
+  visualAssets?: {
+    locations: VisualAsset[];
+    characters: VisualAsset[];
+    objects: VisualAsset[];
+  };
+}
+
 // Story template - static data for story definitions
 export interface StoryTemplate {
   id: string;
@@ -119,6 +142,7 @@ export interface StoryTemplate {
   backgroundMusicUrl?: string | null;
   totalChapters: number;
   chapters: StoryChapter[];
+  storyBible?: StoryBible | null;
 }
 
 // Active story instance - created when user starts a story
@@ -135,6 +159,7 @@ export interface StoryArc {
   currentChapterIndex: number;
   isComplete: boolean;
   createdAt: string;
+  storyBible?: StoryBible | null;
 }
 
 export interface StoryChapter {
@@ -148,6 +173,7 @@ export interface StoryChapter {
   isRead: boolean;
   readAt: string | null;
   // Pre-recorded audio narration sequences for chapter intro/outro
+  titleNarrationSequence: NarrationSequenceItem[] | null;
   recapNarrationSequence: NarrationSequenceItem[] | null;
   cliffhangerNarrationSequence: NarrationSequenceItem[] | null;
   teaserNarrationSequence: NarrationSequenceItem[] | null;
@@ -177,6 +203,14 @@ export interface StorySegment {
   childPose: Expression | null; // Child expression: happy, sad, surprised, worried, determined, excited
   petPose: Expression | null; // Pet expression: happy, sad, surprised, worried, determined, excited
   backgroundPrompt: string | null; // Prompt for background-only image (no main characters)
+  // Storyboard data for image generation consistency
+  storyboardLocationId: string | null;
+  storyboardCharacterIds: string[] | null;
+  storyboardObjectIds: string[] | null;
+  storyboardShotType: string | null;
+  storyboardCameraAngle: string | null;
+  storyboardFocus: string | null;
+  storyboardExclude: string[] | null;
 }
 
 export type BrushingZone =

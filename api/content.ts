@@ -36,7 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         s.description,
         s.cover_image_url,
         s.background_music_url,
-        s.total_chapters
+        s.total_chapters,
+        s.story_bible
       FROM stories s
       WHERE s.is_published = true
       ORDER BY s.created_at ASC
@@ -53,6 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             recap,
             cliffhanger,
             next_chapter_teaser,
+            title_narration_sequence,
             recap_narration_sequence,
             cliffhanger_narration_sequence,
             teaser_narration_sequence
@@ -75,7 +77,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 image_url,
                 narration_sequence,
                 child_pose,
-                pet_pose
+                pet_pose,
+                storyboard_location_id,
+                storyboard_character_ids,
+                storyboard_object_ids,
+                storyboard_shot_type,
+                storyboard_camera_angle,
+                storyboard_focus,
+                storyboard_exclude
               FROM segments
               WHERE chapter_id = ${chapter.id}
               ORDER BY segment_order
@@ -90,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               nextChapterTeaser: chapter.next_chapter_teaser,
               isRead: false,
               readAt: null,
+              titleNarrationSequence: chapter.title_narration_sequence,
               recapNarrationSequence: chapter.recap_narration_sequence,
               cliffhangerNarrationSequence: chapter.cliffhanger_narration_sequence,
               teaserNarrationSequence: chapter.teaser_narration_sequence,
@@ -104,6 +114,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 narrationSequence: seg.narration_sequence,
                 childPose: seg.child_pose || null,
                 petPose: seg.pet_pose || null,
+                storyboardLocationId: seg.storyboard_location_id || null,
+                storyboardCharacterIds: seg.storyboard_character_ids || null,
+                storyboardObjectIds: seg.storyboard_object_ids || null,
+                storyboardShotType: seg.storyboard_shot_type || null,
+                storyboardCameraAngle: seg.storyboard_camera_angle || null,
+                storyboardFocus: seg.storyboard_focus || null,
+                storyboardExclude: seg.storyboard_exclude || null,
               })),
             };
           })
@@ -118,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           backgroundMusicUrl: story.background_music_url || null,
           totalChapters: story.total_chapters,
           chapters: chaptersWithSegments,
+          storyBible: story.story_bible || null,
         };
       })
     );
