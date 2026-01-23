@@ -171,11 +171,12 @@ Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythm
         reader.readAsDataURL(file);
       });
 
-      // Upload to server
-      const res = await fetch('/api/admin/upload-audio', {
+      // Upload to server via consolidated admin endpoint
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          action: 'uploadAudio',
           fileName: file.name,
           fileData: base64Data,
           fileType: file.type,
@@ -212,11 +213,15 @@ Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythm
     }
   };
 
-  // Fetch music library
+  // Fetch music library via consolidated admin endpoint
   const fetchMusicLibrary = async () => {
     setLoadingLibrary(true);
     try {
-      const res = await fetch('/api/admin/music-library');
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'musicLibrary' }),
+      });
       if (!res.ok) throw new Error('Failed to fetch music library');
       const data = await res.json();
       // Filter out current world's music
