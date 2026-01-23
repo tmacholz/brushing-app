@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen, RotateCcw } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
@@ -39,13 +39,16 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward } = useChild();
+  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getWorldById, getStoriesForWorld } = useContent();
 
   // DEV: Test wheel state
   const [showTestWheel, setShowTestWheel] = useState(false);
+
+  // Replay chapter modal state
+  const [replayChapterIndex, setReplayChapterIndex] = useState<number | null>(null);
 
   if (!child) return null;
 
@@ -107,6 +110,14 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   const handleStartBrushing = () => {
     playSound('success');
+    onNavigate('brushing');
+  };
+
+  const handleReplayChapter = async () => {
+    if (replayChapterIndex === null) return;
+    playSound('success');
+    await replayChapter(replayChapterIndex);
+    setReplayChapterIndex(null);
     onNavigate('brushing');
   };
 
@@ -258,11 +269,16 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 return (
                   <div key={index} className="flex items-start flex-1">
                     {/* Circle and label */}
-                    <div className="flex flex-col items-center">
+                    <div
+                      className={`flex flex-col items-center ${isCompleted ? 'cursor-pointer' : ''}`}
+                      onClick={isCompleted ? () => setReplayChapterIndex(index) : undefined}
+                    >
                       <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ delay: 0.3 + index * 0.05 }}
+                        whileHover={isCompleted ? { scale: 1.1 } : undefined}
+                        whileTap={isCompleted ? { scale: 0.95 } : undefined}
                         className={`relative w-10 h-10 rounded-full flex items-center justify-center ${
                           isCompleted
                             ? 'bg-accent text-white'
@@ -319,7 +335,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
               const isCurrent = index === currentChapter;
 
               return (
-                <div key={index} className="flex items-stretch">
+                <div
+                  key={index}
+                  className={`flex items-stretch ${isCompleted ? 'cursor-pointer' : ''}`}
+                  onClick={isCompleted ? () => setReplayChapterIndex(index) : undefined}
+                >
                   {/* Circle and connector column */}
                   <div className="flex flex-col items-center mr-3">
                     {/* Circle */}
@@ -327,6 +347,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       transition={{ delay: 0.3 + index * 0.05 }}
+                      whileHover={isCompleted ? { scale: 1.1 } : undefined}
+                      whileTap={isCompleted ? { scale: 0.95 } : undefined}
                       className={`relative w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         isCompleted
                           ? 'bg-accent text-white'
@@ -516,6 +538,59 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           onComplete={handleTestWheelComplete}
         />
       )}
+
+      {/* Replay Chapter Confirmation Modal */}
+      <AnimatePresence>
+        {replayChapterIndex !== null && child.currentStoryArc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            onClick={() => setReplayChapterIndex(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+                  <RotateCcw className="w-5 h-5 text-accent" />
+                </div>
+                <h3 className="text-lg font-bold text-text">
+                  Replay "{child.currentStoryArc.chapters[replayChapterIndex]?.title}"?
+                </h3>
+              </div>
+
+              <p className="text-text/70 text-sm mb-6">
+                You'll watch this chapter again before continuing your story.
+              </p>
+
+              <div className="flex gap-3">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setReplayChapterIndex(null)}
+                  className="flex-1 py-3 px-4 rounded-xl border-2 border-gray-200 text-text font-medium"
+                >
+                  Cancel
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleReplayChapter}
+                  className="flex-1 py-3 px-4 rounded-xl bg-accent text-white font-medium"
+                >
+                  Replay
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
