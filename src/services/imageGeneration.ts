@@ -1,4 +1,4 @@
-import type { StoryArc, StorySegment, Child, Pet } from '../types';
+import type { StoryArc, StorySegment, StoryBible, VisualAsset, Child, Pet } from '../types';
 import { getCharacterById } from '../data/characters';
 
 interface GenerateImageResult {
@@ -11,6 +11,14 @@ interface CharacterContext {
   petName: string;
   userAvatarUrl: string | null;
   petAvatarUrl: string | null;
+}
+
+// Visual reference for consistent imagery (matches API interface)
+interface VisualReference {
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  imageUrl: string;
 }
 
 // Detect if characters should appear in a segment based on text content
@@ -41,13 +49,76 @@ function detectCharacterPresence(
   return { includeUser, includePet };
 }
 
+// Build visualReferences array from segment's storyboard tags and story bible
+function buildVisualReferences(
+  segment: StorySegment,
+  storyBible?: StoryBible | null
+): VisualReference[] {
+  const references: VisualReference[] = [];
+
+  if (!storyBible?.visualAssets) {
+    return references;
+  }
+
+  const { locations, characters, objects } = storyBible.visualAssets;
+
+  // Add location reference if tagged
+  if (segment.storyboardLocationId && locations) {
+    const location = locations.find((loc) => loc.id === segment.storyboardLocationId);
+    if (location?.referenceImageUrl) {
+      references.push({
+        type: 'location',
+        name: location.name,
+        description: location.description,
+        imageUrl: location.referenceImageUrl,
+      });
+    }
+  }
+
+  // Add character references if tagged
+  if (segment.storyboardCharacterIds && characters) {
+    for (const charId of segment.storyboardCharacterIds) {
+      const character = characters.find((c) => c.id === charId);
+      if (character?.referenceImageUrl) {
+        references.push({
+          type: 'character',
+          name: character.name,
+          description: character.description,
+          imageUrl: character.referenceImageUrl,
+        });
+      }
+    }
+  }
+
+  // Add object references if tagged
+  if (segment.storyboardObjectIds && objects) {
+    for (const objId of segment.storyboardObjectIds) {
+      const object = objects.find((o) => o.id === objId);
+      if (object?.referenceImageUrl) {
+        references.push({
+          type: 'object',
+          name: object.name,
+          description: object.description,
+          imageUrl: object.referenceImageUrl,
+        });
+      }
+    }
+  }
+
+  return references;
+}
+
 export async function generateImageForSegment(
   segment: StorySegment,
   referenceImageUrl?: string,
-  characterContext?: CharacterContext
+  characterContext?: CharacterContext,
+  storyBible?: StoryBible | null
 ): Promise<GenerateImageResult | null> {
-  if (!segment.imagePrompt) {
-    console.log('[ImageGen] Segment has no imagePrompt, skipping:', segment.id);
+  // Check if segment has image prompt or storyboard data
+  const hasStoryboard = !!(segment.storyboardShotType || segment.storyboardLocationId || segment.storyboardFocus);
+
+  if (!segment.imagePrompt && !hasStoryboard) {
+    console.log('[ImageGen] Segment has no imagePrompt or storyboard, skipping:', segment.id);
     return null;
   }
   console.log('[ImageGen] Starting image generation for segment:', segment.id);
@@ -74,6 +145,10 @@ export async function generateImageForSegment(
     petAvatarUrl = characterContext.petAvatarUrl;
   }
 
+  // Build visual references from storyboard tags
+  const visualReferences = buildVisualReferences(segment, storyBible);
+  console.log('[ImageGen] Visual references:', visualReferences.length, 'items');
+
   try {
     console.log('[ImageGen] Calling /api/generate for segment:', segment.id);
     const response = await fetch('/api/generate', {
@@ -84,6 +159,7 @@ export async function generateImageForSegment(
       body: JSON.stringify({
         type: 'image',
         prompt: segment.imagePrompt,
+        segmentText: segment.text,
         segmentId: segment.id,
         referenceImageUrl,
         userAvatarUrl,
@@ -92,6 +168,22 @@ export async function generateImageForSegment(
         includePet,
         childName,
         petName,
+        // Story Bible for visual style consistency
+        storyBible: storyBible ? {
+          colorPalette: storyBible.colorPalette,
+          lightingStyle: storyBible.lightingStyle,
+          artDirection: storyBible.artDirection,
+          visualAssets: storyBible.visualAssets,
+        } : undefined,
+        // Visual references (character/location/object images)
+        visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
+        // Storyboard data
+        storyboardLocationId: segment.storyboardLocationId,
+        storyboardCharacterIds: segment.storyboardCharacterIds,
+        storyboardShotType: segment.storyboardShotType,
+        storyboardCameraAngle: segment.storyboardCameraAngle,
+        storyboardFocus: segment.storyboardFocus,
+        storyboardExclude: segment.storyboardExclude,
       }),
     });
 
@@ -142,7 +234,8 @@ export async function generateImagesForStory(
   const segmentsToGenerate: StorySegment[] = [];
   for (const chapter of storyArc.chapters) {
     for (const segment of chapter.segments) {
-      if (segment.imagePrompt && !segment.imageUrl) {
+      const hasStoryboard = !!(segment.storyboardShotType || segment.storyboardLocationId || segment.storyboardFocus);
+      if ((segment.imagePrompt || hasStoryboard) && !segment.imageUrl) {
         segmentsToGenerate.push(segment);
       }
     }
@@ -159,7 +252,7 @@ export async function generateImagesForStory(
       currentSegment: segment.id,
     });
 
-    const result = await generateImageForSegment(segment, undefined, characterContext);
+    const result = await generateImageForSegment(segment, undefined, characterContext, storyArc.storyBible);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
     }
@@ -203,10 +296,11 @@ export async function generateImagesForChapter(
         }
       : undefined;
 
-  // Filter segments that need images
-  const segmentsToGenerate = chapter.segments.filter(
-    (segment) => segment.imagePrompt && !segment.imageUrl
-  );
+  // Filter segments that need images (have imagePrompt or storyboard data)
+  const segmentsToGenerate = chapter.segments.filter((segment) => {
+    const hasStoryboard = !!(segment.storyboardShotType || segment.storyboardLocationId || segment.storyboardFocus);
+    return (segment.imagePrompt || hasStoryboard) && !segment.imageUrl;
+  });
 
   const total = segmentsToGenerate.length;
   console.log('[ImageGen] Segments to generate:', total, 'out of', chapter.segments.length, 'total segments');
@@ -221,8 +315,8 @@ export async function generateImagesForChapter(
       currentSegment: segment.id,
     });
 
-    // Pass the previous image URL for style consistency plus character context
-    const result = await generateImageForSegment(segment, previousImageUrl, characterContext);
+    // Pass the previous image URL for style consistency, character context, and story bible
+    const result = await generateImageForSegment(segment, previousImageUrl, characterContext, storyArc.storyBible);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
       // Use this image as reference for the next one

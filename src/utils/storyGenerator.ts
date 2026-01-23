@@ -64,6 +64,7 @@ export const personalizeStory = (
     chapters: storyTemplate.chapters.map((chapter) =>
       personalizeChapter(chapter, childName, petName)
     ),
+    storyBible: storyTemplate.storyBible ?? null,
   };
 };
 
@@ -150,5 +151,6 @@ export const refreshStoryArcContent = (
     title: replaceTokens(storyTemplate.title, childName, petName),
     backgroundMusicUrl: storyTemplate.backgroundMusicUrl ?? storyArc.backgroundMusicUrl,
     chapters: refreshedChapters,
+    storyBible: storyTemplate.storyBible ?? storyArc.storyBible ?? null,
   };
 };
