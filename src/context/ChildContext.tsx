@@ -31,6 +31,7 @@ interface ChildContextType {
   updateStreak: () => Promise<{ newStreak: number; streakBroken: boolean }>;
   setCurrentStoryArc: (storyArc: StoryArc | null) => Promise<void>;
   completeChapter: (chapterIndex: number) => Promise<void>;
+  replayChapter: (chapterIndex: number) => Promise<void>;
   updateStoryImages: (imageUrlMap: Map<string, string>) => void;
   unlockPet: (petId: string) => Promise<boolean>;
   unlockBrush: (brushId: string) => Promise<boolean>;
@@ -407,6 +408,16 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     });
   }, [child, updateChild]);
 
+  const replayChapter = useCallback(async (chapterIndex: number) => {
+    if (!child?.currentStoryArc) return;
+    await updateChild({
+      currentStoryArc: {
+        ...child.currentStoryArc,
+        currentChapterIndex: chapterIndex,
+      },
+    });
+  }, [child, updateChild]);
+
   // Update story images locally (don't persist data URLs to API)
   const updateStoryImages = useCallback((imageUrlMap: Map<string, string>) => {
     if (!activeChildId) return;
@@ -571,6 +582,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         updateStreak,
         setCurrentStoryArc,
         completeChapter,
+        replayChapter,
         updateStoryImages,
         unlockPet,
         unlockBrush,
