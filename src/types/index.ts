@@ -173,6 +173,7 @@ export interface StoryChapter {
   isRead: boolean;
   readAt: string | null;
   // Pre-recorded audio narration sequences for chapter intro/outro
+  titleNarrationSequence: NarrationSequenceItem[] | null;
   recapNarrationSequence: NarrationSequenceItem[] | null;
   cliffhangerNarrationSequence: NarrationSequenceItem[] | null;
   teaserNarrationSequence: NarrationSequenceItem[] | null;

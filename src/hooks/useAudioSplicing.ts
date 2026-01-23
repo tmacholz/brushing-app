@@ -213,10 +213,10 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
 
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         // Use overlap around name clips to reduce perceived gaps from audio silence padding
-        // Values reduced to give more breathing room around names
-        const NAME_OVERLAP_BEFORE = 0.15; // Overlap before name clips (tighten lead-in)
-        const NAME_OVERLAP_AFTER = 0.18; // Overlap after name clips (tighten follow-up)
-        const COMMA_PAUSE = 0.15; // Extra pause when name is followed by comma/punctuation
+        // Higher values = tighter/faster transitions, lower values = more breathing room
+        const NAME_OVERLAP_BEFORE = 0.22; // Overlap before name clips (tighten lead-in)
+        const NAME_OVERLAP_AFTER = 0.25; // Overlap after name clips (tighten follow-up)
+        const COMMA_PAUSE = 0.08; // Extra pause when name is followed by comma/punctuation
         let scheduleTime = ctx.currentTime;
         const sources: AudioBufferSourceNode[] = [];
 

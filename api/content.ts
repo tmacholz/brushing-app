@@ -54,6 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             recap,
             cliffhanger,
             next_chapter_teaser,
+            title_narration_sequence,
             recap_narration_sequence,
             cliffhanger_narration_sequence,
             teaser_narration_sequence
@@ -98,6 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               nextChapterTeaser: chapter.next_chapter_teaser,
               isRead: false,
               readAt: null,
+              titleNarrationSequence: chapter.title_narration_sequence,
               recapNarrationSequence: chapter.recap_narration_sequence,
               cliffhangerNarrationSequence: chapter.cliffhanger_narration_sequence,
               teaserNarrationSequence: chapter.teaser_narration_sequence,

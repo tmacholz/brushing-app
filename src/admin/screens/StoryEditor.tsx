@@ -87,6 +87,7 @@ interface Chapter {
   next_chapter_teaser: string | null;
   segments: Segment[];
   // Pre-recorded audio narration sequences
+  title_narration_sequence: NarrationSequenceItem[] | null;
   recap_narration_sequence: NarrationSequenceItem[] | null;
   cliffhanger_narration_sequence: NarrationSequenceItem[] | null;
   teaser_narration_sequence: NarrationSequenceItem[] | null;
@@ -687,12 +688,12 @@ function getTimeAgo(date: Date): string {
   return date.toLocaleDateString();
 }
 
-// Component for managing audio on a single chapter field (recap, cliffhanger, or teaser)
+// Component for managing audio on a single chapter field (title, recap, cliffhanger, or teaser)
 interface ChapterFieldAudioEditorProps {
   chapterId: string;
   storyId: string;
   chapterNumber: number;
-  fieldName: 'recap' | 'cliffhanger' | 'teaser';
+  fieldName: 'title' | 'recap' | 'cliffhanger' | 'teaser';
   fieldLabel: string;
   text: string | null;
   narrationSequence: NarrationSequenceItem[] | null;
@@ -744,7 +745,9 @@ function ChapterFieldAudioEditor({
 
       // Save to database using the appropriate field name
       const saveBody: Record<string, unknown> = {};
-      if (fieldName === 'recap') {
+      if (fieldName === 'title') {
+        saveBody.titleNarrationSequence = data.narrationSequence;
+      } else if (fieldName === 'recap') {
         saveBody.recapNarrationSequence = data.narrationSequence;
       } else if (fieldName === 'cliffhanger') {
         saveBody.cliffhangerNarrationSequence = data.narrationSequence;
@@ -2972,6 +2975,16 @@ export function StoryEditor() {
                           value={chapter.title}
                           onSave={(value) => handleSaveChapterField(chapter.id, 'title', value)}
                           className="text-lg font-medium text-white"
+                        />
+                        <ChapterFieldAudioEditor
+                          chapterId={chapter.id}
+                          storyId={storyId}
+                          chapterNumber={chapter.chapter_number}
+                          fieldName="title"
+                          fieldLabel="Title"
+                          text={`Chapter ${chapter.chapter_number}: ${chapter.title}`}
+                          narrationSequence={chapter.title_narration_sequence}
+                          onUpdate={handleChapterUpdate}
                         />
                       </div>
 

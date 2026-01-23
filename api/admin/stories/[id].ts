@@ -27,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         recap,
         cliffhanger,
         nextChapterTeaser,
+        titleNarrationSequence,
         recapNarrationSequence,
         cliffhangerNarrationSequence,
         teaserNarrationSequence
@@ -36,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         recap: recap !== undefined ? 'provided' : 'not provided',
         cliffhanger: cliffhanger !== undefined ? 'provided' : 'not provided',
         nextChapterTeaser: nextChapterTeaser !== undefined ? 'provided' : 'not provided',
+        titleNarration: titleNarrationSequence?.length ?? 'not provided',
         recapNarration: recapNarrationSequence?.length ?? 'not provided',
         cliffhangerNarration: cliffhangerNarrationSequence?.length ?? 'not provided',
         teaserNarration: teaserNarrationSequence?.length ?? 'not provided',
@@ -44,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         // Check if any field is provided
         const hasContent = title !== undefined || recap !== undefined || cliffhanger !== undefined || nextChapterTeaser !== undefined;
-        const hasNarration = recapNarrationSequence !== undefined || cliffhangerNarrationSequence !== undefined || teaserNarrationSequence !== undefined;
+        const hasNarration = titleNarrationSequence !== undefined || recapNarrationSequence !== undefined || cliffhangerNarrationSequence !== undefined || teaserNarrationSequence !== undefined;
 
         if (!hasContent && !hasNarration) {
           return res.status(400).json({ error: 'No update data provided' });
@@ -57,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             recap = COALESCE(${recap ?? null}, recap),
             cliffhanger = COALESCE(${cliffhanger ?? null}, cliffhanger),
             next_chapter_teaser = COALESCE(${nextChapterTeaser ?? null}, next_chapter_teaser),
+            title_narration_sequence = COALESCE(${titleNarrationSequence ? JSON.stringify(titleNarrationSequence) : null}, title_narration_sequence),
             recap_narration_sequence = COALESCE(${recapNarrationSequence ? JSON.stringify(recapNarrationSequence) : null}, recap_narration_sequence),
             cliffhanger_narration_sequence = COALESCE(${cliffhangerNarrationSequence ? JSON.stringify(cliffhangerNarrationSequence) : null}, cliffhanger_narration_sequence),
             teaser_narration_sequence = COALESCE(${teaserNarrationSequence ? JSON.stringify(teaserNarrationSequence) : null}, teaser_narration_sequence)
