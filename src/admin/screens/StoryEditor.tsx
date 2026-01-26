@@ -3371,13 +3371,25 @@ export function StoryEditor() {
                                             {loc.name}
                                             <button
                                               onClick={async () => {
+                                                // Also remove associated reference tag if it exists
+                                                const newRefIds = loc.refId
+                                                  ? (segment.reference_ids || []).filter(id => id !== loc.refId)
+                                                  : segment.reference_ids;
                                                 try {
                                                   await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
                                                     method: 'PUT',
                                                     headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({ storyboardLocationId: null, storyboardLocation: null }),
+                                                    body: JSON.stringify({
+                                                      storyboardLocationId: null,
+                                                      storyboardLocation: null,
+                                                      referenceIds: newRefIds && newRefIds.length > 0 ? newRefIds : null
+                                                    }),
                                                   });
-                                                  handleSegmentUpdate(segment.id, { storyboard_location_id: null, storyboard_location: null });
+                                                  handleSegmentUpdate(segment.id, {
+                                                    storyboard_location_id: null,
+                                                    storyboard_location: null,
+                                                    reference_ids: newRefIds && newRefIds.length > 0 ? newRefIds : null
+                                                  });
                                                 } catch (err) {
                                                   console.error('Failed to remove location:', err);
                                                 }
@@ -3438,18 +3450,25 @@ export function StoryEditor() {
                                               onClick={async () => {
                                                 const newIds = (segment.storyboard_character_ids || []).filter(id => id !== charId);
                                                 const newNames = newIds.map(id => mergedVisualAssets.characters.find(c => c.id === id)?.name).filter(Boolean);
+                                                // Also remove associated reference tag if it exists
+                                                const charToRemove = mergedVisualAssets.characters.find(c => c.id === charId);
+                                                const newRefIds = charToRemove?.refId
+                                                  ? (segment.reference_ids || []).filter(id => id !== charToRemove.refId)
+                                                  : segment.reference_ids;
                                                 try {
                                                   await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
                                                     method: 'PUT',
                                                     headers: { 'Content-Type': 'application/json' },
                                                     body: JSON.stringify({
                                                       storyboardCharacterIds: newIds.length > 0 ? newIds : null,
-                                                      storyboardCharacters: newNames.length > 0 ? newNames : null
+                                                      storyboardCharacters: newNames.length > 0 ? newNames : null,
+                                                      referenceIds: newRefIds && newRefIds.length > 0 ? newRefIds : null
                                                     }),
                                                   });
                                                   handleSegmentUpdate(segment.id, {
                                                     storyboard_character_ids: newIds.length > 0 ? newIds : null,
-                                                    storyboard_characters: newNames.length > 0 ? newNames as string[] : null
+                                                    storyboard_characters: newNames.length > 0 ? newNames as string[] : null,
+                                                    reference_ids: newRefIds && newRefIds.length > 0 ? newRefIds : null
                                                   });
                                                 } catch (err) {
                                                   console.error('Failed to remove character:', err);
@@ -3520,13 +3539,23 @@ export function StoryEditor() {
                                               <button
                                                 onClick={async () => {
                                                   const newIds = (segment.storyboard_object_ids || []).filter(id => id !== objId);
+                                                  // Also remove associated reference tag if it exists
+                                                  const newRefIds = obj.refId
+                                                    ? (segment.reference_ids || []).filter(id => id !== obj.refId)
+                                                    : segment.reference_ids;
                                                   try {
                                                     await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
                                                       method: 'PUT',
                                                       headers: { 'Content-Type': 'application/json' },
-                                                      body: JSON.stringify({ storyboardObjectIds: newIds.length > 0 ? newIds : null }),
+                                                      body: JSON.stringify({
+                                                        storyboardObjectIds: newIds.length > 0 ? newIds : null,
+                                                        referenceIds: newRefIds && newRefIds.length > 0 ? newRefIds : null
+                                                      }),
                                                     });
-                                                    handleSegmentUpdate(segment.id, { storyboard_object_ids: newIds.length > 0 ? newIds : null });
+                                                    handleSegmentUpdate(segment.id, {
+                                                      storyboard_object_ids: newIds.length > 0 ? newIds : null,
+                                                      reference_ids: newRefIds && newRefIds.length > 0 ? newRefIds : null
+                                                    });
                                                   } catch (err) {
                                                     console.error('Failed to remove object:', err);
                                                   }
