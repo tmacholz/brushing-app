@@ -410,6 +410,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
           // ID-based storyboard fields (preferred for lookups)
           storyboardLocationId: segment.storyboard_location_id || undefined,
           storyboardCharacterIds: segment.storyboard_character_ids || undefined,
+          storyboardObjectIds: segment.storyboard_object_ids || undefined,
         }),
       });
 
@@ -1982,6 +1983,7 @@ export function StoryEditor() {
             // ID-based storyboard fields (preferred for lookups)
             storyboardLocationId: segment.storyboard_location_id || undefined,
             storyboardCharacterIds: segment.storyboard_character_ids || undefined,
+            storyboardObjectIds: segment.storyboard_object_ids || undefined,
           }),
         });
 

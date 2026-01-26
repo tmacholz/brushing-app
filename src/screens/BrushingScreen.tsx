@@ -58,6 +58,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [hasBonusFlow, setHasBonusFlow] = useState(false); // Track if bonus flow is enabled
   const [hasExited, setHasExited] = useState(false); // Prevent rendering after exit
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const hasTriggeredCompletionRef = useRef(false); // Prevent duplicate completion triggers
   const lastPhaseRef = useRef<string | null>(null);
   const lastSegmentRef = useRef<string | null>(null);
   const lastSpokenTextRef = useRef<string | null>(null);
@@ -183,6 +184,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }, [child?.currentStoryArc]);
 
   const handleBrushingComplete = async () => {
+    // Prevent duplicate completion triggers (can be called by both timer and story phase)
+    if (hasTriggeredCompletionRef.current) {
+      console.log('[Completion] Already triggered, skipping duplicate call');
+      return;
+    }
+    hasTriggeredCompletionRef.current = true;
+
     if (!child) return;
 
     // Play completion sound

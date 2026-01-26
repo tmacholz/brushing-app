@@ -153,6 +153,7 @@ interface StoryImageRequest {
   // ID-based storyboard fields (preferred for lookups)
   storyboardLocationId?: string | null;    // visualAssets.locations[].id
   storyboardCharacterIds?: string[] | null; // visualAssets.characters[].id
+  storyboardObjectIds?: string[] | null;   // visualAssets.objects[].id
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
@@ -160,7 +161,7 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     prompt, segmentText, segmentId, referenceImageUrl, userAvatarUrl, petAvatarUrl,
     includeUser, includePet, childName, petName, storyBible, visualReferences,
     storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle, storyboardFocus, storyboardExclude,
-    storyboardLocationId, storyboardCharacterIds
+    storyboardLocationId, storyboardCharacterIds, storyboardObjectIds
   } = req;
 
   if (!segmentId) {
@@ -323,8 +324,10 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
         }
       }
 
-      // Fall back to name-based lookup
-      if (!matchingLocation && storyboardLocation) {
+      // Only fall back to name-based lookup if ID was never set (legacy data without ID support)
+      // If storyboardLocationId is explicitly set (even to null), trust it and don't use name
+      const hasExplicitLocationId = storyboardLocationId !== undefined;
+      if (!matchingLocation && !hasExplicitLocationId && storyboardLocation) {
         // Try visualAssets first
         if (hasVisualAssets) {
           const locByName = locations.find(
@@ -374,8 +377,10 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
         }
       }
 
-      // If no ID matches, fall back to name-based lookup
-      if (charactersToInclude.length === 0 && storyboardCharacters && storyboardCharacters.length > 0) {
+      // Only fall back to name-based lookup if IDs were never set (legacy data without ID support)
+      // If storyboardCharacterIds is explicitly set (even to empty array), trust it and don't use names
+      const hasExplicitIds = storyboardCharacterIds !== undefined && storyboardCharacterIds !== null;
+      if (charactersToInclude.length === 0 && !hasExplicitIds && storyboardCharacters && storyboardCharacters.length > 0) {
         // Try visualAssets first
         if (characters.length > 0) {
           for (const charName of storyboardCharacters) {
@@ -416,6 +421,25 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
         fullPrompt += `- ${char.name}: ${char.visualDescription}\n`;
       });
       fullPrompt += '\n';
+    }
+
+    // If storyboard specifies objects, look them up from visualAssets
+    const objects = storyBible.visualAssets?.objects || [];
+    if (storyboardObjectIds && storyboardObjectIds.length > 0 && objects.length > 0) {
+      const objectsToInclude: { name: string; description: string }[] = [];
+      for (const objId of storyboardObjectIds) {
+        const objById = objects.find(o => o.id === objId);
+        if (objById) {
+          objectsToInclude.push({ name: objById.name, description: objById.description });
+        }
+      }
+      if (objectsToInclude.length > 0) {
+        fullPrompt += '=== KEY OBJECTS IN THIS SCENE ===\n';
+        objectsToInclude.forEach(obj => {
+          fullPrompt += `${obj.name}: ${obj.description}\n`;
+        });
+        fullPrompt += '\n';
+      }
     }
   }
 
