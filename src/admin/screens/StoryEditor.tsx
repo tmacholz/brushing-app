@@ -373,6 +373,25 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
     }));
   };
 
+  // Clear all reference tags from this segment
+  const handleClearReferenceTags = async () => {
+    try {
+      const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceIds: null }),
+      });
+      if (res.ok) {
+        onUpdate(segment.id, { reference_ids: null });
+        console.log('[ImageGen] Cleared reference tags for segment:', segment.id);
+      }
+    } catch (err) {
+      console.error('Failed to clear reference tags:', err);
+    }
+  };
+
+  const taggedRefs = getTaggedReferences();
+
   const handleGenerateImage = async () => {
     if (!canGenerate) {
       alert('No storyboard data or image prompt for this segment. Generate a storyboard first, or add a manual image prompt.');
@@ -507,6 +526,26 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
 
   return (
     <div className="mt-2">
+      {/* Tagged References Warning */}
+      {taggedRefs.length > 0 && (
+        <div className="mb-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs text-amber-300">
+              <span className="font-medium">Reference images tagged:</span>{' '}
+              {taggedRefs.map(r => r.name).join(', ')}
+            </div>
+            <button
+              onClick={handleClearReferenceTags}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded transition-colors"
+              title="Remove all reference image tags from this segment"
+            >
+              <X className="w-3 h-3" />
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap">
         {/* Generate/Regenerate Image Button */}
         <button
