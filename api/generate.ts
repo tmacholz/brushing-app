@@ -168,6 +168,19 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required field: segmentId' });
   }
 
+  // Log incoming storyboard data for debugging
+  console.log('[ImageGen] Segment:', segmentId);
+  console.log('[ImageGen] Storyboard data:', {
+    locationId: storyboardLocationId,
+    location: storyboardLocation,
+    characterIds: storyboardCharacterIds,
+    characters: storyboardCharacters,
+    objectIds: storyboardObjectIds,
+    focus: storyboardFocus,
+    exclude: storyboardExclude,
+  });
+  console.log('[ImageGen] Visual references:', visualReferences?.map(r => ({ type: r.type, name: r.name })));
+
   // Determine if we have storyboard data to build from
   const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
 
@@ -482,6 +495,11 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   }
 
   fullPrompt += `=== SCENE DESCRIPTION ===\n${sceneDescription}`;
+
+  // Log the full prompt for debugging
+  console.log('[ImageGen] Full prompt for segment', segmentId, ':\n', fullPrompt);
+  console.log('[ImageGen] Number of reference images:', parts.length);
+
   parts.push({ text: fullPrompt });
 
   // Include timestamp in filename for reliable cache busting (CDN may ignore query params)
