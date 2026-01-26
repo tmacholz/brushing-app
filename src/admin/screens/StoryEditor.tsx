@@ -375,15 +375,20 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
 
   // Clear all reference tags from this segment
   const handleClearReferenceTags = async () => {
+    console.log('[ImageGen] Clearing reference tags for segment:', segment.id, 'storyId:', storyId);
     try {
       const res = await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ referenceIds: null }),
       });
+      console.log('[ImageGen] Clear response status:', res.status);
       if (res.ok) {
         onUpdate(segment.id, { reference_ids: null });
-        console.log('[ImageGen] Cleared reference tags for segment:', segment.id);
+        console.log('[ImageGen] Cleared reference tags successfully');
+      } else {
+        const error = await res.text();
+        console.error('[ImageGen] Failed to clear reference tags:', error);
       }
     } catch (err) {
       console.error('Failed to clear reference tags:', err);
