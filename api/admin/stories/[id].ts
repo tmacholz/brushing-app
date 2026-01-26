@@ -100,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided',
         selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
-        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided',
+        referenceIds: referenceIds !== undefined ? (referenceIds === null ? 'clearing' : referenceIds.length) : 'not provided',
         storyboard: (storyboardLocation !== undefined || storyboardCharacters !== undefined ||
           storyboardShotType !== undefined || storyboardCameraAngle !== undefined ||
           storyboardFocus !== undefined || storyboardContinuity !== undefined ||
