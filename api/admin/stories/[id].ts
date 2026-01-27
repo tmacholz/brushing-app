@@ -100,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         narrationSequence: narrationSequence?.length ?? 'not provided',
         imageUrl: imageUrl ? 'provided' : 'not provided',
         selectImageFromHistory: selectImageFromHistory ? 'provided' : 'not provided',
-        referenceIds: referenceIds !== undefined ? referenceIds.length : 'not provided',
+        referenceIds: referenceIds !== undefined ? (referenceIds === null ? 'clearing' : referenceIds.length) : 'not provided',
         storyboard: (storyboardLocation !== undefined || storyboardCharacters !== undefined ||
           storyboardShotType !== undefined || storyboardCameraAngle !== undefined ||
           storyboardFocus !== undefined || storyboardContinuity !== undefined ||
@@ -343,6 +343,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           DELETE FROM story_references WHERE id = ${referenceId} AND story_id = ${id} RETURNING id
         `;
         if (!reference) return res.status(404).json({ error: 'Reference not found' });
+
+        // Clean up: remove this reference ID from all segments that have it tagged
+        // Get all chapters for this story, then update segments
+        const chapters = await sql`SELECT id FROM chapters WHERE story_id = ${id}`;
+        for (const chapter of chapters) {
+          // Remove the deleted reference ID from any segment's reference_ids array
+          await sql`
+            UPDATE segments
+            SET reference_ids = array_remove(reference_ids, ${referenceId})
+            WHERE chapter_id = ${chapter.id}
+              AND reference_ids IS NOT NULL
+              AND ${referenceId} = ANY(reference_ids)
+          `;
+        }
+        console.log('[Reference] Deleted reference and cleaned up segment tags:', referenceId);
+
         return res.status(200).json({ success: true });
       } catch (error) {
         console.error('Error deleting reference:', error);

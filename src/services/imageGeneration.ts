@@ -180,6 +180,7 @@ export async function generateImageForSegment(
         // Storyboard data
         storyboardLocationId: segment.storyboardLocationId,
         storyboardCharacterIds: segment.storyboardCharacterIds,
+        storyboardObjectIds: segment.storyboardObjectIds,
         storyboardShotType: segment.storyboardShotType,
         storyboardCameraAngle: segment.storyboardCameraAngle,
         storyboardFocus: segment.storyboardFocus,
