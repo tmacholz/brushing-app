@@ -168,19 +168,6 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing required field: segmentId' });
   }
 
-  // Log incoming storyboard data for debugging
-  console.log('[ImageGen] Segment:', segmentId);
-  console.log('[ImageGen] Storyboard data:', {
-    locationId: storyboardLocationId,
-    location: storyboardLocation,
-    characterIds: storyboardCharacterIds,
-    characters: storyboardCharacters,
-    objectIds: storyboardObjectIds,
-    focus: storyboardFocus,
-    exclude: storyboardExclude,
-  });
-  console.log('[ImageGen] Visual references:', visualReferences?.map(r => ({ type: r.type, name: r.name })));
-
   // Determine if we have storyboard data to build from
   const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
 
@@ -243,6 +230,64 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
           `[Image ${imageIndex}] ${typeLabel} for "${ref.name}" - Match this ${ref.type}'s appearance EXACTLY`
         );
         imageIndex++;
+      }
+    }
+  }
+
+  // Add reference images from visualAssets based on storyboard selections
+  // This ensures that when a location/character/object is in the storyboard, its reference image is included
+  if (storyBible?.visualAssets && hasStoryboard) {
+    const alreadyIncludedUrls = new Set(visualReferences?.map(r => r.imageUrl) || []);
+
+    // Location reference image
+    if (storyboardLocationId) {
+      const loc = storyBible.visualAssets.locations?.find(l => l.id === storyboardLocationId);
+      if (loc?.referenceImageUrl && !alreadyIncludedUrls.has(loc.referenceImageUrl)) {
+        const imageData = await fetchImageAsBase64(loc.referenceImageUrl);
+        if (imageData) {
+          parts.push({ inlineData: imageData });
+          referenceDescriptions.push(
+            `[Image ${imageIndex}] LOCATION REFERENCE for "${loc.name}" - Match this location's appearance EXACTLY`
+          );
+          imageIndex++;
+          alreadyIncludedUrls.add(loc.referenceImageUrl);
+        }
+      }
+    }
+
+    // Character reference images
+    if (storyboardCharacterIds && storyboardCharacterIds.length > 0) {
+      for (const charId of storyboardCharacterIds) {
+        const char = storyBible.visualAssets.characters?.find(c => c.id === charId);
+        if (char?.referenceImageUrl && !alreadyIncludedUrls.has(char.referenceImageUrl)) {
+          const imageData = await fetchImageAsBase64(char.referenceImageUrl);
+          if (imageData) {
+            parts.push({ inlineData: imageData });
+            referenceDescriptions.push(
+              `[Image ${imageIndex}] CHARACTER REFERENCE SHEET for "${char.name}" - Match this character's appearance EXACTLY`
+            );
+            imageIndex++;
+            alreadyIncludedUrls.add(char.referenceImageUrl);
+          }
+        }
+      }
+    }
+
+    // Object reference images
+    if (storyboardObjectIds && storyboardObjectIds.length > 0) {
+      for (const objId of storyboardObjectIds) {
+        const obj = storyBible.visualAssets.objects?.find(o => o.id === objId);
+        if (obj?.referenceImageUrl && !alreadyIncludedUrls.has(obj.referenceImageUrl)) {
+          const imageData = await fetchImageAsBase64(obj.referenceImageUrl);
+          if (imageData) {
+            parts.push({ inlineData: imageData });
+            referenceDescriptions.push(
+              `[Image ${imageIndex}] OBJECT REFERENCE SHEET for "${obj.name}" - Match this object's appearance EXACTLY`
+            );
+            imageIndex++;
+            alreadyIncludedUrls.add(obj.referenceImageUrl);
+          }
+        }
       }
     }
   }
@@ -495,10 +540,6 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   }
 
   fullPrompt += `=== SCENE DESCRIPTION ===\n${sceneDescription}`;
-
-  // Log the full prompt for debugging
-  console.log('[ImageGen] Full prompt for segment', segmentId, ':\n', fullPrompt);
-  console.log('[ImageGen] Number of reference images:', parts.length);
 
   parts.push({ text: fullPrompt });
 
