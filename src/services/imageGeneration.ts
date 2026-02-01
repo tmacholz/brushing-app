@@ -50,10 +50,9 @@ function detectCharacterPresence(
   return { includeUser, includePet };
 }
 
-// Build visualReferences array from segment's storyboard tags, using story_references (preferred) or story bible fallback
+// Build visualReferences array from segment's storyboard tags using story_references
 function buildVisualReferences(
   segment: StorySegment,
-  storyBible?: StoryBible | null,
   storyReferences?: StoryReference[]
 ): VisualReference[] {
   const result: VisualReference[] = [];
@@ -133,7 +132,7 @@ export async function generateImageForSegment(
   }
 
   // Build visual references from storyboard tags
-  const visualReferences = buildVisualReferences(segment, storyBible, storyReferences);
+  const visualReferences = buildVisualReferences(segment, storyReferences);
   console.log('[ImageGen] Visual references:', visualReferences.length, 'items');
 
   try {
