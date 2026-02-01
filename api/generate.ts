@@ -169,7 +169,8 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
   }
 
   // Determine if we have storyboard data to build from
-  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus;
+  const hasStoryboard = storyboardShotType || storyboardLocation || storyboardCameraAngle || storyboardFocus
+    || storyboardLocationId || (storyboardCharacterIds && storyboardCharacterIds.length > 0) || (storyboardObjectIds && storyboardObjectIds.length > 0);
 
   // Using overlay system - child and pet will be composited separately
   const usingOverlaySystem = !includeUser && !includePet;
@@ -236,7 +237,8 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
 
   // Add reference images from visualAssets based on storyboard selections
   // This ensures that when a location/character/object is in the storyboard, its reference image is included
-  if (storyBible?.visualAssets && hasStoryboard) {
+  // No hasStoryboard gate: storyboard IDs are checked individually below
+  if (storyBible?.visualAssets) {
     const alreadyIncludedUrls = new Set(visualReferences?.map(r => r.imageUrl) || []);
 
     // Location reference image

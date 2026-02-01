@@ -349,7 +349,8 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const hasImage = !!segment.image_url;
-  const hasStoryboard = !!(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus);
+  const hasStoryboard = !!(segment.storyboard_shot_type || segment.storyboard_location || segment.storyboard_focus
+    || segment.storyboard_location_id || (segment.storyboard_character_ids && segment.storyboard_character_ids.length > 0) || (segment.storyboard_object_ids && segment.storyboard_object_ids.length > 0));
   const hasPromptOverride = !!segment.image_prompt;
   const canGenerate = hasStoryboard || hasPromptOverride;
   const imageHistory = segment.image_history || [];
@@ -1586,11 +1587,36 @@ export function StoryEditor() {
 
       if (!saveRes.ok) throw new Error('Failed to save reference image URL');
 
-      // Update local state
+      // Update local state - both references AND story_bible.visualAssets (mirrors backend sync)
       setStory(prev => {
         if (!prev) return prev;
+        // Also sync referenceImageUrl into story_bible.visualAssets by name matching (mirrors backend)
+        let updatedStoryBible = prev.story_bible;
+        if (updatedStoryBible?.visualAssets) {
+          const assetArrayKey = reference.type === 'character' ? 'characters' : reference.type === 'location' ? 'locations' : 'objects';
+          const assetArray = updatedStoryBible.visualAssets[assetArrayKey];
+          if (assetArray) {
+            const refNameLower = reference.name.toLowerCase().replace(/^the\s+/, '');
+            updatedStoryBible = {
+              ...updatedStoryBible,
+              visualAssets: {
+                ...updatedStoryBible.visualAssets,
+                [assetArrayKey]: assetArray.map((asset: VisualAsset) => {
+                  const assetNameLower = asset.name.toLowerCase().replace(/^the\s+/, '');
+                  if (refNameLower === assetNameLower ||
+                      refNameLower.includes(assetNameLower) ||
+                      assetNameLower.includes(refNameLower)) {
+                    return { ...asset, referenceImageUrl: data.imageUrl };
+                  }
+                  return asset;
+                }),
+              },
+            };
+          }
+        }
         return {
           ...prev,
+          story_bible: updatedStoryBible,
           references: prev.references.map(r =>
             r.id === reference.id ? { ...r, image_url: data.imageUrl } : r
           ),
@@ -1684,11 +1710,29 @@ export function StoryEditor() {
 
       if (!saveRes.ok) throw new Error('Failed to save reference image URL');
 
-      // Update local state
+      // Update local state - both references AND story_bible.visualAssets
       setStory(prev => {
         if (!prev) return prev;
+        // Also sync referenceImageUrl into story_bible.visualAssets so it's sent to the API
+        let updatedStoryBible = prev.story_bible;
+        if (updatedStoryBible?.visualAssets) {
+          const assetArrayKey = assetType === 'character' ? 'characters' : assetType === 'location' ? 'locations' : 'objects';
+          const assetArray = updatedStoryBible.visualAssets[assetArrayKey];
+          if (assetArray) {
+            updatedStoryBible = {
+              ...updatedStoryBible,
+              visualAssets: {
+                ...updatedStoryBible.visualAssets,
+                [assetArrayKey]: assetArray.map((asset: VisualAsset) =>
+                  asset.id === assetId ? { ...asset, referenceImageUrl: data.imageUrl } : asset
+                ),
+              },
+            };
+          }
+        }
         return {
           ...prev,
+          story_bible: updatedStoryBible,
           references: prev.references.map(r =>
             r.id === refId ? { ...r, image_url: data.imageUrl } : r
           ),
@@ -1985,6 +2029,7 @@ export function StoryEditor() {
     // Segments can be generated if they have storyboard data OR an image prompt
     const generatableSegments = chapter.segments.filter(s =>
       s.image_prompt || s.storyboard_shot_type || s.storyboard_location || s.storyboard_focus
+      || s.storyboard_location_id || (s.storyboard_character_ids && s.storyboard_character_ids.length > 0) || (s.storyboard_object_ids && s.storyboard_object_ids.length > 0)
     );
     if (generatableSegments.length === 0) {
       alert('No segments with storyboard data or image prompts in this chapter. Generate a storyboard first.');
