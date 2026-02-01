@@ -356,22 +356,71 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
   const imageHistory = segment.image_history || [];
   const hasHistory = imageHistory.length > 1;
 
-  // Get explicitly tagged references for this segment (no auto-detection)
-  const getTaggedReferences = () => {
-    if (!references || references.length === 0) return [];
-    if (!segment.reference_ids || segment.reference_ids.length === 0) return [];
+  // Build visual references for this segment from storyboard IDs and explicit tags.
+  // Storyboard IDs can be either visualAsset IDs (e.g. "char-xxx") or story_reference
+  // IDs with "ref-" prefix (e.g. "ref-UUID"), so we check both systems.
+  const getVisualReferences = () => {
+    const result: { type: string; name: string; description: string; imageUrl: string }[] = [];
+    const includedUrls = new Set<string>();
 
-    // Only include explicitly tagged references that have generated images
-    const taggedRefs = references.filter(ref =>
-      segment.reference_ids?.includes(ref.id) && ref.image_url
-    );
+    const addRef = (type: string, name: string, description: string, imageUrl: string) => {
+      if (!includedUrls.has(imageUrl)) {
+        result.push({ type, name, description, imageUrl });
+        includedUrls.add(imageUrl);
+      }
+    };
 
-    return taggedRefs.map(ref => ({
-      type: ref.type,
-      name: ref.name,
-      description: ref.description,
-      imageUrl: ref.image_url!,
-    }));
+    // Helper: look up a storyboard ID in visualAssets, then fall back to story_references
+    const lookupId = (id: string, assetType: 'location' | 'character' | 'object') => {
+      // Try visualAssets first
+      if (storyBible?.visualAssets) {
+        const arrayKey = assetType === 'character' ? 'characters' : assetType === 'location' ? 'locations' : 'objects';
+        const asset = storyBible.visualAssets[arrayKey]?.find((a: VisualAsset) => a.id === id);
+        if (asset?.referenceImageUrl) {
+          addRef(assetType, asset.name, asset.description, asset.referenceImageUrl);
+          return;
+        }
+      }
+      // Fall back to story_references (storyboard IDs may have "ref-" prefix)
+      if (references && references.length > 0) {
+        const refUuid = id.startsWith('ref-') ? id.slice(4) : id;
+        const ref = references.find(r => r.id === refUuid || r.id === id);
+        if (ref?.image_url) {
+          addRef(assetType, ref.name, ref.description, ref.image_url);
+        }
+      }
+    };
+
+    // Look up storyboard location
+    if (segment.storyboard_location_id) {
+      lookupId(segment.storyboard_location_id, 'location');
+    }
+
+    // Look up storyboard characters
+    if (segment.storyboard_character_ids) {
+      for (const id of segment.storyboard_character_ids) {
+        lookupId(id, 'character');
+      }
+    }
+
+    // Look up storyboard objects
+    if (segment.storyboard_object_ids) {
+      for (const id of segment.storyboard_object_ids) {
+        lookupId(id, 'object');
+      }
+    }
+
+    // Also include explicitly tagged reference_ids (legacy system)
+    if (segment.reference_ids && references) {
+      for (const refId of segment.reference_ids) {
+        const ref = references.find(r => r.id === refId && r.image_url);
+        if (ref?.image_url) {
+          addRef(ref.type, ref.name, ref.description, ref.image_url);
+        }
+      }
+    }
+
+    return result;
   };
 
   // Clear all reference tags from this segment
@@ -396,7 +445,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
     }
   };
 
-  const taggedRefs = getTaggedReferences();
+  const taggedRefs = getVisualReferences();
 
   const handleGenerateImage = async () => {
     if (!canGenerate) {
@@ -406,7 +455,7 @@ function SegmentImageEditor({ segment, storyId, previousImageUrl, storyBible, re
 
     setGenerating(true);
     try {
-      const visualReferences = getTaggedReferences();
+      const visualReferences = getVisualReferences();
       console.log('[ImageGen] Using', visualReferences.length, 'tagged references:', visualReferences.map(r => r.name));
 
       const res = await fetch('/api/generate', {
@@ -1995,35 +2044,57 @@ export function StoryEditor() {
 
   // Generate all images for a chapter
   // Helper to find relevant references for a segment using fuzzy matching
-  const findRelevantReferences = useCallback((segment: Segment, allReferences: StoryReference[]) => {
-    if (!allReferences || allReferences.length === 0) return [];
+  // Build visual references from storyboard IDs, checking both visualAssets and story_references.
+  // Storyboard IDs can be visualAsset IDs (e.g. "char-xxx") or "ref-UUID" story_reference IDs.
+  const buildVisualReferencesForSegment = useCallback((segment: Segment, allReferences: StoryReference[]) => {
+    const result: { type: string; name: string; description: string; imageUrl: string }[] = [];
+    const includedUrls = new Set<string>();
 
-    // Only include references that have generated images
-    const refsWithImages = allReferences.filter(r => r.image_url);
-    if (refsWithImages.length === 0) return [];
+    const addRef = (type: string, name: string, description: string, imageUrl: string) => {
+      if (!includedUrls.has(imageUrl)) {
+        result.push({ type, name, description, imageUrl });
+        includedUrls.add(imageUrl);
+      }
+    };
 
-    const searchText = `${segment.text} ${segment.image_prompt || ''}`.toLowerCase();
+    const lookupId = (id: string, assetType: 'location' | 'character' | 'object') => {
+      // Try visualAssets first
+      if (story?.story_bible?.visualAssets) {
+        const arrayKey = assetType === 'character' ? 'characters' : assetType === 'location' ? 'locations' : 'objects';
+        const asset = story.story_bible.visualAssets[arrayKey]?.find((a: VisualAsset) => a.id === id);
+        if (asset?.referenceImageUrl) {
+          addRef(assetType, asset.name, asset.description, asset.referenceImageUrl);
+          return;
+        }
+      }
+      // Fall back to story_references (storyboard IDs may have "ref-" prefix)
+      if (allReferences.length > 0) {
+        const refUuid = id.startsWith('ref-') ? id.slice(4) : id;
+        const ref = allReferences.find(r => r.id === refUuid || r.id === id);
+        if (ref?.image_url) {
+          addRef(assetType, ref.name, ref.description, ref.image_url);
+        }
+      }
+    };
 
-    // Find references whose name appears in the segment text or image prompt
-    const relevantRefs = refsWithImages.filter(ref => {
-      // Extract key words from reference name (remove articles, common words)
-      const nameWords = ref.name.toLowerCase()
-        .replace(/^(the|a|an)\s+/i, '')
-        .split(/\s+/)
-        .filter(w => w.length > 2);
+    if (segment.storyboard_location_id) lookupId(segment.storyboard_location_id, 'location');
+    if (segment.storyboard_character_ids) {
+      for (const id of segment.storyboard_character_ids) lookupId(id, 'character');
+    }
+    if (segment.storyboard_object_ids) {
+      for (const id of segment.storyboard_object_ids) lookupId(id, 'object');
+    }
 
-      // Check if any significant word from the reference name appears in the segment
-      return nameWords.some(word => searchText.includes(word));
-    });
+    // Also include explicitly tagged reference_ids (legacy system)
+    if (segment.reference_ids) {
+      for (const refId of segment.reference_ids) {
+        const ref = allReferences.find(r => r.id === refId && r.image_url);
+        if (ref?.image_url) addRef(ref.type, ref.name, ref.description, ref.image_url);
+      }
+    }
 
-    // Return matching refs, formatted for the API
-    return relevantRefs.map(ref => ({
-      type: ref.type,
-      name: ref.name,
-      description: ref.description,
-      imageUrl: ref.image_url!,
-    }));
-  }, []);
+    return result;
+  }, [story?.story_bible]);
 
   const handleGenerateChapterImages = useCallback(async (chapter: Chapter) => {
     // Segments can be generated if they have storyboard data OR an image prompt
@@ -2045,9 +2116,9 @@ export function StoryEditor() {
       const segment = generatableSegments[i];
       setImageGenProgress({ current: i + 1, total: generatableSegments.length });
 
-      // Find relevant visual references for this segment
-      const visualReferences = findRelevantReferences(segment, story?.references || []);
-      console.log(`[ImageGen] Segment ${i + 1}: Found ${visualReferences.length} relevant references:`,
+      // Build visual references from storyboard IDs and story references
+      const visualReferences = buildVisualReferencesForSegment(segment, story?.references || []);
+      console.log(`[ImageGen] Segment ${i + 1}: Found ${visualReferences.length} visual references:`,
         visualReferences.map(r => r.name));
 
       try {
@@ -2104,7 +2175,7 @@ export function StoryEditor() {
 
     setGeneratingImagesForChapter(null);
     setImageGenProgress(null);
-  }, [storyId, handleSegmentUpdate, findRelevantReferences, story?.references, story?.story_bible]);
+  }, [storyId, handleSegmentUpdate, buildVisualReferencesForSegment, story?.references, story?.story_bible]);
 
   const handleGenerateChapterAudio = useCallback(async (chapter: Chapter) => {
     // Find segments without audio
