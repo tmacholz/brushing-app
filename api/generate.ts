@@ -98,28 +98,15 @@ interface StoryBible {
   colorPalette?: string;
   lightingStyle?: string;
   artDirection?: string;
-  keyLocations?: { name: string; visualDescription: string; mood: string }[];
-  recurringCharacters?: { name: string; visualDescription: string; personality: string; role: string }[];
 }
 
 // Visual reference for consistent imagery
 interface VisualReference {
+  id?: string;  // UUID from story_references table (for prompt description lookup)
   type: 'character' | 'object' | 'location';
   name: string;
   description: string;
   imageUrl: string;
-}
-
-// Visual asset from Story Bible
-interface VisualAsset {
-  id: string;
-  name: string;
-  description: string;
-  mood?: string;
-  personality?: string;
-  role?: string;
-  referenceImageUrl?: string;
-  source?: 'bible' | 'extracted';
 }
 
 // Story image generation
@@ -135,14 +122,8 @@ interface StoryImageRequest {
   includePet?: boolean;
   childName?: string;
   petName?: string;
-  storyBible?: StoryBible & {              // Extended with visualAssets
-    visualAssets?: {
-      locations: VisualAsset[];
-      characters: VisualAsset[];
-      objects: VisualAsset[];
-    };
-  };
-  visualReferences?: VisualReference[];    // Reference images for characters/objects/locations
+  storyBible?: StoryBible;
+  visualReferences?: VisualReference[];    // Reference images for characters/objects/locations (with id for description lookup)
   // Storyboard fields for intentional visual planning (name-based for display/backwards compat)
   storyboardLocation?: string | null;      // Location name
   storyboardCharacters?: string[] | null;  // NPC names
@@ -151,9 +132,9 @@ interface StoryImageRequest {
   storyboardFocus?: string | null;         // What to emphasize visually
   storyboardExclude?: string[] | null;     // Elements to explicitly exclude
   // ID-based storyboard fields (preferred for lookups)
-  storyboardLocationId?: string | null;    // visualAssets.locations[].id
-  storyboardCharacterIds?: string[] | null; // visualAssets.characters[].id
-  storyboardObjectIds?: string[] | null;   // visualAssets.objects[].id
+  storyboardLocationId?: string | null;    // story_references UUID
+  storyboardCharacterIds?: string[] | null; // story_references UUIDs
+  storyboardObjectIds?: string[] | null;   // story_references UUIDs
 }
 
 async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
@@ -235,64 +216,8 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     }
   }
 
-  // Add reference images from visualAssets based on storyboard selections
-  // This ensures that when a location/character/object is in the storyboard, its reference image is included
-  // No hasStoryboard gate: storyboard IDs are checked individually below
-  if (storyBible?.visualAssets) {
-    const alreadyIncludedUrls = new Set(visualReferences?.map(r => r.imageUrl) || []);
-
-    // Location reference image
-    if (storyboardLocationId) {
-      const loc = storyBible.visualAssets.locations?.find(l => l.id === storyboardLocationId);
-      if (loc?.referenceImageUrl && !alreadyIncludedUrls.has(loc.referenceImageUrl)) {
-        const imageData = await fetchImageAsBase64(loc.referenceImageUrl);
-        if (imageData) {
-          parts.push({ inlineData: imageData });
-          referenceDescriptions.push(
-            `[Image ${imageIndex}] LOCATION REFERENCE for "${loc.name}" - Match this location's appearance EXACTLY`
-          );
-          imageIndex++;
-          alreadyIncludedUrls.add(loc.referenceImageUrl);
-        }
-      }
-    }
-
-    // Character reference images
-    if (storyboardCharacterIds && storyboardCharacterIds.length > 0) {
-      for (const charId of storyboardCharacterIds) {
-        const char = storyBible.visualAssets.characters?.find(c => c.id === charId);
-        if (char?.referenceImageUrl && !alreadyIncludedUrls.has(char.referenceImageUrl)) {
-          const imageData = await fetchImageAsBase64(char.referenceImageUrl);
-          if (imageData) {
-            parts.push({ inlineData: imageData });
-            referenceDescriptions.push(
-              `[Image ${imageIndex}] CHARACTER REFERENCE SHEET for "${char.name}" - Match this character's appearance EXACTLY`
-            );
-            imageIndex++;
-            alreadyIncludedUrls.add(char.referenceImageUrl);
-          }
-        }
-      }
-    }
-
-    // Object reference images
-    if (storyboardObjectIds && storyboardObjectIds.length > 0) {
-      for (const objId of storyboardObjectIds) {
-        const obj = storyBible.visualAssets.objects?.find(o => o.id === objId);
-        if (obj?.referenceImageUrl && !alreadyIncludedUrls.has(obj.referenceImageUrl)) {
-          const imageData = await fetchImageAsBase64(obj.referenceImageUrl);
-          if (imageData) {
-            parts.push({ inlineData: imageData });
-            referenceDescriptions.push(
-              `[Image ${imageIndex}] OBJECT REFERENCE SHEET for "${obj.name}" - Match this object's appearance EXACTLY`
-            );
-            imageIndex++;
-            alreadyIncludedUrls.add(obj.referenceImageUrl);
-          }
-        }
-      }
-    }
-  }
+  // Note: Reference images from storyboard selections are now included via visualReferences
+  // (callers resolve storyboard IDs to visualReferences before calling this API)
 
   // Add user avatar reference
   if (includeUser && userAvatarUrl) {
@@ -369,133 +294,30 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     }
     fullPrompt += '\n';
 
-    // If storyboard specifies a location, look it up from visualAssets (by ID) or keyLocations (by name)
-    const locations = storyBible.visualAssets?.locations || [];
-    const hasVisualAssets = locations.length > 0;
+    // Use visualReferences for location/character/object text descriptions in the prompt
+    // visualReferences are resolved by the caller from story_references (single source of truth)
+    if (visualReferences && visualReferences.length > 0) {
+      const locationRefs = visualReferences.filter(r => r.type === 'location');
+      const characterRefs = visualReferences.filter(r => r.type === 'character');
+      const objectRefs = visualReferences.filter(r => r.type === 'object');
 
-    if (storyboardLocationId || storyboardLocation) {
-      let matchingLocation: { name: string; description: string; mood?: string } | null = null;
-
-      // Prefer ID-based lookup
-      if (storyboardLocationId && hasVisualAssets) {
-        const locById = locations.find(loc => loc.id === storyboardLocationId);
-        if (locById) {
-          matchingLocation = { name: locById.name, description: locById.description, mood: locById.mood };
-        }
+      if (locationRefs.length > 0) {
+        const loc = locationRefs[0]; // Typically one location per scene
+        fullPrompt += `=== LOCATION: ${loc.name} ===\n`;
+        fullPrompt += `${loc.description}\n\n`;
       }
 
-      // Only fall back to name-based lookup if ID was never set (legacy data without ID support)
-      // If storyboardLocationId is explicitly set (even to null), trust it and don't use name
-      const hasExplicitLocationId = storyboardLocationId !== undefined;
-      if (!matchingLocation && !hasExplicitLocationId && storyboardLocation) {
-        // Try visualAssets first
-        if (hasVisualAssets) {
-          const locByName = locations.find(
-            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase() ||
-                   loc.name.toLowerCase().includes(storyboardLocation.toLowerCase()) ||
-                   storyboardLocation.toLowerCase().includes(loc.name.toLowerCase())
-          );
-          if (locByName) {
-            matchingLocation = { name: locByName.name, description: locByName.description, mood: locByName.mood };
-          }
-        }
-        // Then try deprecated keyLocations
-        if (!matchingLocation && storyBible.keyLocations) {
-          const locLegacy = storyBible.keyLocations.find(
-            loc => loc.name.toLowerCase() === storyboardLocation.toLowerCase()
-          );
-          if (locLegacy) {
-            matchingLocation = { name: locLegacy.name, description: locLegacy.visualDescription, mood: locLegacy.mood };
-          }
-        }
-      }
-
-      if (matchingLocation) {
-        fullPrompt += `=== LOCATION: ${matchingLocation.name} ===\n`;
-        fullPrompt += `${matchingLocation.description}\n`;
-        if (matchingLocation.mood) {
-          fullPrompt += `Mood: ${matchingLocation.mood}\n`;
-        }
-        fullPrompt += '\n';
-      }
-    }
-
-    // If storyboard specifies characters, look them up from visualAssets (by ID) or recurringCharacters (by name)
-    const characters = storyBible.visualAssets?.characters || [];
-
-    if ((storyboardCharacterIds && storyboardCharacterIds.length > 0) ||
-        (storyboardCharacters && storyboardCharacters.length > 0)) {
-      const charactersToInclude: { name: string; description: string }[] = [];
-
-      // Prefer ID-based lookup
-      if (storyboardCharacterIds && storyboardCharacterIds.length > 0 && characters.length > 0) {
-        for (const charId of storyboardCharacterIds) {
-          const charById = characters.find(c => c.id === charId);
-          if (charById) {
-            charactersToInclude.push({ name: charById.name, description: charById.description });
-          }
-        }
-      }
-
-      // Only fall back to name-based lookup if IDs were never set (legacy data without ID support)
-      // If storyboardCharacterIds is explicitly set (even to empty array), trust it and don't use names
-      const hasExplicitIds = storyboardCharacterIds !== undefined && storyboardCharacterIds !== null;
-      if (charactersToInclude.length === 0 && !hasExplicitIds && storyboardCharacters && storyboardCharacters.length > 0) {
-        // Try visualAssets first
-        if (characters.length > 0) {
-          for (const charName of storyboardCharacters) {
-            const charByName = characters.find(c =>
-              c.name.toLowerCase().includes(charName.toLowerCase()) ||
-              charName.toLowerCase().includes(c.name.toLowerCase())
-            );
-            if (charByName && !charactersToInclude.some(c => c.name === charByName.name)) {
-              charactersToInclude.push({ name: charByName.name, description: charByName.description });
-            }
-          }
-        }
-        // Then try deprecated recurringCharacters
-        if (charactersToInclude.length === 0 && storyBible.recurringCharacters) {
-          const legacyChars = storyBible.recurringCharacters.filter(char =>
-            storyboardCharacters.some(name =>
-              char.name.toLowerCase().includes(name.toLowerCase()) ||
-              name.toLowerCase().includes(char.name.toLowerCase())
-            )
-          );
-          for (const char of legacyChars) {
-            charactersToInclude.push({ name: char.name, description: char.visualDescription });
-          }
-        }
-      }
-
-      if (charactersToInclude.length > 0) {
+      if (characterRefs.length > 0) {
         fullPrompt += '=== CHARACTERS IN THIS SCENE ===\n';
-        charactersToInclude.forEach(char => {
+        characterRefs.forEach(char => {
           fullPrompt += `${char.name}: ${char.description}\n`;
         });
         fullPrompt += '\n';
       }
-    } else if (!hasStoryboard && storyBible.recurringCharacters && storyBible.recurringCharacters.length > 0) {
-      // Legacy behavior: include all characters if no storyboard
-      fullPrompt += 'RECURRING CHARACTERS (if they appear, use these exact descriptions):\n';
-      storyBible.recurringCharacters.forEach(char => {
-        fullPrompt += `- ${char.name}: ${char.visualDescription}\n`;
-      });
-      fullPrompt += '\n';
-    }
 
-    // If storyboard specifies objects, look them up from visualAssets
-    const objects = storyBible.visualAssets?.objects || [];
-    if (storyboardObjectIds && storyboardObjectIds.length > 0 && objects.length > 0) {
-      const objectsToInclude: { name: string; description: string }[] = [];
-      for (const objId of storyboardObjectIds) {
-        const objById = objects.find(o => o.id === objId);
-        if (objById) {
-          objectsToInclude.push({ name: objById.name, description: objById.description });
-        }
-      }
-      if (objectsToInclude.length > 0) {
+      if (objectRefs.length > 0) {
         fullPrompt += '=== KEY OBJECTS IN THIS SCENE ===\n';
-        objectsToInclude.forEach(obj => {
+        objectRefs.forEach(obj => {
           fullPrompt += `${obj.name}: ${obj.description}\n`;
         });
         fullPrompt += '\n';

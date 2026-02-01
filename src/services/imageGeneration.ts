@@ -1,4 +1,4 @@
-import type { StoryArc, StorySegment, StoryBible, Child, Pet } from '../types';
+import type { StoryArc, StorySegment, StoryBible, StoryReference, Child, Pet } from '../types';
 import { getCharacterById } from '../data/characters';
 
 interface GenerateImageResult {
@@ -15,6 +15,7 @@ interface CharacterContext {
 
 // Visual reference for consistent imagery (matches API interface)
 interface VisualReference {
+  id?: string;
   type: 'character' | 'object' | 'location';
   name: string;
   description: string;
@@ -49,70 +50,56 @@ function detectCharacterPresence(
   return { includeUser, includePet };
 }
 
-// Build visualReferences array from segment's storyboard tags and story bible
+// Build visualReferences array from segment's storyboard tags, using story_references (preferred) or story bible fallback
 function buildVisualReferences(
   segment: StorySegment,
-  storyBible?: StoryBible | null
+  storyBible?: StoryBible | null,
+  storyReferences?: StoryReference[]
 ): VisualReference[] {
-  const references: VisualReference[] = [];
+  const result: VisualReference[] = [];
+  const includedIds = new Set<string>();
 
-  if (!storyBible?.visualAssets) {
-    return references;
-  }
+  // Look up a storyboard ID in story_references by UUID
+  const lookupId = (id: string, assetType: 'location' | 'character' | 'object') => {
+    if (includedIds.has(id)) return;
 
-  const { locations, characters, objects } = storyBible.visualAssets;
+    if (storyReferences && storyReferences.length > 0) {
+      const ref = storyReferences.find(r => r.id === id);
+      if (ref?.imageUrl) {
+        result.push({ id: ref.id, type: assetType, name: ref.name, description: ref.description, imageUrl: ref.imageUrl });
+        includedIds.add(id);
+      }
+    }
+  };
 
   // Add location reference if tagged
-  if (segment.storyboardLocationId && locations) {
-    const location = locations.find((loc) => loc.id === segment.storyboardLocationId);
-    if (location?.referenceImageUrl) {
-      references.push({
-        type: 'location',
-        name: location.name,
-        description: location.description,
-        imageUrl: location.referenceImageUrl,
-      });
-    }
+  if (segment.storyboardLocationId) {
+    lookupId(segment.storyboardLocationId, 'location');
   }
 
   // Add character references if tagged
-  if (segment.storyboardCharacterIds && characters) {
+  if (segment.storyboardCharacterIds) {
     for (const charId of segment.storyboardCharacterIds) {
-      const character = characters.find((c) => c.id === charId);
-      if (character?.referenceImageUrl) {
-        references.push({
-          type: 'character',
-          name: character.name,
-          description: character.description,
-          imageUrl: character.referenceImageUrl,
-        });
-      }
+      lookupId(charId, 'character');
     }
   }
 
   // Add object references if tagged
-  if (segment.storyboardObjectIds && objects) {
+  if (segment.storyboardObjectIds) {
     for (const objId of segment.storyboardObjectIds) {
-      const object = objects.find((o) => o.id === objId);
-      if (object?.referenceImageUrl) {
-        references.push({
-          type: 'object',
-          name: object.name,
-          description: object.description,
-          imageUrl: object.referenceImageUrl,
-        });
-      }
+      lookupId(objId, 'object');
     }
   }
 
-  return references;
+  return result;
 }
 
 export async function generateImageForSegment(
   segment: StorySegment,
   referenceImageUrl?: string,
   characterContext?: CharacterContext,
-  storyBible?: StoryBible | null
+  storyBible?: StoryBible | null,
+  storyReferences?: StoryReference[]
 ): Promise<GenerateImageResult | null> {
   // Check if segment has image prompt or storyboard data
   const hasStoryboard = !!(segment.storyboardShotType || segment.storyboardLocationId || segment.storyboardFocus);
@@ -146,7 +133,7 @@ export async function generateImageForSegment(
   }
 
   // Build visual references from storyboard tags
-  const visualReferences = buildVisualReferences(segment, storyBible);
+  const visualReferences = buildVisualReferences(segment, storyBible, storyReferences);
   console.log('[ImageGen] Visual references:', visualReferences.length, 'items');
 
   try {
@@ -173,7 +160,6 @@ export async function generateImageForSegment(
           colorPalette: storyBible.colorPalette,
           lightingStyle: storyBible.lightingStyle,
           artDirection: storyBible.artDirection,
-          visualAssets: storyBible.visualAssets,
         } : undefined,
         // Visual references (character/location/object images)
         visualReferences: visualReferences.length > 0 ? visualReferences : undefined,
@@ -253,7 +239,7 @@ export async function generateImagesForStory(
       currentSegment: segment.id,
     });
 
-    const result = await generateImageForSegment(segment, undefined, characterContext, storyArc.storyBible);
+    const result = await generateImageForSegment(segment, undefined, characterContext, storyArc.storyBible, storyArc.references);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
     }
@@ -317,7 +303,7 @@ export async function generateImagesForChapter(
     });
 
     // Pass the previous image URL for style consistency, character context, and story bible
-    const result = await generateImageForSegment(segment, previousImageUrl, characterContext, storyArc.storyBible);
+    const result = await generateImageForSegment(segment, previousImageUrl, characterContext, storyArc.storyBible, storyArc.references);
     if (result) {
       imageUrlMap.set(result.segmentId, result.imageUrl);
       // Use this image as reference for the next one

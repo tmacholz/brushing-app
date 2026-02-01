@@ -65,6 +65,7 @@ export const personalizeStory = (
       personalizeChapter(chapter, childName, petName)
     ),
     storyBible: storyTemplate.storyBible ?? null,
+    references: storyTemplate.references ?? undefined,
   };
 };
 
@@ -152,5 +153,6 @@ export const refreshStoryArcContent = (
     backgroundMusicUrl: storyTemplate.backgroundMusicUrl ?? storyArc.backgroundMusicUrl,
     chapters: refreshedChapters,
     storyBible: storyTemplate.storyBible ?? storyArc.storyBible ?? null,
+    references: storyTemplate.references ?? storyArc.references ?? undefined,
   };
 };

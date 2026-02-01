@@ -109,15 +109,19 @@ export interface StoryWorld {
   isStarter: boolean;
 }
 
-// Visual asset from Story Bible for consistent imagery
-export interface VisualAsset {
+// Story reference from story_references table (single source of truth for visual references)
+export interface StoryReference {
   id: string;
+  storyId: string;
+  type: 'character' | 'object' | 'location';
   name: string;
   description: string;
+  imageUrl: string | null;
   mood?: string;
   personality?: string;
   role?: string;
-  referenceImageUrl?: string;
+  source?: string;
+  sortOrder: number;
 }
 
 // Story Bible for visual consistency across chapters
@@ -125,11 +129,6 @@ export interface StoryBible {
   colorPalette?: string;
   lightingStyle?: string;
   artDirection?: string;
-  visualAssets?: {
-    locations: VisualAsset[];
-    characters: VisualAsset[];
-    objects: VisualAsset[];
-  };
 }
 
 // Story template - static data for story definitions
@@ -143,6 +142,7 @@ export interface StoryTemplate {
   totalChapters: number;
   chapters: StoryChapter[];
   storyBible?: StoryBible | null;
+  references?: StoryReference[];
 }
 
 // Active story instance - created when user starts a story
@@ -160,6 +160,7 @@ export interface StoryArc {
   isComplete: boolean;
   createdAt: string;
   storyBible?: StoryBible | null;
+  references?: StoryReference[];
 }
 
 export interface StoryChapter {
