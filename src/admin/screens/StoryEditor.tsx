@@ -3116,58 +3116,61 @@ export function StoryEditor() {
                                       Location:
                                     </span>
                                     <div className="flex-1 flex flex-wrap gap-1 items-center">
-                                      {segment.storyboard_location_id && (() => {
-                                        const loc = referenceAssets.locations.find(l => l.id === segment.storyboard_location_id);
-                                        return loc ? (
-                                          <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded flex items-center gap-1 text-xs">
-                                            {loc.image_url && (
-                                              <img src={loc.image_url} alt="" className="w-4 h-4 rounded object-cover" />
-                                            )}
-                                            {loc.name}
-                                            <button
-                                              onClick={async () => {
-                                                const newRefIds = (segment.reference_ids || []).filter(id => id !== loc.id);
-                                                try {
-                                                  await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-                                                    method: 'PUT',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                      storyboardLocationId: null,
-                                                      storyboardLocation: null,
-                                                      referenceIds: newRefIds.length > 0 ? newRefIds : null
-                                                    }),
-                                                  });
-                                                  handleSegmentUpdate(segment.id, {
-                                                    storyboard_location_id: null,
-                                                    storyboard_location: null,
-                                                    reference_ids: newRefIds.length > 0 ? newRefIds : null
-                                                  });
-                                                } catch (err) {
-                                                  console.error('Failed to remove location:', err);
-                                                }
-                                              }}
-                                              className="opacity-60 hover:opacity-100"
-                                            >
-                                              <X className="w-3 h-3" />
-                                            </button>
-                                          </span>
-                                        ) : null;
-                                      })()}
-                                      {!segment.storyboard_location_id && (
-                                        referenceAssets.locations.length > 0 ? (
+                                      {(() => {
+                                        const loc = segment.storyboard_location_id
+                                          ? referenceAssets.locations.find(l => l.id === segment.storyboard_location_id)
+                                          : null;
+                                        if (loc) {
+                                          return (
+                                            <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded flex items-center gap-1 text-xs">
+                                              {loc.image_url && (
+                                                <img src={loc.image_url} alt="" className="w-4 h-4 rounded object-cover" />
+                                              )}
+                                              {loc.name}
+                                              <button
+                                                onClick={async () => {
+                                                  const newRefIds = (segment.reference_ids || []).filter(id => id !== loc.id);
+                                                  try {
+                                                    await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                      method: 'PUT',
+                                                      headers: { 'Content-Type': 'application/json' },
+                                                      body: JSON.stringify({
+                                                        storyboardLocationId: null,
+                                                        storyboardLocation: null,
+                                                        referenceIds: newRefIds.length > 0 ? newRefIds : null
+                                                      }),
+                                                    });
+                                                    handleSegmentUpdate(segment.id, {
+                                                      storyboard_location_id: null,
+                                                      storyboard_location: null,
+                                                      reference_ids: newRefIds.length > 0 ? newRefIds : null
+                                                    });
+                                                  } catch (err) {
+                                                    console.error('Failed to remove location:', err);
+                                                  }
+                                                }}
+                                                className="opacity-60 hover:opacity-100"
+                                              >
+                                                <X className="w-3 h-3" />
+                                              </button>
+                                            </span>
+                                          );
+                                        }
+                                        // No matched location — show dropdown to select one
+                                        return referenceAssets.locations.length > 0 ? (
                                           <select
                                             value=""
                                             onChange={async (e) => {
                                               const locId = e.target.value;
                                               if (!locId) return;
-                                              const loc = referenceAssets.locations.find(l => l.id === locId);
+                                              const selectedLoc = referenceAssets.locations.find(l => l.id === locId);
                                               try {
                                                 await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
                                                   method: 'PUT',
                                                   headers: { 'Content-Type': 'application/json' },
-                                                  body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: loc?.name || null }),
+                                                  body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: selectedLoc?.name || null }),
                                                 });
-                                                handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: loc?.name || null });
+                                                handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: selectedLoc?.name || null });
                                               } catch (err) {
                                                 console.error('Failed to set location:', err);
                                               }
@@ -3175,14 +3178,14 @@ export function StoryEditor() {
                                             className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-green-500/50"
                                           >
                                             <option value="">Select location...</option>
-                                            {referenceAssets.locations.map(loc => (
-                                              <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                            {referenceAssets.locations.map(l => (
+                                              <option key={l.id} value={l.id}>{l.name}</option>
                                             ))}
                                           </select>
                                         ) : (
                                           <span className="text-slate-500 text-xs italic">No locations defined in Visual Assets</span>
-                                        )
-                                      )}
+                                        );
+                                      })()}
                                     </div>
                                   </div>
 
