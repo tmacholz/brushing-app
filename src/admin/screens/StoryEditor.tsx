@@ -2298,16 +2298,17 @@ export function StoryEditor() {
                     </div>
 
                     {/* Visual Assets (Locations, Characters, Objects with Reference Images) */}
-                    {(referenceAssets.locations.length > 0 || referenceAssets.characters.length > 0 || referenceAssets.objects.length > 0) && (
                       <div className="space-y-6">
                         {/* Section Header with Actions */}
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-medium text-slate-300 flex items-center gap-2">
                             <Sparkles className="w-4 h-4 text-purple-400" />
                             Visual Assets
-                            <span className="text-xs font-normal text-slate-500">
-                              ({referenceAssets.locations.length + referenceAssets.characters.length + referenceAssets.objects.length} items)
-                            </span>
+                            {(referenceAssets.locations.length + referenceAssets.characters.length + referenceAssets.objects.length) > 0 && (
+                              <span className="text-xs font-normal text-slate-500">
+                                ({referenceAssets.locations.length + referenceAssets.characters.length + referenceAssets.objects.length} items)
+                              </span>
+                            )}
                           </h3>
                           <div className="flex gap-2">
                             <button
@@ -2393,6 +2394,11 @@ export function StoryEditor() {
                             </motion.div>
                           )}
                         </AnimatePresence>
+
+                        {/* Empty state */}
+                        {referenceAssets.locations.length === 0 && referenceAssets.characters.length === 0 && referenceAssets.objects.length === 0 && !showAddReference && (
+                          <p className="text-xs text-slate-500 italic">No visual references yet. Click "Add" to create one, or "Re-extract" to extract from the story.</p>
+                        )}
 
                         {/* Locations */}
                         {referenceAssets.locations.length > 0 && (
@@ -2660,7 +2666,6 @@ export function StoryEditor() {
                           </p>
                         )}
                       </div>
-                    )}
                   </div>
                 )}
               </motion.div>
@@ -3149,30 +3154,34 @@ export function StoryEditor() {
                                         ) : null;
                                       })()}
                                       {!segment.storyboard_location_id && (
-                                        <select
-                                          value=""
-                                          onChange={async (e) => {
-                                            const locId = e.target.value;
-                                            if (!locId) return;
-                                            const loc = referenceAssets.locations.find(l => l.id === locId);
-                                            try {
-                                              await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
-                                                method: 'PUT',
-                                                headers: { 'Content-Type': 'application/json' },
-                                                body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: loc?.name || null }),
-                                              });
-                                              handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: loc?.name || null });
-                                            } catch (err) {
-                                              console.error('Failed to set location:', err);
-                                            }
-                                          }}
-                                          className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-green-500/50"
-                                        >
-                                          <option value="">Select location...</option>
-                                          {referenceAssets.locations.map(loc => (
-                                            <option key={loc.id} value={loc.id}>{loc.name}</option>
-                                          ))}
-                                        </select>
+                                        referenceAssets.locations.length > 0 ? (
+                                          <select
+                                            value=""
+                                            onChange={async (e) => {
+                                              const locId = e.target.value;
+                                              if (!locId) return;
+                                              const loc = referenceAssets.locations.find(l => l.id === locId);
+                                              try {
+                                                await fetch(`/api/admin/stories/${storyId}?segment=${segment.id}`, {
+                                                  method: 'PUT',
+                                                  headers: { 'Content-Type': 'application/json' },
+                                                  body: JSON.stringify({ storyboardLocationId: locId, storyboardLocation: loc?.name || null }),
+                                                });
+                                                handleSegmentUpdate(segment.id, { storyboard_location_id: locId, storyboard_location: loc?.name || null });
+                                              } catch (err) {
+                                                console.error('Failed to set location:', err);
+                                              }
+                                            }}
+                                            className="px-2 py-0.5 bg-slate-700/30 border border-slate-600/50 rounded text-slate-400 text-xs focus:outline-none focus:border-green-500/50"
+                                          >
+                                            <option value="">Select location...</option>
+                                            {referenceAssets.locations.map(loc => (
+                                              <option key={loc.id} value={loc.id}>{loc.name}</option>
+                                            ))}
+                                          </select>
+                                        ) : (
+                                          <span className="text-slate-500 text-xs italic">No locations defined in Visual Assets</span>
+                                        )
                                       )}
                                     </div>
                                   </div>
