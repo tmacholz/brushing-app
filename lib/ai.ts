@@ -45,7 +45,7 @@ async function callGemini(prompt: string, maxRetries: number = 5): Promise<strin
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
+        generationConfig: { temperature: 0.9, maxOutputTokens: 16384 },
       }),
     });
 
@@ -68,12 +68,20 @@ async function callGemini(prompt: string, maxRetries: number = 5): Promise<strin
     console.log('[Gemini] Response structure:', JSON.stringify(data, null, 2).slice(0, 500));
 
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const finishReason = data.candidates?.[0]?.finishReason;
 
     if (!text) {
       // Log full response for debugging
       console.error('[Gemini] No text found. Full response:', JSON.stringify(data, null, 2));
-      const blockReason = data.candidates?.[0]?.finishReason || data.promptFeedback?.blockReason;
+      const blockReason = finishReason || data.promptFeedback?.blockReason;
       throw new Error(`No text in Gemini response. Reason: ${blockReason || 'unknown'}`);
+    }
+
+    // If response was truncated, retry with higher token limit
+    if (finishReason === 'MAX_TOKENS') {
+      console.warn('[Gemini] Response truncated (MAX_TOKENS), retrying...');
+      lastError = new Error('Response truncated');
+      continue;
     }
 
     return text;
@@ -91,6 +99,14 @@ function extractJson<T>(text: string): T {
     } catch {
       // Fall through to other methods
     }
+  }
+
+  // Try JSON.parse directly on trimmed text
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed) as T;
+  } catch {
+    // Fall through to brace counting
   }
 
   // Try to find balanced JSON object or array
@@ -128,9 +144,9 @@ function extractJson<T>(text: string): T {
 
     if (inString) continue;
 
-    if (char === startChar || char === '{' || char === '[') {
+    if (char === '{' || char === '[') {
       depth++;
-    } else if (char === endChar || char === '}' || char === ']') {
+    } else if (char === '}' || char === ']') {
       depth--;
       if (depth === 0) {
         endIndex = i;
@@ -140,6 +156,8 @@ function extractJson<T>(text: string): T {
   }
 
   if (endIndex === -1) {
+    console.error('[extractJson] Unbalanced braces. Response text (first 500 chars):', text.slice(0, 500));
+    console.error('[extractJson] Response text (last 500 chars):', text.slice(-500));
     throw new Error('No valid JSON found - unbalanced braces');
   }
 
