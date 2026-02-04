@@ -113,8 +113,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     const activePet = getPetById(child.activePetId);
     const stories = getStoriesForWorld(child.activeWorldId);
 
-    // Create new story if needed
+    // Create new story if needed (but not during completion flow — let HomeScreen handle it)
     if (!child.currentStoryArc) {
+      if (hasTriggeredCompletionRef.current) return;
       if (stories.length > 0) {
         // Use the first available story from the database/content
         const storyArc = personalizeStory(
