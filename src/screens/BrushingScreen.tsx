@@ -194,6 +194,13 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     if (!child) return;
 
+    // Stop background music and narration
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.pause();
+    }
+    stopSpeaking();
+    stopSplicedAudio();
+
     // Play completion sound
     playSound('complete');
 
@@ -227,6 +234,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     setHasBonusFlow(bonusEnabled);
 
     // Always show "Amazing job" completion screen first
+    playSound('success');
     setShowInitialCompletion(true);
   };
 
