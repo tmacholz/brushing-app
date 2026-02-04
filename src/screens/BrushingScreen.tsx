@@ -34,7 +34,7 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward, replayingChapterIndex, clearReplayState } = useChild();
   const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
@@ -147,7 +147,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }, [child, setCurrentStoryArc, getPetById, getStoriesForWorld]);
 
   // Derive chapter directly from context so it updates when images are added
-  const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;
+  // Use replay index when replaying a previously completed chapter
+  const chapterIndex = replayingChapterIndex ?? (child?.currentStoryArc?.currentChapterIndex ?? 0);
   const currentChapter = child?.currentStoryArc?.chapters[chapterIndex] ?? null;
 
   // Use the story arc's pet, falling back to active pet for new stories
@@ -198,7 +199,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     // Update streak and calculate points
     const { newStreak } = await updateStreak();
+    const isReplay = replayingChapterIndex !== null;
     const isStoryArcComplete =
+      !isReplay &&
       child.currentStoryArc &&
       chapterIndex === child.currentStoryArc.totalChapters - 1;
 
@@ -611,6 +614,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       stopSplicedAudio();
     };
   }, [stopSpeaking, stopSplicedAudio]);
+
+  // Clear replay state on unmount (handles exit mid-replay)
+  useEffect(() => () => clearReplayState(), [clearReplayState]);
 
   // Backfill background music URL for existing story arcs that don't have it
   useEffect(() => {
