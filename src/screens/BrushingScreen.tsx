@@ -34,7 +34,7 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward, replayingChapterIndex, clearReplayState } = useChild();
   const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
@@ -113,8 +113,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     const activePet = getPetById(child.activePetId);
     const stories = getStoriesForWorld(child.activeWorldId);
 
-    // Create new story if needed
+    // Create new story if needed (but not during completion flow — let HomeScreen handle it)
     if (!child.currentStoryArc) {
+      if (hasTriggeredCompletionRef.current) return;
       if (stories.length > 0) {
         // Use the first available story from the database/content
         const storyArc = personalizeStory(
@@ -147,7 +148,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   }, [child, setCurrentStoryArc, getPetById, getStoriesForWorld]);
 
   // Derive chapter directly from context so it updates when images are added
-  const chapterIndex = child?.currentStoryArc?.currentChapterIndex ?? 0;
+  // Use replay index when replaying a previously completed chapter
+  const chapterIndex = replayingChapterIndex ?? (child?.currentStoryArc?.currentChapterIndex ?? 0);
   const currentChapter = child?.currentStoryArc?.chapters[chapterIndex] ?? null;
 
   // Use the story arc's pet, falling back to active pet for new stories
@@ -193,12 +195,21 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     if (!child) return;
 
+    // Stop background music and narration
+    if (backgroundMusicRef.current) {
+      backgroundMusicRef.current.pause();
+    }
+    stopSpeaking();
+    stopSplicedAudio();
+
     // Play completion sound
     playSound('complete');
 
     // Update streak and calculate points
     const { newStreak } = await updateStreak();
+    const isReplay = replayingChapterIndex !== null;
     const isStoryArcComplete =
+      !isReplay &&
       child.currentStoryArc &&
       chapterIndex === child.currentStoryArc.totalChapters - 1;
 
@@ -224,6 +235,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     setHasBonusFlow(bonusEnabled);
 
     // Always show "Amazing job" completion screen first
+    playSound('success');
     setShowInitialCompletion(true);
   };
 
@@ -612,6 +624,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     };
   }, [stopSpeaking, stopSplicedAudio]);
 
+  // Clear replay state on unmount (handles exit mid-replay)
+  useEffect(() => () => clearReplayState(), [clearReplayState]);
+
   // Backfill background music URL for existing story arcs that don't have it
   useEffect(() => {
     if (!child?.currentStoryArc) return;
@@ -748,58 +763,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     return null;
   }
 
-  // Render error if no story is available
-  if (!currentChapter) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <p className="text-6xl mb-6">📚</p>
-          <h1 className="text-2xl font-bold text-white mb-4">No Stories Yet!</h1>
-          <p className="text-white/80 text-lg mb-8">
-            Stories for this world are coming soon.
-          </p>
-          <button
-            onClick={onExit}
-            className="bg-white text-primary font-bold py-3 px-8 rounded-full text-lg shadow-lg"
-          >
-            Go Back
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // Render countdown
-  if (showCountdown) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="text-center"
-        >
-          <p className="text-white/80 text-xl mb-4">Get ready to brush!</p>
-          <motion.div
-            key={countdown}
-            initial={{ scale: 1.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.5, opacity: 0 }}
-            className="text-9xl font-bold text-white"
-          >
-            {countdown}
-          </motion.div>
-        </motion.div>
-      </div>
-    );
-  }
-
   // Render initial completion screen ("Amazing job!" first)
   // Note: showInitialCompletion is set in handleBrushingComplete, which can be triggered by
   // either the timer completing (isComplete) OR the story phase reaching 'complete'
+  // Must come before !currentChapter check since currentStoryArc is null after final chapter
   if (showInitialCompletion) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-success to-success/80 flex flex-col items-center justify-center p-6">
@@ -877,6 +844,55 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         onRewardClaimed={handleChestRewardClaimed}
         onClose={handleChestClose}
       />
+    );
+  }
+
+  // Render error if no story is available
+  if (!currentChapter) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <p className="text-6xl mb-6">📚</p>
+          <h1 className="text-2xl font-bold text-white mb-4">No Stories Yet!</h1>
+          <p className="text-white/80 text-lg mb-8">
+            Stories for this world are coming soon.
+          </p>
+          <button
+            onClick={onExit}
+            className="bg-white text-primary font-bold py-3 px-8 rounded-full text-lg shadow-lg"
+          >
+            Go Back
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Render countdown
+  if (showCountdown) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-primary/80 flex flex-col items-center justify-center p-6">
+        <motion.div
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="text-center"
+        >
+          <p className="text-white/80 text-xl mb-4">Get ready to brush!</p>
+          <motion.div
+            key={countdown}
+            initial={{ scale: 1.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            className="text-9xl font-bold text-white"
+          >
+            {countdown}
+          </motion.div>
+        </motion.div>
+      </div>
     );
   }
 

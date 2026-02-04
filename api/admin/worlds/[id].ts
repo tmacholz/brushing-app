@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, mergeExtractedReferencesIntoStoryBible, generateStoryboard, type ExistingStory } from '../../../lib/ai.js';
+import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, generateStoryboard, type ExistingStory, type StoryboardReference } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
 
 // Helper to generate world image (calls the shared function directly)
@@ -150,14 +150,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Step 1: Generate Story Bible for consistency across chapters and images
         console.log('[Story] Generating Story Bible for:', pitch.title);
-        const storyBible = await generateStoryBible(
+        const { storyBible, references: bibleReferences } = await generateStoryBible(
           world.display_name,
           world.description,
           pitch.title,
           pitch.description,
           outline
         );
-        console.log('[Story] Story Bible created with', storyBible.keyLocations.length, 'locations and', storyBible.recurringCharacters.length, 'characters');
+        console.log('[Story] Story Bible created with', bibleReferences.filter(r => r.type === 'location').length, 'locations and', bibleReferences.filter(r => r.type === 'character').length, 'characters');
 
         // Step 2: Create story record with bible
         const [story] = await sql`
@@ -166,8 +166,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           RETURNING *
         `;
 
+        // Step 2b: Save bible references to story_references table
+        for (let i = 0; i < bibleReferences.length; i++) {
+          const ref = bibleReferences[i];
+          await sql`
+            INSERT INTO story_references (story_id, type, name, description, mood, personality, role, source, sort_order)
+            VALUES (${story.id}, ${ref.type}, ${ref.name}, ${ref.description}, ${ref.mood ?? null}, ${ref.personality ?? null}, ${ref.role ?? null}, ${ref.source ?? 'bible'}, ${i})
+          `;
+        }
+        console.log('[Story] Saved', bibleReferences.length, 'bible references to story_references table');
+
         // Step 3: Generate chapters using the story bible for consistency
-        const chapters = await generateFullStory(world.display_name, world.description, pitch.title, pitch.description, outline, storyBible);
+        const chapters = await generateFullStory(world.display_name, world.description, pitch.title, pitch.description, outline, storyBible, bibleReferences);
 
         for (const chapter of chapters) {
           const [savedChapter] = await sql`
@@ -187,29 +197,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await sql`UPDATE stories SET status = 'draft' WHERE id = ${story.id}`;
         await sql`UPDATE story_pitches SET is_used = true WHERE id = ${pitchId}`;
 
-        // Step 4: Extract visual references and merge into Story Bible
+        // Step 4: Extract additional visual references and save directly to story_references
         console.log('[Story] Extracting visual references for:', pitch.title);
-        let updatedStoryBible = storyBible;
         try {
-          const references = await extractStoryReferences(pitch.title, pitch.description, chapters, storyBible);
-          console.log('[Story] Extracted', references.length, 'visual references');
+          const extractedRefs = await extractStoryReferences(pitch.title, pitch.description, chapters, storyBible, bibleReferences);
+          console.log('[Story] Extracted', extractedRefs.length, 'visual references');
 
-          // Merge extracted references into Story Bible
-          updatedStoryBible = mergeExtractedReferencesIntoStoryBible(storyBible, references);
-          console.log('[Story] Merged references into Story Bible visualAssets');
+          // Get existing references to avoid duplicates
+          const existingRefs = await sql`SELECT name, type FROM story_references WHERE story_id = ${story.id}`;
+          const existingNames = new Set(existingRefs.map(r => r.name.toLowerCase()));
 
-          // Update Story Bible in database with merged assets
-          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${story.id}`;
+          // Get next sort_order
+          const [maxOrder] = await sql`SELECT COALESCE(MAX(sort_order), -1) as max_order FROM story_references WHERE story_id = ${story.id}`;
+          let sortOrder = (maxOrder?.max_order ?? -1) + 1;
 
-          // Also save to story_references table for backwards compatibility
-          for (let i = 0; i < references.length; i++) {
-            const ref = references[i];
-            await sql`
-              INSERT INTO story_references (story_id, type, name, description, sort_order)
-              VALUES (${story.id}, ${ref.type}, ${ref.name}, ${ref.description}, ${i})
-            `;
+          // Save new extracted references (skip duplicates by name)
+          let addedCount = 0;
+          for (const ref of extractedRefs) {
+            const normalize = (s: string) => s.toLowerCase().replace(/^the\s+/, '');
+            const isDuplicate = existingRefs.some(e =>
+              e.type === ref.type && (
+                normalize(e.name) === normalize(ref.name) ||
+                normalize(e.name).includes(normalize(ref.name)) ||
+                normalize(ref.name).includes(normalize(e.name))
+              )
+            );
+            if (!isDuplicate) {
+              await sql`
+                INSERT INTO story_references (story_id, type, name, description, source, sort_order)
+                VALUES (${story.id}, ${ref.type}, ${ref.name}, ${ref.description}, ${'extracted'}, ${sortOrder++})
+              `;
+              addedCount++;
+            }
           }
-          console.log('[Story] Saved', references.length, 'references to database');
+          console.log('[Story] Added', addedCount, 'new extracted references to database');
         } catch (refError) {
           // Don't fail the whole story if reference extraction fails
           console.error('[Story] Reference extraction failed (non-fatal):', refError);
@@ -230,16 +251,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   id: s.id,
                   segmentOrder: s.segment_order,
                   text: s.text,
-                  imagePrompt: null, // No longer used
+                  imagePrompt: null,
                 })),
               };
             })
           );
 
+          // Fetch saved story_references with UUIDs to pass to storyboard
+          const savedRefs = await sql`SELECT id, type, name, description, mood, personality, role FROM story_references WHERE story_id = ${story.id} ORDER BY sort_order`;
+          const storyboardRefs: StoryboardReference[] = savedRefs.map(r => ({
+            id: r.id,
+            type: r.type,
+            name: r.name,
+            description: r.description,
+            mood: r.mood || undefined,
+            personality: r.personality || undefined,
+            role: r.role || undefined,
+          }));
+
           const storyboard = await generateStoryboard({
             storyTitle: pitch.title,
             storyDescription: pitch.description,
-            storyBible: updatedStoryBible,
+            storyBible,
+            references: storyboardRefs,
             chapters: chaptersForStoryboard,
           });
           console.log('[Story] Generated storyboard with', storyboard.length, 'segment entries');

@@ -126,6 +126,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           })
         );
 
+        // Fetch story references for visual consistency
+        const storyRefs = await sql`
+          SELECT id, story_id, type, name, description, image_url, mood, personality, role, source, sort_order
+          FROM story_references
+          WHERE story_id = ${story.id}
+          ORDER BY sort_order
+        `;
+
         return {
           id: story.id,
           worldId: story.world_id,
@@ -136,6 +144,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           totalChapters: story.total_chapters,
           chapters: chaptersWithSegments,
           storyBible: story.story_bible || null,
+          references: storyRefs.map((ref) => ({
+            id: ref.id,
+            storyId: ref.story_id,
+            type: ref.type,
+            name: ref.name,
+            description: ref.description,
+            imageUrl: ref.image_url || null,
+            mood: ref.mood || undefined,
+            personality: ref.personality || undefined,
+            role: ref.role || undefined,
+            source: ref.source || undefined,
+            sortOrder: ref.sort_order,
+          })),
         };
       })
     );

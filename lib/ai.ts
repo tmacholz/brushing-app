@@ -172,66 +172,29 @@ export interface StoryPitch {
 }
 
 // Story Bible - comprehensive reference for consistent storytelling and visuals
-// Visual asset with unique ID for stable referencing
-export interface VisualAsset {
-  id: string;                    // Unique ID (e.g., "loc-abc123", "char-def456", "obj-ghi789")
-  name: string;                  // Display name
-  description: string;           // Visual description for image generation
-  mood?: string;                 // For locations
-  personality?: string;          // For characters
-  role?: string;                 // For characters (e.g., "wise mentor", "comic relief")
-  referenceImageUrl?: string;    // Generated reference image
-  source: 'bible' | 'extracted'; // Where it came from
-}
-
 export interface StoryBible {
   // Narrative elements
-  tone: string; // e.g., "whimsical and heartwarming with gentle humor"
-  themes: string[]; // e.g., ["friendship", "bravery", "helping others"]
-  narrativeStyle: string; // e.g., "Third person, warm narrator voice, simple sentences"
+  tone: string;
+  themes: string[];
+  narrativeStyle: string;
 
   // Character behavior in THIS story
-  childRole: string; // How [CHILD] acts in this story, e.g., "curious explorer who asks questions"
-  petRole: string; // How [PET] acts, e.g., "loyal sidekick who provides comic relief"
-  characterDynamic: string; // How they interact, e.g., "[CHILD] leads, [PET] encourages and helps"
-
-  // CONSOLIDATED VISUAL ASSETS (replaces keyLocations + recurringCharacters)
-  visualAssets: {
-    locations: VisualAsset[];
-    characters: VisualAsset[];  // NPCs only (not child/pet)
-    objects: VisualAsset[];     // Important items
-  };
-
-  // DEPRECATED: Keep for backwards compatibility during migration
-  keyLocations?: {
-    name: string;
-    visualDescription: string;
-    mood: string;
-  }[];
-  recurringCharacters?: {
-    name: string;
-    visualDescription: string;
-    personality: string;
-    role: string;
-  }[];
+  childRole: string;
+  petRole: string;
+  characterDynamic: string;
 
   // Visual style guide
-  colorPalette: string; // e.g., "warm golden yellows, soft greens, magical purples"
-  lightingStyle: string; // e.g., "soft dappled sunlight filtering through leaves"
-  artDirection: string; // Additional visual notes
+  colorPalette: string;
+  lightingStyle: string;
+  artDirection: string;
 
   // Story-specific elements
-  magicSystem: string | null; // If applicable, how magic works
-  stakes: string; // What's at risk, e.g., "The forest animals will lose their home"
-  resolution: string; // How it ends (for consistent buildup)
+  magicSystem: string | null;
+  stakes: string;
+  resolution: string;
 }
 
-// Generate a unique ID for visual assets
-function generateAssetId(type: 'loc' | 'char' | 'obj'): string {
-  return `${type}-${Math.random().toString(36).substring(2, 10)}`;
-}
-
-// Raw response from AI before we add IDs
+// Raw response from AI before we extract references
 interface RawStoryBibleResponse {
   tone: string;
   themes: string[];
@@ -252,13 +215,18 @@ interface RawStoryBibleResponse {
   resolution: string;
 }
 
+export interface GeneratedStoryBibleResult {
+  storyBible: StoryBible;
+  references: ExtractedReference[];
+}
+
 export async function generateStoryBible(
   worldName: string,
   worldDescription: string,
   storyTitle: string,
   storyDescription: string,
   outline: { chapter: number; title: string; summary: string }[]
-): Promise<StoryBible> {
+): Promise<GeneratedStoryBibleResult> {
   const outlineText = outline.map(ch => `  Chapter ${ch.chapter}: "${ch.title}" - ${ch.summary}`).join('\n');
 
   const prompt = `Create a comprehensive "Story Bible" for a children's adventure story (ages 4-8).
@@ -334,32 +302,19 @@ Be specific and detailed - this bible will be the source of truth for the entire
   const text = await callGemini(prompt);
   const raw = extractJson<RawStoryBibleResponse>(text);
 
-  // Add unique IDs and source tracking to all visual assets
-  const visualAssets: StoryBible['visualAssets'] = {
-    locations: (raw.visualAssets?.locations || []).map(loc => ({
-      id: generateAssetId('loc'),
-      name: loc.name,
-      description: loc.description,
-      mood: loc.mood,
-      source: 'bible' as const,
-    })),
-    characters: (raw.visualAssets?.characters || []).map(char => ({
-      id: generateAssetId('char'),
-      name: char.name,
-      description: char.description,
-      personality: char.personality,
-      role: char.role,
-      source: 'bible' as const,
-    })),
-    objects: (raw.visualAssets?.objects || []).map(obj => ({
-      id: generateAssetId('obj'),
-      name: obj.name,
-      description: obj.description,
-      source: 'bible' as const,
-    })),
-  };
+  // Extract references from the AI response (these will be saved to story_references table by the caller)
+  const references: ExtractedReference[] = [];
+  for (const loc of raw.visualAssets?.locations || []) {
+    references.push({ type: 'location', name: loc.name, description: loc.description, mood: loc.mood, source: 'bible' });
+  }
+  for (const char of raw.visualAssets?.characters || []) {
+    references.push({ type: 'character', name: char.name, description: char.description, personality: char.personality, role: char.role, source: 'bible' });
+  }
+  for (const obj of raw.visualAssets?.objects || []) {
+    references.push({ type: 'object', name: obj.name, description: obj.description, source: 'bible' });
+  }
 
-  // Build the full StoryBible with backwards compatibility
+  // Build the StoryBible (references are stored separately in story_references table)
   const storyBible: StoryBible = {
     tone: raw.tone,
     themes: raw.themes,
@@ -367,19 +322,6 @@ Be specific and detailed - this bible will be the source of truth for the entire
     childRole: raw.childRole,
     petRole: raw.petRole,
     characterDynamic: raw.characterDynamic,
-    visualAssets,
-    // Backwards compatibility: populate deprecated fields
-    keyLocations: visualAssets.locations.map(loc => ({
-      name: loc.name,
-      visualDescription: loc.description,
-      mood: loc.mood || '',
-    })),
-    recurringCharacters: visualAssets.characters.map(char => ({
-      name: char.name,
-      visualDescription: char.description,
-      personality: char.personality || '',
-      role: char.role || '',
-    })),
     colorPalette: raw.colorPalette,
     lightingStyle: raw.lightingStyle,
     artDirection: raw.artDirection,
@@ -388,7 +330,7 @@ Be specific and detailed - this bible will be the source of truth for the entire
     resolution: raw.resolution,
   };
 
-  return storyBible;
+  return { storyBible, references };
 }
 
 export interface ExistingStory {
@@ -502,12 +444,18 @@ export async function generateFullStory(
   storyTitle: string,
   storyDescription: string,
   outline: { chapter: number; title: string; summary: string }[],
-  storyBible?: StoryBible
+  storyBible?: StoryBible,
+  references?: ExtractedReference[]
 ): Promise<GeneratedChapter[]> {
   const chapters: GeneratedChapter[] = [];
 
   // Build story bible reference section if provided
-  const bibleSection = storyBible ? `
+  let bibleSection = '';
+  if (storyBible) {
+    const locations = (references || []).filter(r => r.type === 'location');
+    const characters = (references || []).filter(r => r.type === 'character');
+
+    bibleSection = `
 STORY BIBLE (maintain consistency with these elements throughout):
 - Tone: ${storyBible.tone}
 - Themes: ${storyBible.themes.join(', ')}
@@ -519,17 +467,18 @@ STORY BIBLE (maintain consistency with these elements throughout):
 - Resolution Direction: ${storyBible.resolution}
 
 KEY LOCATIONS (use these visual descriptions for image prompts):
-${storyBible.keyLocations.map(loc => `- ${loc.name}: ${loc.visualDescription} (mood: ${loc.mood})`).join('\n')}
+${locations.map(loc => `- ${loc.name}: ${loc.description}${loc.mood ? ` (mood: ${loc.mood})` : ''}`).join('\n')}
 
 RECURRING CHARACTERS (maintain consistent appearances):
-${storyBible.recurringCharacters.map(char => `- ${char.name}: ${char.visualDescription} (${char.personality}, role: ${char.role})`).join('\n')}
+${characters.map(char => `- ${char.name}: ${char.description}${char.personality ? ` (${char.personality}` : ''}${char.role ? `, role: ${char.role})` : char.personality ? ')' : ''}`).join('\n')}
 
 VISUAL STYLE (apply to all image prompts):
 - Color Palette: ${storyBible.colorPalette}
 - Lighting: ${storyBible.lightingStyle}
 - Art Direction: ${storyBible.artDirection}
 ${storyBible.magicSystem ? `- Magic System: ${storyBible.magicSystem}` : ''}
-` : '';
+`;
+  }
 
   for (let i = 0; i < outline.length; i++) {
     const chapterOutline = outline[i];
@@ -634,13 +583,18 @@ export interface ExtractedReference {
   type: 'character' | 'object' | 'location';
   name: string;
   description: string; // Detailed visual description for image generation
+  mood?: string;       // For locations
+  personality?: string; // For characters
+  role?: string;       // For characters
+  source?: 'bible' | 'extracted'; // Where it came from
 }
 
 export async function extractStoryReferences(
   storyTitle: string,
   storyDescription: string,
   chapters: GeneratedChapter[],
-  storyBible?: StoryBible
+  storyBible?: StoryBible,
+  existingReferences?: ExtractedReference[]
 ): Promise<ExtractedReference[]> {
   // Compile all story text for analysis
   const allSegmentTexts = chapters.flatMap(ch =>
@@ -652,20 +606,20 @@ export async function extractStoryReferences(
     .map(ch => ch.cliffhanger)
     .join('\n');
 
-  // Include Story Bible info for richer extraction (use new visualAssets or fallback to deprecated fields)
+  // Include Story Bible and existing references for context
   let bibleContext = '';
-  if (storyBible) {
-    const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({ name: l.name, description: l.visualDescription })) || [];
-    const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({ name: c.name, description: c.visualDescription })) || [];
-    const objects = storyBible.visualAssets?.objects || [];
+  if (storyBible || (existingReferences && existingReferences.length > 0)) {
+    const refs = existingReferences || [];
+    const locations = refs.filter(r => r.type === 'location');
+    const characters = refs.filter(r => r.type === 'character');
+    const objects = refs.filter(r => r.type === 'object');
 
     bibleContext = `
 STORY BIBLE CONTEXT:
 Locations: ${locations.map(l => `${l.name} - ${l.description}`).join('; ')}
 Characters: ${characters.map(c => `${c.name} - ${c.description}`).join('; ')}
 Objects: ${objects.map(o => `${o.name} - ${o.description}`).join('; ')}
-Color Palette: ${storyBible.colorPalette}
-Lighting Style: ${storyBible.lightingStyle}
+${storyBible ? `Color Palette: ${storyBible.colorPalette}\nLighting Style: ${storyBible.lightingStyle}` : ''}
 `;
   }
 
@@ -732,90 +686,6 @@ If the story has fewer meaningful visual elements, return fewer items. Quality o
     .slice(0, 8);
 }
 
-// Helper to check if two names are similar (fuzzy match)
-function namesAreSimilar(name1: string, name2: string): boolean {
-  const normalize = (s: string) => s.toLowerCase().replace(/^the\s+/, '').replace(/[^a-z0-9]/g, '');
-  const n1 = normalize(name1);
-  const n2 = normalize(name2);
-  return n1 === n2 || n1.includes(n2) || n2.includes(n1);
-}
-
-// Merge extracted references into Story Bible's visualAssets
-export function mergeExtractedReferencesIntoStoryBible(
-  storyBible: StoryBible,
-  extractedRefs: ExtractedReference[]
-): StoryBible {
-  // Initialize visualAssets if not present
-  const visualAssets = storyBible.visualAssets || {
-    locations: [],
-    characters: [],
-    objects: [],
-  };
-
-  // Get existing names for deduplication
-  const existingLocationNames = new Set(visualAssets.locations.map(l => l.name.toLowerCase()));
-  const existingCharacterNames = new Set(visualAssets.characters.map(c => c.name.toLowerCase()));
-  const existingObjectNames = new Set(visualAssets.objects.map(o => o.name.toLowerCase()));
-
-  for (const ref of extractedRefs) {
-    const refNameLower = ref.name.toLowerCase();
-
-    if (ref.type === 'location') {
-      // Check if similar location exists
-      const exists = visualAssets.locations.some(l => namesAreSimilar(l.name, ref.name)) ||
-                     existingLocationNames.has(refNameLower);
-      if (!exists) {
-        visualAssets.locations.push({
-          id: generateAssetId('loc'),
-          name: ref.name,
-          description: ref.description,
-          source: 'extracted',
-        });
-      }
-    } else if (ref.type === 'character') {
-      const exists = visualAssets.characters.some(c => namesAreSimilar(c.name, ref.name)) ||
-                     existingCharacterNames.has(refNameLower);
-      if (!exists) {
-        visualAssets.characters.push({
-          id: generateAssetId('char'),
-          name: ref.name,
-          description: ref.description,
-          source: 'extracted',
-        });
-      }
-    } else if (ref.type === 'object') {
-      const exists = visualAssets.objects.some(o => namesAreSimilar(o.name, ref.name)) ||
-                     existingObjectNames.has(refNameLower);
-      if (!exists) {
-        visualAssets.objects.push({
-          id: generateAssetId('obj'),
-          name: ref.name,
-          description: ref.description,
-          source: 'extracted',
-        });
-      }
-    }
-  }
-
-  // Update deprecated fields for backwards compatibility
-  const updatedBible: StoryBible = {
-    ...storyBible,
-    visualAssets,
-    keyLocations: visualAssets.locations.map(loc => ({
-      name: loc.name,
-      visualDescription: loc.description,
-      mood: loc.mood || '',
-    })),
-    recurringCharacters: visualAssets.characters.map(char => ({
-      name: char.name,
-      visualDescription: char.description,
-      personality: char.personality || '',
-      role: char.role || '',
-    })),
-  };
-
-  return updatedBible;
-}
 
 // =====================================================
 // Reference Tagging for Segments
@@ -913,18 +783,29 @@ export interface StoryboardSegment {
   chapterNumber: number;
   location: string | null;           // Location name (for display)
   characters: string[];              // NPC names (for display)
-  locationId: string | null;         // Story Bible visualAssets.locations[].id
-  characterIds: string[];            // Story Bible visualAssets.characters[].id
+  locationId: string | null;         // story_references UUID
+  characterIds: string[];            // story_references UUIDs
   shotType: 'wide' | 'medium' | 'close-up' | 'extreme-close-up' | 'over-shoulder';
   cameraAngle: 'eye-level' | 'low-angle' | 'high-angle' | 'birds-eye' | 'worms-eye' | 'dutch-angle';
   visualFocus: string;               // What to emphasize visually
   continuityNote: string;            // How this connects to adjacent segments
 }
 
+export interface StoryboardReference {
+  id: string;   // UUID from story_references table
+  type: 'character' | 'object' | 'location';
+  name: string;
+  description: string;
+  mood?: string;
+  personality?: string;
+  role?: string;
+}
+
 export interface FullStoryboardInput {
   storyTitle: string;
   storyDescription: string;
   storyBible: StoryBible;
+  references?: StoryboardReference[]; // References with DB UUIDs for ID-based lookups
   chapters: {
     chapterNumber: number;
     title: string;
@@ -938,26 +819,23 @@ export interface FullStoryboardInput {
 }
 
 export async function generateStoryboard(input: FullStoryboardInput): Promise<StoryboardSegment[]> {
-  const { storyTitle, storyDescription, storyBible, chapters } = input;
+  const { storyTitle, storyDescription, storyBible, references: inputRefs, chapters } = input;
 
-  // Get locations from visualAssets (preferred) or fallback to deprecated keyLocations
-  const locations = storyBible.visualAssets?.locations || storyBible.keyLocations?.map(l => ({
-    id: generateAssetId('loc'),
-    name: l.name,
-    description: l.visualDescription,
-    mood: l.mood,
-    source: 'bible' as const,
-  })) || [];
-
-  // Get characters from visualAssets (preferred) or fallback to deprecated recurringCharacters
-  const characters = storyBible.visualAssets?.characters || storyBible.recurringCharacters?.map(c => ({
-    id: generateAssetId('char'),
-    name: c.name,
-    description: c.visualDescription,
-    personality: c.personality,
-    role: c.role,
-    source: 'bible' as const,
-  })) || [];
+  // Get locations and characters from references (story_references table with UUIDs)
+  const allRefs = inputRefs || [];
+  const locations = allRefs.filter(r => r.type === 'location').map(r => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    mood: r.mood,
+  }));
+  const characters = allRefs.filter(r => r.type === 'character').map(r => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    personality: r.personality,
+    role: r.role,
+  }));
 
   // Build location list from Story Bible
   const locationList = locations.length

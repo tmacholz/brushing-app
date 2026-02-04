@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
-import { generateStoryBible, generateStoryboard } from '../../../lib/ai.js';
+import { generateStoryBible, generateStoryboard, type StoryboardReference } from '../../../lib/ai.js';
 
 interface ImageHistoryItem {
   url: string;
@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Storyboard fields (text-based for backwards compatibility)
         storyboardLocation, storyboardCharacters, storyboardShotType, storyboardCameraAngle,
         storyboardFocus, storyboardContinuity, storyboardExclude,
-        // Storyboard ID-based fields (linked to visualAssets)
+        // Storyboard ID-based fields (linked to story_references)
         storyboardLocationId, storyboardCharacterIds, storyboardObjectIds,
         // Character expression overlays
         childPose, petPose
@@ -285,49 +285,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('Reference updated:', reference?.id);
         if (!reference) return res.status(404).json({ error: 'Reference not found' });
 
-        // Also sync image URL to Story Bible visualAssets if imageUrl was updated
-        if (imageUrl && reference) {
-          try {
-            const [story] = await sql`SELECT story_bible FROM stories WHERE id = ${id}`;
-            if (story?.story_bible?.visualAssets) {
-              const visualAssets = story.story_bible.visualAssets;
-              let updated = false;
-
-              // Find and update matching asset based on type and name
-              const assetArrays = [
-                { key: 'locations', type: 'location' },
-                { key: 'characters', type: 'character' },
-                { key: 'objects', type: 'object' },
-              ] as const;
-
-              for (const { key, type } of assetArrays) {
-                if (reference.type === type && visualAssets[key]) {
-                  for (const asset of visualAssets[key]) {
-                    // Match by name (fuzzy)
-                    const refNameLower = reference.name.toLowerCase().replace(/^the\s+/, '');
-                    const assetNameLower = asset.name.toLowerCase().replace(/^the\s+/, '');
-                    if (refNameLower === assetNameLower ||
-                        refNameLower.includes(assetNameLower) ||
-                        assetNameLower.includes(refNameLower)) {
-                      asset.referenceImageUrl = imageUrl;
-                      updated = true;
-                      console.log(`[Reference] Synced image to Story Bible visualAssets.${key}: ${asset.name}`);
-                      break;
-                    }
-                  }
-                }
-              }
-
-              if (updated) {
-                await sql`UPDATE stories SET story_bible = ${JSON.stringify(story.story_bible)} WHERE id = ${id}`;
-              }
-            }
-          } catch (syncError) {
-            // Don't fail the main operation if sync fails
-            console.error('[Reference] Failed to sync to Story Bible (non-fatal):', syncError);
-          }
-        }
-
         return res.status(200).json({ reference });
       } catch (error) {
         console.error('Error updating reference:', error);
@@ -498,17 +455,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }));
 
         console.log('[StoryBible] Generating Story Bible for legacy story:', story.title);
-        const storyBible = await generateStoryBible(
+        const { storyBible, references: bibleRefs } = await generateStoryBible(
           story.world_name,
           story.world_description,
           story.title,
           story.description,
           outline
         );
-        console.log('[StoryBible] Generated with', storyBible.keyLocations?.length || 0, 'locations and', storyBible.recurringCharacters?.length || 0, 'characters');
+        console.log('[StoryBible] Generated with', bibleRefs.filter(r => r.type === 'location').length, 'locations and', bibleRefs.filter(r => r.type === 'character').length, 'characters');
 
-        // Save to database
+        // Save story bible to database (references stored separately in story_references)
         await sql`UPDATE stories SET story_bible = ${JSON.stringify(storyBible)} WHERE id = ${id}`;
+
+        // Save bible references to story_references table
+        await sql`DELETE FROM story_references WHERE story_id = ${id}`;
+        for (let i = 0; i < bibleRefs.length; i++) {
+          const ref = bibleRefs[i];
+          await sql`
+            INSERT INTO story_references (story_id, type, name, description, mood, personality, role, source, sort_order)
+            VALUES (${id}, ${ref.type}, ${ref.name}, ${ref.description}, ${ref.mood ?? null}, ${ref.personality ?? null}, ${ref.role ?? null}, ${ref.source ?? 'bible'}, ${i})
+          `;
+        }
+        console.log('[StoryBible] Saved', bibleRefs.length, 'references to story_references table');
 
         // Also generate storyboard if segments don't have storyboard data
         const [segmentCheck] = await sql`
@@ -536,14 +504,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               })
             );
 
+            // Fetch saved story_references with UUIDs for storyboard
+            const savedReferences = await sql`SELECT id, type, name, description, mood, personality, role FROM story_references WHERE story_id = ${id} ORDER BY sort_order`;
+            const storyboardRefs: StoryboardReference[] = savedReferences.map(r => ({
+              id: r.id,
+              type: r.type,
+              name: r.name,
+              description: r.description,
+              mood: r.mood || undefined,
+              personality: r.personality || undefined,
+              role: r.role || undefined,
+            }));
+
             const storyboard = await generateStoryboard({
               storyTitle: story.title,
               storyDescription: story.description,
               storyBible,
+              references: storyboardRefs,
               chapters: chaptersForStoryboard,
             });
 
-            // Update segments with storyboard data (including ID-based references)
+            // Update segments with storyboard data (IDs are now real UUIDs from story_references)
             for (const entry of storyboard) {
               await sql`
                 UPDATE segments SET
@@ -559,41 +540,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               `;
             }
             console.log('[StoryBible] Storyboard generated for', storyboard.length, 'segments');
-
-            // Auto-tag references based on storyboard
-            const savedReferences = await sql`SELECT id, name, type FROM story_references WHERE story_id = ${id}`;
-            if (savedReferences.length > 0) {
-              console.log('[StoryBible] Auto-tagging references based on storyboard...');
-              for (const entry of storyboard) {
-                const matchingRefIds: string[] = [];
-
-                for (const charName of entry.characters || []) {
-                  const matchingRef = savedReferences.find(r =>
-                    r.type === 'character' &&
-                    (r.name.toLowerCase().includes(charName.toLowerCase()) ||
-                     charName.toLowerCase().includes(r.name.toLowerCase()))
-                  );
-                  if (matchingRef) matchingRefIds.push(matchingRef.id);
-                }
-
-                if (entry.location) {
-                  const matchingRef = savedReferences.find(r =>
-                    r.type === 'location' &&
-                    (r.name.toLowerCase().includes(entry.location!.toLowerCase()) ||
-                     entry.location!.toLowerCase().includes(r.name.toLowerCase()))
-                  );
-                  if (matchingRef) matchingRefIds.push(matchingRef.id);
-                }
-
-                if (matchingRefIds.length > 0) {
-                  await sql`
-                    UPDATE segments SET reference_ids = ${matchingRefIds}
-                    WHERE id = ${entry.segmentId}
-                  `;
-                }
-              }
-              console.log('[StoryBible] Reference tags applied');
-            }
           } catch (storyboardError) {
             console.error('[StoryBible] Storyboard generation failed (non-fatal):', storyboardError);
           }
@@ -611,7 +557,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'extractReferences') {
       try {
         // Import the extraction and tagging functions
-        const { extractStoryReferences, mergeExtractedReferencesIntoStoryBible, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
+        const { extractStoryReferences, suggestSegmentReferenceTags } = await import('../../../lib/ai.js');
 
         // Get story with bible
         const [story] = await sql`SELECT * FROM stories WHERE id = ${id}`;
@@ -658,14 +604,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           story.story_bible || undefined
         );
 
-        // Merge extracted references into Story Bible if it exists
-        if (story.story_bible) {
-          const updatedStoryBible = mergeExtractedReferencesIntoStoryBible(story.story_bible, references);
-          await sql`UPDATE stories SET story_bible = ${JSON.stringify(updatedStoryBible)} WHERE id = ${id}`;
-          console.log('[extractReferences] Merged references into Story Bible visualAssets');
-        }
-
-        // Delete existing references and insert new ones (backwards compatibility)
+        // Delete existing references and insert new ones
         await sql`DELETE FROM story_references WHERE story_id = ${id}`;
 
         const savedRefs = [];
@@ -751,11 +690,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         console.log('[generateStoryboard] Generating storyboard for', chaptersWithSegments.length, 'chapters');
 
+        // Fetch saved story_references with UUIDs for storyboard
+        const storyRefs = await sql`SELECT id, type, name, description, mood, personality, role FROM story_references WHERE story_id = ${id} ORDER BY sort_order`;
+        const storyboardRefs: StoryboardReference[] = storyRefs.map(r => ({
+          id: r.id,
+          type: r.type,
+          name: r.name,
+          description: r.description,
+          mood: r.mood || undefined,
+          personality: r.personality || undefined,
+          role: r.role || undefined,
+        }));
+
         // Generate storyboard
         const storyboard = await generateStoryboard({
           storyTitle: story.title,
           storyDescription: story.description,
           storyBible: story.story_bible,
+          references: storyboardRefs,
           chapters: chaptersWithSegments,
         });
 

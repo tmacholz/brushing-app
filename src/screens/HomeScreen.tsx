@@ -39,7 +39,7 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter } = useChild();
+  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter, clearReplayState } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getWorldById, getStoriesForWorld } = useContent();
@@ -110,6 +110,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   const handleStartBrushing = () => {
     playSound('success');
+    clearReplayState();
     onNavigate('brushing');
   };
 
@@ -263,8 +264,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           <div className="hidden md:block">
             <div className="flex items-start justify-between">
               {child.currentStoryArc.chapters.map((chapter, index) => {
-                const isCompleted = index < currentChapter;
-                const isCurrent = index === currentChapter;
+                const isCompleted = chapter.isRead;
+                const isCurrent = index === currentChapter && !chapter.isRead;
 
                 return (
                   <div key={index} className="flex items-start flex-1">
@@ -331,8 +332,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           {/* Vertical layout for mobile */}
           <div className="flex flex-col md:hidden">
             {child.currentStoryArc.chapters.map((chapter, index) => {
-              const isCompleted = index < currentChapter;
-              const isCurrent = index === currentChapter;
+              const isCompleted = chapter.isRead;
+              const isCurrent = index === currentChapter && !chapter.isRead;
 
               return (
                 <div

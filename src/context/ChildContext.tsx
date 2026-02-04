@@ -19,6 +19,10 @@ interface ChildContextType {
   allChildren: Child[];
   hasMultipleChildren: boolean;
 
+  // Replay state (transient, not persisted)
+  replayingChapterIndex: number | null;
+  clearReplayState: () => void;
+
   // Child management
   createChild: (name: string, age: number, characterId: string, petId?: string, worldId?: string) => Promise<Child | null>;
   addChild: (name: string, age: number, characterId: string, petId?: string, worldId?: string) => Promise<Child | null>;
@@ -192,6 +196,7 @@ async function migrateLegacyData(): Promise<void> {
 export function ChildProvider({ children }: { children: ReactNode }) {
   const { getStarterPets, getPetById } = usePets();
 
+  const [replayingChapterIndex, setReplayingChapterIndex] = useState<number | null>(null);
   const [allChildren, setAllChildren] = useState<Child[]>([]);
   const [activeChildId, setActiveChildId] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
@@ -371,8 +376,19 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     await updateChild({ currentStoryArc: storyArc });
   }, [updateChild]);
 
+  const clearReplayState = useCallback(() => {
+    setReplayingChapterIndex(null);
+  }, []);
+
   const completeChapter = useCallback(async (chapterIndex: number) => {
     if (!child?.currentStoryArc) return;
+
+    // If this chapter was already read, it's a replay — just clear replay state and return
+    const isReplay = child.currentStoryArc.chapters[chapterIndex]?.isRead === true;
+    if (isReplay) {
+      setReplayingChapterIndex(null);
+      return;
+    }
 
     const updatedChapters = child.currentStoryArc.chapters.map((ch, idx) =>
       idx === chapterIndex
@@ -410,13 +426,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
 
   const replayChapter = useCallback(async (chapterIndex: number) => {
     if (!child?.currentStoryArc) return;
-    await updateChild({
-      currentStoryArc: {
-        ...child.currentStoryArc,
-        currentChapterIndex: chapterIndex,
-      },
-    });
-  }, [child, updateChild]);
+    setReplayingChapterIndex(chapterIndex);
+  }, [child]);
 
   // Update story images locally (don't persist data URLs to API)
   const updateStoryImages = useCallback((imageUrlMap: Map<string, string>) => {
@@ -573,6 +584,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         isLoading,
         allChildren,
         hasMultipleChildren,
+        replayingChapterIndex,
+        clearReplayState,
         createChild,
         addChild,
         switchChild,
