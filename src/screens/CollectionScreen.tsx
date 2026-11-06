@@ -5,12 +5,14 @@ import { useChild } from '../context/ChildContext';
 import { useContent } from '../context/ContentContext';
 import { useAudio } from '../context/AudioContext';
 import type { Collectible } from '../types';
+import { PUZZLES, type Puzzle } from '../data/puzzles';
+import { getPuzzleProgress } from '../utils/puzzleProgress';
 
 interface CollectionScreenProps {
   onBack: () => void;
 }
 
-type TabType = 'stickers' | 'accessories';
+type TabType = 'stickers' | 'accessories' | 'puzzles';
 
 export function CollectionScreen({ onBack }: CollectionScreenProps) {
   const { child } = useChild();
@@ -20,6 +22,7 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
   const [allCollectibles, setAllCollectibles] = useState<Collectible[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<Collectible | null>(null);
+  const [selectedPuzzle, setSelectedPuzzle] = useState<Puzzle | null>(null);
 
   // Fetch published collectibles on mount
   useEffect(() => {
@@ -66,6 +69,10 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
   // Count collected items
   const collectedStickerCount = stickers.filter(s => collectedStickers.has(s.id)).length;
   const collectedAccessoryCount = accessories.filter(a => collectedAccessories.has(a.id)).length;
+
+  // Finished puzzles from puzzle mode
+  const completedPuzzleIds = new Set(getPuzzleProgress(child).completedPuzzleIds);
+  const completedPuzzleCount = PUZZLES.filter(p => completedPuzzleIds.has(p.id)).length;
 
   const handleTabChange = (tab: TabType) => {
     playSound('tap');
@@ -170,6 +177,16 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
           >
             Accessories ({collectedAccessoryCount}/{accessories.length})
           </button>
+          <button
+            onClick={() => handleTabChange('puzzles')}
+            className={`flex-1 py-2 px-4 rounded-full font-medium transition-all ${
+              activeTab === 'puzzles'
+                ? 'bg-sky-500 text-white'
+                : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            Puzzles ({completedPuzzleCount}/{PUZZLES.length})
+          </button>
         </div>
       </div>
 
@@ -179,6 +196,28 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
           <div className="flex flex-col items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-pink-500 mb-2" />
             <p className="text-gray-500">Loading collection...</p>
+          </div>
+        ) : activeTab === 'puzzles' ? (
+          <div className="grid grid-cols-2 gap-3">
+            {PUZZLES.map((p) => {
+              const done = completedPuzzleIds.has(p.id);
+              return (
+                <motion.button
+                  key={p.id}
+                  whileTap={done ? { scale: 0.96 } : undefined}
+                  onClick={() => done && setSelectedPuzzle(p)}
+                  className="bg-white rounded-2xl p-2 shadow-sm text-left"
+                >
+                  <div
+                    className="aspect-square rounded-xl bg-cover bg-center grid place-items-center"
+                    style={{ backgroundImage: `url(${done ? p.image : p.thumb})` }}
+                  >
+                    {!done && <Lock className="w-8 h-8 text-white drop-shadow" />}
+                  </div>
+                  <p className={`mt-2 text-sm font-semibold ${done ? 'text-gray-800' : 'text-gray-400'}`}>{p.title}</p>
+                </motion.button>
+              );
+            })}
           </div>
         ) : activeTab === 'stickers' ? (
           stickers.length === 0 ? (
@@ -222,6 +261,43 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
           )
         )}
       </div>
+
+      {/* Finished puzzle modal */}
+      <AnimatePresence>
+        {selectedPuzzle && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            onClick={() => setSelectedPuzzle(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white rounded-3xl p-4 max-w-md w-full"
+              onClick={e => e.stopPropagation()}
+            >
+              <img src={selectedPuzzle.image} alt={selectedPuzzle.title} className="w-full aspect-square rounded-2xl object-cover mb-3" />
+              <h3 className="text-xl font-bold text-gray-800 mb-2">{selectedPuzzle.title}</h3>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {selectedPuzzle.pieces.map((piece) => (
+                  <span key={piece.name} className="px-2.5 py-1 rounded-full bg-sky-50 text-sm font-medium text-gray-700">
+                    {piece.emoji} {piece.name}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => setSelectedPuzzle(null)}
+                className="w-full bg-sky-500 text-white font-bold py-3 rounded-xl"
+              >
+                Close
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Item Detail Modal */}
       <AnimatePresence>

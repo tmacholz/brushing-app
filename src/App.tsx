@@ -9,6 +9,7 @@ import { PetsProvider, usePets } from './context/PetsContext';
 import { ContentProvider, useContent } from './context/ContentContext';
 import { HomeScreen } from './screens/HomeScreen';
 import { BrushingScreen } from './screens/BrushingScreen';
+import { PuzzleBrushingScreen } from './screens/PuzzleBrushingScreen';
 import { PetSelectScreen } from './screens/PetSelectScreen';
 import { ProfileSelectScreen } from './screens/ProfileSelectScreen';
 import { StoryWorldSelectScreen } from './screens/StoryWorldSelectScreen';
@@ -538,6 +539,7 @@ function HomeRoute() {
 // Brushing screen wrapper
 function BrushingRoute() {
   const navigate = useNavigate();
+  const { child } = useChild();
   return (
     <motion.div
       key="brushing"
@@ -545,10 +547,18 @@ function BrushingRoute() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <BrushingScreen
-        onComplete={() => navigate('/')}
-        onExit={() => navigate('/')}
-      />
+      {child?.mode === 'puzzle' ? (
+        <PuzzleBrushingScreen
+          // Home animates the new piece snapping into the board.
+          onComplete={(newPiece) => navigate('/', { state: { newPiece } })}
+          onExit={() => navigate('/')}
+        />
+      ) : (
+        <BrushingScreen
+          onComplete={() => navigate('/')}
+          onExit={() => navigate('/')}
+        />
+      )}
     </motion.div>
   );
 }

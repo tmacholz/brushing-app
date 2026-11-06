@@ -44,6 +44,13 @@ export interface Child {
 
 export type PlayMode = 'story' | 'puzzle';
 
+// Puzzle mode progress, stored at child.modeProgress.puzzle.
+export interface PuzzleProgress {
+  currentPuzzleId: string | null; // null = kid still needs to pick one
+  piecesFound: number;            // pieces found in the current puzzle
+  completedPuzzleIds: string[];   // finished puzzles, oldest first (shown in Collection)
+}
+
 // =====================================================
 // Task Bonus System Types
 // =====================================================

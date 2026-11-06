@@ -4,6 +4,8 @@
 //
 // Reads GEMINI_API_KEY from the environment or .env.local, and writes
 // public/puzzles/<id>.png (plus <id>-2.png, -3.png... for extra variants).
+// Pick the best one by eye, then save it as public/puzzles/<id>.jpg (1080px)
+// and <id>-thumb.jpg (120px, blurred) and delete the PNGs.
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
@@ -26,7 +28,7 @@ function loadKey() {
 }
 
 // Node 22.18+ strips TypeScript types natively, so the app's puzzle data loads directly.
-const { PUZZLES, buildPuzzlePrompt } = await import(pathToFileURL(resolve(root, 'src/prototype/puzzles.ts')).href);
+const { PUZZLES, buildPuzzlePrompt } = await import(pathToFileURL(resolve(root, 'src/data/puzzles.ts')).href);
 const id = process.argv[2] || PUZZLES[0].id;
 const variants = Number(process.argv[3] || 1);
 const puzzle = PUZZLES.find((p) => p.id === id);

@@ -8,6 +8,7 @@ import { characters, getCharacterById } from '../data/characters';
 import { DEFAULT_TASKS } from '../types';
 import type { TaskConfig } from '../types';
 import { apiFetch } from '../services/api';
+import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -119,7 +120,7 @@ function TaskBonusSettings({
 }
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig, refreshChildren } = useChild();
+  const { child, updateCharacter, resetChild, resetAllData, allChildren, updateTaskConfig, refreshChildren, updateChild } = useChild();
   const { playSound } = useAudio();
   const { showToast } = useToast();
 
@@ -213,6 +214,24 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       </div>
 
       <div className="p-4 pb-24 space-y-6">
+        {/* Way to play */}
+        {child && (
+          <section className="bg-white rounded-2xl p-6 shadow-sm">
+            <h2 className="text-lg font-bold text-text mb-1">Way to Play</h2>
+            <p className="text-sm text-text/60 mb-4">
+              Story mode unlocks a chapter each brush. Puzzle mode finds a puzzle piece each brush.
+              Kids can also switch on the home screen.
+            </p>
+            <PlayModeToggle
+              mode={child.mode}
+              onChange={(mode) => {
+                playSound('tap');
+                updateChild({ mode });
+              }}
+            />
+          </section>
+        )}
+
         {/* Character Section */}
         <section className="bg-white rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-bold text-text mb-4">Story Character</h2>

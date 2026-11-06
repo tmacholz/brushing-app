@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen, RotateCcw } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
@@ -8,7 +9,12 @@ import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
 import { BonusWheel } from '../components/BonusWheel/BonusWheel';
-import type { ScreenName, StoryTemplate, ChestReward } from '../types';
+import { PlayModeToggle } from '../components/ui/PlayModeToggle';
+import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
+import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
+import { getPuzzleById, PIECES_PER_PUZZLE, type Puzzle } from '../data/puzzles';
+import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress } from '../utils/puzzleProgress';
+import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
 interface HomeScreenProps {
   onNavigate: (screen: ScreenName) => void;
@@ -49,6 +55,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   // Replay chapter modal state
   const [replayChapterIndex, setReplayChapterIndex] = useState<number | null>(null);
+
+  // Set by the puzzle brushing screen so the new piece snaps into the board.
+  const location = useLocation();
+  const newPieceIndex = (location.state as { newPiece?: number } | null)?.newPiece ?? null;
 
   if (!child) return null;
 
@@ -120,6 +130,23 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     await replayChapter(replayChapterIndex);
     setReplayChapterIndex(null);
     onNavigate('brushing');
+  };
+
+  // Puzzle mode ("ways to play")
+  const isPuzzleMode = child.mode === 'puzzle';
+  const puzzleProgress = getPuzzleProgress(child);
+  const currentPuzzle = getPuzzleById(puzzleProgress.currentPuzzleId);
+  const puzzleFinished = isPuzzleFinished(puzzleProgress);
+  const puzzleChoices = getPuzzleChoices(puzzleProgress);
+
+  const handleModeChange = (mode: PlayMode) => {
+    playSound('tap');
+    updateChild({ mode });
+  };
+
+  const handleChoosePuzzle = (puzzle: Puzzle) => {
+    playSound('success');
+    updateChild({ modeProgress: withPuzzleProgress(child, startPuzzle(puzzleProgress, puzzle.id)) });
   };
 
   const pet = getPetById(child.activePetId);
@@ -197,6 +224,51 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </div>
       </motion.div>
 
+      {/* Way to play */}
+      <div className="mb-5 max-w-xs w-full mx-auto">
+        <PlayModeToggle mode={child.mode} onChange={handleModeChange} compact />
+      </div>
+
+      {isPuzzleMode ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="flex flex-col gap-4"
+        >
+          {currentPuzzle && (
+            <>
+              <div className="text-center">
+                <p className="text-xl font-bold text-text">{currentPuzzle.title}</p>
+                <p className="text-sm text-text/60">
+                  {puzzleFinished
+                    ? 'You found everyone! 🎉'
+                    : `${puzzleProgress.piecesFound} of ${PIECES_PER_PUZZLE} pieces found`}
+                </p>
+              </div>
+              <PuzzleBoard
+                puzzle={currentPuzzle}
+                piecesFound={puzzleProgress.piecesFound}
+                justAdded={newPieceIndex}
+              />
+            </>
+          )}
+
+          {(!currentPuzzle || puzzleFinished) && (
+            <div>
+              <p className="text-lg font-bold text-text mb-2">
+                {currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
+              </p>
+              <PuzzleChooser
+                choices={puzzleChoices}
+                completedIds={puzzleProgress.completedPuzzleIds}
+                onChoose={handleChoosePuzzle}
+              />
+            </div>
+          )}
+        </motion.div>
+      ) : (
+        <>
       {/* Pet Display - smaller */}
       <motion.div
         initial={{ opacity: 0, scale: 0.8 }}
@@ -487,11 +559,14 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </motion.button>
       )}
 
+        </>
+      )}
+
       {/* Spacer to push button down */}
       <div className="flex-1" />
 
-      {/* Start Brushing Button - hide when showing completion prompt */}
-      {!completedStoryInfo && (
+      {/* Start Brushing Button - hide when showing a completion prompt or puzzle chooser */}
+      {(isPuzzleMode ? currentPuzzle && !puzzleFinished : !completedStoryInfo) && (
         <>
           <motion.button
             initial={{ opacity: 0, y: 20 }}
@@ -502,7 +577,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             onClick={handleStartBrushing}
             className="w-full bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg"
           >
-            {hasStoryInProgress ? 'CONTINUE STORY' : 'START BRUSHING'}
+            {isPuzzleMode
+              ? `FIND PIECE ${puzzleProgress.piecesFound + 1}`
+              : hasStoryInProgress ? 'CONTINUE STORY' : 'START BRUSHING'}
           </motion.button>
 
           {/* Bottom hint */}
