@@ -47,7 +47,7 @@ interface Sibling { name: string; progress: PuzzleProgress }
 
 // Up to three puzzles to choose from. Puzzles nobody in the family has done
 // come first, so siblings don't all end up on the same pictures; then ones a
-// sibling has done or is doing (labelled); then this kid's own repeats.
+// sibling finished, then ones a sibling is doing (labelled); then repeats.
 export function getPuzzleChoices(progress: PuzzleProgress, siblings: Sibling[] = [], count = 3): PuzzleChoice[] {
   const mine = new Set(progress.completedPuzzleIds);
   const noteFor = (id: string): string | null => {
@@ -56,7 +56,11 @@ export function getPuzzleChoices(progress: PuzzleProgress, siblings: Sibling[] =
     const done = siblings.find((s) => s.progress.completedPuzzleIds.includes(id));
     return done ? `${done.name} finished this one` : null;
   };
-  const rank = (p: Puzzle) => (mine.has(p.id) ? 2 : noteFor(p.id) ? 1 : 0);
+  const siblingDoing = (id: string) =>
+    siblings.some((s) => s.progress.currentPuzzleId === id && !isPuzzleFinished(s.progress));
+  // 0 fresh for the family, 1 a sibling already finished it, 2 a sibling is on
+  // it right now, 3 this kid has done it before.
+  const rank = (p: Puzzle) => (mine.has(p.id) ? 3 : siblingDoing(p.id) ? 2 : noteFor(p.id) ? 1 : 0);
   return PUZZLES
     .filter((p) => !p.retired && p.id !== progress.currentPuzzleId)
     .map((p, i) => ({ p, i, r: rank(p) }))

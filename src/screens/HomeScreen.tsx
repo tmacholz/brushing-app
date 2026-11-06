@@ -278,7 +278,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                   ? 'Pick a different puzzle'
                   : currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
               </p>
-              {switchingPuzzle && (
+              {switchingPuzzle && puzzleProgress.piecesFound > 0 && (
                 <p className="text-sm text-text/60 mb-2">
                   Your {puzzleProgress.piecesFound} {puzzleProgress.piecesFound === 1 ? 'piece stays' : 'pieces stay'} saved in {currentPuzzle?.title}.
                 </p>
