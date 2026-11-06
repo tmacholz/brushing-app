@@ -22,6 +22,10 @@ export const GEMINI_TEXT_FALLBACK_MODEL =
   process.env.GEMINI_TEXT_FALLBACK_MODEL || 'gemini-3.1-flash-lite';
 export const GEMINI_IMAGE_MODEL =
   process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+// Narration and name audio. Flash TTS is $9 per 1M audio tokens, Flash-Lite
+// TTS $6; Tim picked Flash with the "Kore" voice from side-by-side samples.
+export const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
+export const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Kore';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 

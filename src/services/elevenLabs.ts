@@ -1,62 +1,25 @@
 import { apiFetch } from './api';
-// Custom child-friendly voice from ElevenLabs
-const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
-export interface TTSOptions {
-  voiceId?: string;
-  modelId?: string;
-  stability?: number;
-  similarityBoost?: number;
-  style?: number;
-  useSpeakerBoost?: boolean;
-}
-
-const defaultOptions: TTSOptions = {
-  voiceId: DEFAULT_VOICE_ID,
-  modelId: 'eleven_turbo_v2_5', // Fast, low-latency model
-  stability: 0.5,
-  similarityBoost: 0.75,
-  style: 0.5,
-  useSpeakerBoost: true,
-};
+// Narration is synthesized server-side by /api/tts (Gemini text-to-speech;
+// voice and model are configured there). This module only fetches and
+// caches the audio. The file keeps its historical name so imports stay put.
 
 // Audio cache to avoid re-generating the same text
 const audioCache = new Map<string, string>();
 
-function getCacheKey(text: string, voiceId: string): string {
-  return `${voiceId}:${text}`;
-}
-
-export async function generateSpeech(
-  text: string,
-  options: TTSOptions = {}
-): Promise<string> {
-  const opts = { ...defaultOptions, ...options };
-  const cacheKey = getCacheKey(text, opts.voiceId!);
-
+export async function generateSpeech(text: string): Promise<string> {
   // Check cache first
-  const cached = audioCache.get(cacheKey);
+  const cached = audioCache.get(text);
   if (cached) {
     return cached;
   }
 
-  // Call our serverless function instead of ElevenLabs directly
   const response = await apiFetch('/api/tts', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      text,
-      voiceId: opts.voiceId,
-      modelId: opts.modelId,
-      voiceSettings: {
-        stability: opts.stability,
-        similarity_boost: opts.similarityBoost,
-        style: opts.style,
-        use_speaker_boost: opts.useSpeakerBoost,
-      },
-    }),
+    body: JSON.stringify({ text }),
   });
 
   if (!response.ok) {
@@ -69,7 +32,7 @@ export async function generateSpeech(
   const audioUrl = URL.createObjectURL(audioBlob);
 
   // Cache the result
-  audioCache.set(cacheKey, audioUrl);
+  audioCache.set(text, audioUrl);
 
   return audioUrl;
 }
@@ -82,9 +45,6 @@ export function clearAudioCache(): void {
 }
 
 // Pre-generate audio for multiple texts (for preloading)
-export async function preloadSpeech(
-  texts: string[],
-  options: TTSOptions = {}
-): Promise<void> {
-  await Promise.all(texts.map((text) => generateSpeech(text, options)));
+export async function preloadSpeech(texts: string[]): Promise<void> {
+  await Promise.all(texts.map((text) => generateSpeech(text)));
 }

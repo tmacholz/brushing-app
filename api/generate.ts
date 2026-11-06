@@ -5,11 +5,11 @@ import { isSafeKeyPart, isAllowedImageUrl } from '../lib/validation.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 import { GEMINI_IMAGE_URL as GEMINI_API_URL } from '../lib/models.js';
+import { synthesizeSpeech, isTtsConfigured } from '../lib/tts.js';
 
 // ElevenLabs for name audio
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
-const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
 // Consistent style prefix for all images
 const STYLE_PREFIX = `Children's book illustration style, soft watercolor and digital art hybrid,
@@ -656,36 +656,6 @@ function parseTextIntoParts(text: string): Array<
   return parts;
 }
 
-/**
- * Generate TTS audio for a single text clip
- */
-async function generateTtsClip(text: string): Promise<ArrayBuffer> {
-  const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': ELEVENLABS_API_KEY!,
-    },
-    body: JSON.stringify({
-      text,
-      model_id: 'eleven_turbo_v2_5',
-      voice_settings: {
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0.5,
-        use_speaker_boost: true,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`ElevenLabs API error: ${error}`);
-  }
-
-  return response.arrayBuffer();
-}
-
 async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse) {
   const { segmentId, text, storyId, chapterNumber, segmentOrder } = req;
 
@@ -696,8 +666,8 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
     return res.status(400).json({ error: 'Invalid segmentId, storyId, chapterNumber, or segmentOrder' });
   }
 
-  if (!ELEVENLABS_API_KEY) {
-    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  if (!isTtsConfigured()) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -721,12 +691,12 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
-        const audioBuffer = await generateTtsClip(part.content);
+        const speech = await synthesizeSpeech(part.content);
 
-        const storagePath = `story-audio/${storyId}/ch${chapterNumber}/seg${segmentOrder}/clip${clipIndex}.mp3`;
-        const blob = await put(storagePath, Buffer.from(audioBuffer), {
+        const storagePath = `story-audio/${storyId}/ch${chapterNumber}/seg${segmentOrder}/clip${clipIndex}.${speech.extension}`;
+        const blob = await put(storagePath, speech.buffer, {
           access: 'public',
-          contentType: 'audio/mpeg',
+          contentType: speech.contentType,
           allowOverwrite: true,
         });
 
@@ -760,8 +730,8 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
     return res.status(400).json({ error: 'Invalid chapterId, storyId, chapterNumber, or fieldName' });
   }
 
-  if (!ELEVENLABS_API_KEY) {
-    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  if (!isTtsConfigured()) {
+    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -785,12 +755,12 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
-        const audioBuffer = await generateTtsClip(part.content);
+        const speech = await synthesizeSpeech(part.content);
 
-        const storagePath = `story-audio/${storyId}/ch${chapterNumber}/${fieldName}/clip${clipIndex}.mp3`;
-        const blob = await put(storagePath, Buffer.from(audioBuffer), {
+        const storagePath = `story-audio/${storyId}/ch${chapterNumber}/${fieldName}/clip${clipIndex}.${speech.extension}`;
+        const blob = await put(storagePath, speech.buffer, {
           access: 'public',
-          contentType: 'audio/mpeg',
+          contentType: speech.contentType,
           allowOverwrite: true,
         });
 
@@ -1119,9 +1089,9 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Invalid nameType or id' });
   }
 
-  if (!ELEVENLABS_API_KEY) {
-    console.log('ELEVENLABS_API_KEY not set');
-    return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
+  if (!isTtsConfigured()) {
+    console.log('GEMINI_API_KEY not set');
+    return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
   }
 
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
@@ -1133,72 +1103,35 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Name too long (max 50 characters)' });
   }
 
-  // Voice setting variations for natural-sounding variety
-  // Each version has slightly different stability/style to create natural intonation differences
-  const voiceVariations = [
-    { stability: 0.5, similarity_boost: 0.75, style: 0.5 },   // neutral
-    { stability: 0.4, similarity_boost: 0.80, style: 0.6 },   // slightly more expressive
-    { stability: 0.55, similarity_boost: 0.70, style: 0.4 },  // slightly calmer
-  ];
+  // Three takes of each form. Gemini TTS varies its delivery from call to
+  // call, which gives the natural variety the splicer picks from.
+  const VERSIONS = 3;
 
-  // Helper to generate TTS for a single text with specific voice settings
-  const generateSingleAudio = async (text: string, storagePath: string, voiceSettings: typeof voiceVariations[0]): Promise<string> => {
-    const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY!,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_turbo_v2_5',
-        voice_settings: {
-          ...voiceSettings,
-          use_speaker_boost: true,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`ElevenLabs API error: ${error}`);
-    }
-
-    const audioBuffer = await response.arrayBuffer();
-    const blob = await put(storagePath, Buffer.from(audioBuffer), {
+  const generateSingleAudio = async (text: string, basePath: string): Promise<string> => {
+    const speech = await synthesizeSpeech(text);
+    const blob = await put(`${basePath}.${speech.extension}`, speech.buffer, {
       access: 'public',
-      contentType: 'audio/mpeg',
+      contentType: speech.contentType,
       allowOverwrite: true,
     });
-
     return blob.url;
   };
 
   try {
-    console.log('Calling ElevenLabs API for multiple versions of regular and possessive forms...');
-
     const baseStoragePath = nameType === 'child'
       ? `name-audio/children/${id}`
       : `name-audio/pets/${id}`;
 
-    // Generate 3 versions of regular and 3 versions of possessive (6 total)
-    // Using different voice settings for natural variation
-    // Batch requests to avoid ElevenLabs concurrent request limit (max 4)
-    // First batch: regular versions
-    console.log('Generating regular name versions...');
-    const audioUrls = await Promise.all(
-      voiceVariations.map((settings, i) =>
-        generateSingleAudio(name, `${baseStoragePath}-v${i + 1}.mp3`, settings)
-      )
-    );
-
-    // Second batch: possessive versions
-    console.log('Generating possessive name versions...');
-    const possessiveAudioUrls = await Promise.all(
-      voiceVariations.map((settings, i) =>
-        generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive-v${i + 1}.mp3`, settings)
-      )
-    );
+    // Generated one at a time: the Gemini free tier allows 3 requests a minute
+    // and the helper backs off on 429.
+    const audioUrls: string[] = [];
+    const possessiveAudioUrls: string[] = [];
+    for (let i = 0; i < VERSIONS; i++) {
+      audioUrls.push(await generateSingleAudio(name, `${baseStoragePath}-v${i + 1}`));
+    }
+    for (let i = 0; i < VERSIONS; i++) {
+      possessiveAudioUrls.push(await generateSingleAudio(`${name}'s`, `${baseStoragePath}-possessive-v${i + 1}`));
+    }
 
     // For backwards compatibility, also set the main URLs to the first version
     const audioUrl = audioUrls[0];
