@@ -46,7 +46,7 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter, clearReplayState } = useChild();
+  const { child, allChildren, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter, clearReplayState } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getWorldById, getStoriesForWorld } = useContent();
@@ -140,7 +140,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const puzzleProgress = getPuzzleProgress(child);
   const currentPuzzle = getPuzzleById(puzzleProgress.currentPuzzleId);
   const puzzleFinished = isPuzzleFinished(puzzleProgress);
-  const puzzleChoices = getPuzzleChoices(puzzleProgress);
+  const siblings = allChildren
+    .filter((c) => c.id !== child.id)
+    .map((c) => ({ name: c.name, progress: getPuzzleProgress(c) }));
+  const puzzleChoices = getPuzzleChoices(puzzleProgress, siblings);
 
   const handleModeChange = (mode: PlayMode) => {
     playSound('tap');

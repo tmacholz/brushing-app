@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
 import type { Puzzle } from '../../data/puzzles';
+import type { PuzzleChoice } from '../../utils/puzzleProgress';
 
 interface PuzzleChooserProps {
-  choices: Puzzle[];
+  choices: PuzzleChoice[];
   completedIds: string[];
   onChoose: (puzzle: Puzzle) => void;
 }
@@ -12,7 +13,7 @@ interface PuzzleChooserProps {
 export function PuzzleChooser({ choices, completedIds, onChoose }: PuzzleChooserProps) {
   return (
     <div className="grid gap-3">
-      {choices.map((p, i) => (
+      {choices.map(({ puzzle: p, note }, i) => (
         <motion.button
           key={p.id}
           initial={{ opacity: 0, y: 10 }}
@@ -33,6 +34,7 @@ export function PuzzleChooser({ choices, completedIds, onChoose }: PuzzleChooser
               {p.title}
               {completedIds.includes(p.id) && <span className="ml-2 text-xs font-medium text-success">Done before</span>}
             </p>
+            {note && <p className="text-xs font-medium text-secondary">{note}</p>}
             <p className="text-lg tracking-wide">{p.pieces.slice(0, 4).map((x) => x.emoji).join(' ')} …</p>
           </div>
         </motion.button>

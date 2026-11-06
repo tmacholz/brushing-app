@@ -25,13 +25,31 @@ export function isPuzzleFinished(progress: PuzzleProgress): boolean {
   return progress.currentPuzzleId !== null && progress.piecesFound >= PIECES_PER_PUZZLE;
 }
 
-// Up to three puzzles to choose from: unfinished ones first, then repeats so
-// a kid who has done them all can still play.
-export function getPuzzleChoices(progress: PuzzleProgress, count = 3): Puzzle[] {
-  const done = new Set(progress.completedPuzzleIds);
-  const fresh = PUZZLES.filter((p) => !done.has(p.id) && p.id !== progress.currentPuzzleId);
-  const repeats = PUZZLES.filter((p) => done.has(p.id) && p.id !== progress.currentPuzzleId);
-  return [...fresh, ...repeats].slice(0, count);
+export interface PuzzleChoice {
+  puzzle: Puzzle;
+  note: string | null; // e.g. "Sam is doing this one"
+}
+
+interface Sibling { name: string; progress: PuzzleProgress }
+
+// Up to three puzzles to choose from. Puzzles nobody in the family has done
+// come first, so siblings don't all end up on the same pictures; then ones a
+// sibling has done or is doing (labelled); then this kid's own repeats.
+export function getPuzzleChoices(progress: PuzzleProgress, siblings: Sibling[] = [], count = 3): PuzzleChoice[] {
+  const mine = new Set(progress.completedPuzzleIds);
+  const noteFor = (id: string): string | null => {
+    const doing = siblings.find((s) => s.progress.currentPuzzleId === id && !isPuzzleFinished(s.progress));
+    if (doing) return `${doing.name} is doing this one`;
+    const done = siblings.find((s) => s.progress.completedPuzzleIds.includes(id));
+    return done ? `${done.name} finished this one` : null;
+  };
+  const rank = (p: Puzzle) => (mine.has(p.id) ? 2 : noteFor(p.id) ? 1 : 0);
+  return PUZZLES
+    .filter((p) => p.id !== progress.currentPuzzleId)
+    .map((p, i) => ({ p, i, r: rank(p) }))
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .slice(0, count)
+    .map(({ p }) => ({ puzzle: p, note: noteFor(p.id) }));
 }
 
 // Progress after one brush: one more piece; the 9th completes the puzzle.

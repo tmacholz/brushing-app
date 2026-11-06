@@ -8,6 +8,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Pause, Play, X, Volume2, VolumeX } from 'lucide-react';
 import { useBrushingTimer } from '../hooks/useBrushingTimer';
 import { usePuzzleVoice } from '../hooks/usePuzzleVoice';
+import { useBackgroundMusic } from '../hooks/useBackgroundMusic';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { MysteryChest } from '../components/MysteryChest';
@@ -15,7 +16,7 @@ import { TaskCheckIn } from '../components/TaskCheckIn';
 import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
-import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
+import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
 import { getPuzzleProgress, withPuzzleProgress, addPiece } from '../utils/puzzleProgress';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
@@ -37,7 +38,7 @@ interface PuzzleBrushingScreenProps {
 
 export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScreenProps) {
   const { child, updateStreak, addPoints, updateChild, claimChestReward } = useChild();
-  const { playSound } = useAudio();
+  const { playSound, isMuted } = useAudio();
   const { getPetById } = usePets();
 
   // Freeze the puzzle and progress at the start of the session.
@@ -83,6 +84,9 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   }, [child, puzzle, pieceIndex, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
 
   const { elapsedSeconds, isRunning, start, pause, resume } = useBrushingTimer(handleTimerComplete, undefined, TICK_MS);
+
+  // Lively music while actually brushing; fades out on pause and at the end.
+  useBackgroundMusic(PUZZLE_MUSIC_URL, phase === 'brushing' && isRunning && voiceOn && !isMuted);
 
   // 3-2-1, warming the voice clips meanwhile so they play on time.
   useEffect(() => {
@@ -240,7 +244,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
           <button
             onClick={() => { setVoiceOn((v) => !v); stopSpeaking(); }}
             className="p-2 rounded-full bg-white shadow"
-            aria-label={voiceOn ? 'Turn voice off' : 'Turn voice on'}
+            aria-label={voiceOn ? 'Turn sound off' : 'Turn sound on'}
           >
             {voiceOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
           </button>
