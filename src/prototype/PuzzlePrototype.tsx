@@ -82,7 +82,7 @@ function PieceArt({ puzzle, index, imgOk, mystery = false }: { puzzle: Puzzle; i
   const row = Math.floor(index / 3);
   const col = index % 3;
   const piece = puzzle.pieces[index];
-  const filter = mystery ? 'blur(8px) brightness(0.45) saturate(0.6)' : undefined;
+  const filter = mystery ? 'blur(18px) brightness(0.5) saturate(0.5)' : undefined;
   return (
     <div className="absolute inset-0 overflow-hidden">
       {imgOk ? (
@@ -102,7 +102,8 @@ function PieceArt({ puzzle, index, imgOk, mystery = false }: { puzzle: Puzzle; i
         </div>
       )}
       {mystery && (
-        <div className="absolute inset-0 flex items-center justify-center text-white/80 font-black text-3xl drop-shadow">?</div>
+        // Mostly opaque so only a hint of colour shows through: kids can't peek.
+        <div className="absolute inset-0 flex items-center justify-center bg-slate-700/80 text-white/80 font-black text-3xl">?</div>
       )}
     </div>
   );
