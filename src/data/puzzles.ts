@@ -110,6 +110,39 @@ export function getPuzzleById(id: string | null | undefined): Puzzle | undefined
   return PUZZLES.find((p) => p.id === id);
 }
 
+// ---------- Voice lines ----------
+// Pre-recorded once with Gemini TTS (scripts/generate-puzzle-voice.mjs) and
+// served as static files, so brushing never spends the daily TTS quota.
+// If a clip is missing the app falls back to the device's own speech voice.
+
+export interface VoiceLine { key: string; text: string }
+
+export const stageVoice = (stage: number): VoiceLine => ({
+  key: `stage-${stage}`,
+  text: stage === 0
+    ? `Let's start with your ${BRUSH_STAGES[0].label} teeth!`
+    : `Now brush your ${BRUSH_STAGES[stage].label} teeth!`,
+});
+
+export const foundVoice = (puzzle: Puzzle, index: number): VoiceLine => ({
+  key: `${puzzle.id}-${index}`,
+  text: `You found ${puzzle.pieces[index].name}!`,
+});
+
+export const finishedVoice = (puzzle: Puzzle): VoiceLine => ({
+  key: `${puzzle.id}-done`,
+  text: `You finished ${puzzle.title}! Amazing brushing!`,
+});
+
+export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.wav`;
+
+export function allVoiceLines(): VoiceLine[] {
+  return [
+    ...BRUSH_STAGES.map((_, i) => stageVoice(i)),
+    ...PUZZLES.flatMap((p) => [...p.pieces.map((_, i) => foundVoice(p, i)), finishedVoice(p)]),
+  ];
+}
+
 const POSITIONS = [
   'top-left', 'top-center', 'top-right',
   'middle-left', 'center', 'middle-right',

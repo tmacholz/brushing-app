@@ -7,8 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Pause, Play, X, Volume2, VolumeX } from 'lucide-react';
 import { useBrushingTimer } from '../hooks/useBrushingTimer';
-import { useTextToSpeech } from '../hooks/useTextToSpeech';
-import { generateSpeech } from '../services/elevenLabs';
+import { usePuzzleVoice } from '../hooks/usePuzzleVoice';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { MysteryChest } from '../components/MysteryChest';
@@ -16,7 +15,7 @@ import { TaskCheckIn } from '../components/TaskCheckIn';
 import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
-import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES } from '../data/puzzles';
+import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
 import { getPuzzleProgress, withPuzzleProgress, addPiece } from '../utils/puzzleProgress';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
@@ -25,12 +24,6 @@ import { DEFAULT_TASKS } from '../types';
 
 const TOTAL_SECONDS = 120;
 const STAGE_SECONDS = TOTAL_SECONDS / BRUSH_STAGES.length;
-
-const stageLine = (stage: number) =>
-  stage === 0
-    ? `Let's start with your ${BRUSH_STAGES[0].label} teeth!`
-    : `Now brush your ${BRUSH_STAGES[stage].label} teeth!`;
-const foundLine = (name: string) => `You found ${name}!`;
 
 // ?fast speeds the timer up 10x so a whole session can be checked in 12 seconds.
 const TICK_MS = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('fast') ? 100 : 1000;
@@ -46,7 +39,6 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   const { child, updateStreak, addPoints, updateChild, claimChestReward } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
-  const { speak, stop: stopSpeaking } = useTextToSpeech();
 
   // Freeze the puzzle and progress at the start of the session.
   const [startProgress] = useState(() => getPuzzleProgress(child));
@@ -64,13 +56,11 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   const completedRef = useRef(false);
   const exitConfirmRef = useRef(false);
   useEffect(() => { exitConfirmRef.current = showExitConfirm; }, [showExitConfirm]);
-  const voiceOnRef = useRef(voiceOn);
-  useEffect(() => { voiceOnRef.current = voiceOn; }, [voiceOn]);
-
-  const say = useCallback((text: string) => {
-    if (!voiceOnRef.current) return;
-    speak(text).catch(() => { /* chime already played; voice is a bonus */ });
-  }, [speak]);
+  // Voice lines are pre-recorded clips, so brushing never spends TTS quota.
+  const { play: playVoice, preload: preloadVoice, stop: stopSpeaking } = usePuzzleVoice(voiceOn);
+  const say = useCallback((line: VoiceLine) => {
+    playVoice(line).catch(() => { /* chime already played; voice is a bonus */ });
+  }, [playVoice]);
 
   const handleTimerComplete = useCallback(async () => {
     if (completedRef.current || !child || !puzzle) return;
@@ -88,17 +78,18 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     setPuzzleDone(completed);
     setPhase('reveal');
     playSound('unlock');
-    if (piece) say(completed ? `${foundLine(piece.name)} You finished ${puzzle.title}!` : foundLine(piece.name));
-  }, [child, puzzle, piece, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
+    say(foundVoice(puzzle, pieceIndex));
+    if (completed) setTimeout(() => say(finishedVoice(puzzle)), 2200);
+  }, [child, puzzle, pieceIndex, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
 
   const { elapsedSeconds, isRunning, start, pause, resume } = useBrushingTimer(handleTimerComplete, undefined, TICK_MS);
 
   // 3-2-1, warming the voice clips meanwhile so they play on time.
   useEffect(() => {
     if (phase !== 'countdown') return;
-    if (voiceOnRef.current && piece) {
-      [0, 1, 2, 3].forEach((s) => generateSpeech(stageLine(s)).catch(() => {}));
-      generateSpeech(foundLine(piece.name)).catch(() => {});
+    if (puzzle) {
+      BRUSH_STAGES.forEach((_, s) => preloadVoice(stageVoice(s)));
+      preloadVoice(foundVoice(puzzle, pieceIndex));
     }
     playSound('countdown');
     const t = setInterval(() => {
@@ -123,10 +114,8 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     if (phase !== 'brushing' || stage === lastStageRef.current) return;
     lastStageRef.current = stage;
     playSound('brushingPrompt');
-    say(stageLine(stage));
+    say(stageVoice(stage));
   }, [phase, stage, playSound, say]);
-
-  useEffect(() => () => stopSpeaking(), [stopSpeaking]);
 
   const stageProgress = (q: number) => Math.max(0, Math.min(1, (elapsedSeconds - q * STAGE_SECONDS) / STAGE_SECONDS));
 

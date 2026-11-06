@@ -9,6 +9,7 @@ import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
 import { BonusWheel } from '../components/BonusWheel/BonusWheel';
+import { primeSpeechFallback } from '../hooks/usePuzzleVoice';
 import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
@@ -120,6 +121,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   const handleStartBrushing = () => {
     playSound('success');
+    // Lets the device voice speak later if a recorded clip is missing (iOS).
+    if (child.mode === 'puzzle') primeSpeechFallback();
     clearReplayState();
     onNavigate('brushing');
   };
