@@ -726,7 +726,7 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
   if (!chapterId || !text || !storyId || !fieldName) {
     return res.status(400).json({ error: 'Missing required fields: chapterId, text, storyId, fieldName' });
   }
-  if (!isSafeKeyPart(chapterId) || !isSafeKeyPart(storyId) || !Number.isInteger(chapterNumber) || !['recap', 'cliffhanger', 'teaser'].includes(fieldName)) {
+  if (!isSafeKeyPart(chapterId) || !isSafeKeyPart(storyId) || !Number.isInteger(chapterNumber) || !['title', 'recap', 'cliffhanger', 'teaser'].includes(fieldName)) {
     return res.status(400).json({ error: 'Invalid chapterId, storyId, chapterNumber, or fieldName' });
   }
 
