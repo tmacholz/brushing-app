@@ -40,6 +40,9 @@ async function loadAudioBuffer(
   url: string
 ): Promise<AudioBuffer> {
   const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}`);
+  }
   const arrayBuffer = await response.arrayBuffer();
   return audioContext.decodeAudioData(arrayBuffer);
 }
@@ -200,16 +203,22 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
           }
         }
 
-        // Load all audio buffers in parallel
-        const loadPromises: Promise<[string, AudioBuffer]>[] = [];
-        for (const url of urlsToLoad) {
-          loadPromises.push(
-            getAudioBuffer(ctx, url).then((buffer) => [url, buffer] as [string, AudioBuffer])
-          );
+        // Load all audio buffers in parallel. A clip that fails to load (deleted
+        // blob, network hiccup) is skipped rather than failing the whole
+        // segment, so one bad clip does not silence the narration.
+        const urls = [...urlsToLoad];
+        const results = await Promise.allSettled(urls.map((url) => getAudioBuffer(ctx, url)));
+        const bufferMap = new Map<string, AudioBuffer>();
+        results.forEach((result, i) => {
+          if (result.status === 'fulfilled') {
+            bufferMap.set(urls[i], result.value);
+          } else {
+            console.warn('[AudioSplicing] Skipping clip that failed to load:', urls[i], result.reason);
+          }
+        });
+        if (urls.length > 0 && bufferMap.size === 0) {
+          throw new Error('None of the narration clips could be loaded');
         }
-
-        const loadedBuffers = await Promise.all(loadPromises);
-        const bufferMap = new Map<string, AudioBuffer>(loadedBuffers);
 
         // Schedule audio playback - all clips scheduled on the same timeline for gapless playback
         // Use overlap around name clips to reduce perceived gaps from audio silence padding
@@ -312,7 +321,11 @@ export function useAudioSplicing(options: AudioSplicingOptions): UseAudioSplicin
         setIsPlaying(false);
       }
     },
-    [childNameAudioUrl, childNamePossessiveAudioUrl, petNameAudioUrl, petNamePossessiveAudioUrl, externalAudioContext, updateProgress]
+    [
+      childNameAudioUrl, childNamePossessiveAudioUrl, childNameAudioUrls, childNamePossessiveAudioUrls,
+      petNameAudioUrl, petNamePossessiveAudioUrl, petNameAudioUrls, petNamePossessiveAudioUrls,
+      externalAudioContext, updateProgress,
+    ]
   );
 
   const stop = useCallback(() => {

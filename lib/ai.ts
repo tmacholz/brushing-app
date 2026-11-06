@@ -1,5 +1,14 @@
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-import { GEMINI_TEXT_URL as GEMINI_API_URL } from './models.js';
+import {
+  GEMINI_TEXT_MODEL,
+  GEMINI_TEXT_FALLBACK_MODEL,
+  geminiGenerateUrl,
+  geminiTextThinkingConfig,
+} from './models.js';
+
+// Switched to the fallback model for the rest of this function instance if
+// the primary model is not available to this API key (404).
+let activeTextModel = GEMINI_TEXT_MODEL;
 
 interface GenerateResponse {
   candidates?: Array<{
@@ -40,14 +49,26 @@ async function callGemini(prompt: string, maxRetries: number = 5): Promise<strin
     }
 
     lastCallTime = Date.now();
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+    const response = await fetch(`${geminiGenerateUrl(activeTextModel)}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
+        generationConfig: {
+          temperature: 0.9,
+          maxOutputTokens: 8192,
+          ...geminiTextThinkingConfig(activeTextModel),
+        },
       }),
     });
+
+    if (response.status === 404 && activeTextModel !== GEMINI_TEXT_FALLBACK_MODEL) {
+      console.warn(
+        `[Gemini] Model ${activeTextModel} not available, falling back to ${GEMINI_TEXT_FALLBACK_MODEL}`
+      );
+      activeTextModel = GEMINI_TEXT_FALLBACK_MODEL;
+      continue;
+    }
 
     if (response.status === 429) {
       // Try to get retry-after header

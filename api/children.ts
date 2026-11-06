@@ -3,10 +3,8 @@ import { put } from '@vercel/blob';
 import { getDb } from '../lib/db.js';
 import { requireAuth, forwardAuthHeaders } from '../lib/auth.js';
 import { getApiBaseUrl } from '../lib/requestUrl.js';
+import { synthesizeName, isTtsConfigured } from '../lib/tts.js';
 
-const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
-const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
-const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
 // last_brush_date is a DATE column. The driver may hand it back as a Date or a
 // string; the app always works with a plain YYYY-MM-DD calendar date.
@@ -114,40 +112,16 @@ function toChild(row: Record<string, unknown>) {
 }
 
 // Generate TTS audio for a single text phrase
-async function generateSingleAudio(text: string, storagePath: string): Promise<string | null> {
-  if (!ELEVENLABS_API_KEY || !process.env.BLOB_READ_WRITE_TOKEN) {
+async function generateSingleAudio(text: string, basePath: string): Promise<string | null> {
+  if (!isTtsConfigured() || !process.env.BLOB_READ_WRITE_TOKEN) {
     return null;
   }
 
   try {
-    const response = await fetch(`${ELEVENLABS_API_BASE}/text-to-speech/${DEFAULT_VOICE_ID}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': ELEVENLABS_API_KEY,
-      },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_turbo_v2_5',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.5,
-          use_speaker_boost: true,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error('[Children API] ElevenLabs API error:', error);
-      return null;
-    }
-
-    const audioBuffer = await response.arrayBuffer();
-    const blob = await put(storagePath, Buffer.from(audioBuffer), {
+    const speech = await synthesizeName(text);
+    const blob = await put(`${basePath}.${speech.extension}`, speech.buffer, {
       access: 'public',
-      contentType: 'audio/mpeg',
+      contentType: speech.contentType,
       allowOverwrite: true,
     });
 
@@ -165,8 +139,8 @@ interface NameAudioResult {
 }
 
 async function generateNameAudio(name: string, childId: string): Promise<NameAudioResult> {
-  if (!ELEVENLABS_API_KEY) {
-    console.warn('[Children API] ELEVENLABS_API_KEY not configured, skipping audio generation');
+  if (!isTtsConfigured()) {
+    console.warn('[Children API] GEMINI_API_KEY not configured, skipping audio generation');
     return { regular: null, possessive: null };
   }
 
@@ -177,11 +151,9 @@ async function generateNameAudio(name: string, childId: string): Promise<NameAud
 
   console.log('[Children API] Generating name audio for:', name);
 
-  // Generate both regular and possessive forms in parallel
-  const [regularUrl, possessiveUrl] = await Promise.all([
-    generateSingleAudio(name, `name-audio/children/${childId}.mp3`),
-    generateSingleAudio(`${name}'s`, `name-audio/children/${childId}-possessive.mp3`),
-  ]);
+  // One at a time: the Gemini free tier allows 3 requests a minute.
+  const regularUrl = await generateSingleAudio(name, `name-audio/children/${childId}`);
+  const possessiveUrl = await generateSingleAudio(`${name}'s`, `name-audio/children/${childId}-possessive`);
 
   console.log('[Children API] Audio uploaded:', { regular: regularUrl, possessive: possessiveUrl });
   return { regular: regularUrl, possessive: possessiveUrl };
