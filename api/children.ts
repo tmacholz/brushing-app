@@ -3,7 +3,7 @@ import { put } from '@vercel/blob';
 import { getDb } from '../lib/db.js';
 import { requireAuth, forwardAuthHeaders } from '../lib/auth.js';
 import { getApiBaseUrl } from '../lib/requestUrl.js';
-import { synthesizeSpeech, isTtsConfigured } from '../lib/tts.js';
+import { synthesizeName, isTtsConfigured } from '../lib/tts.js';
 
 
 // last_brush_date is a DATE column. The driver may hand it back as a Date or a
@@ -118,7 +118,7 @@ async function generateSingleAudio(text: string, basePath: string): Promise<stri
   }
 
   try {
-    const speech = await synthesizeSpeech(text);
+    const speech = await synthesizeName(text);
     const blob = await put(`${basePath}.${speech.extension}`, speech.buffer, {
       access: 'public',
       contentType: speech.contentType,

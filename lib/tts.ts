@@ -1,4 +1,4 @@
-import { GEMINI_TTS_MODEL, GEMINI_TTS_VOICE, geminiGenerateUrl } from './models.js';
+import { GEMINI_TTS_MODEL, GEMINI_TTS_VOICE, GEMINI_TRANSCRIBE_MODEL, geminiGenerateUrl } from './models.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -109,4 +109,68 @@ function pcmToWav(pcm: Buffer, sampleRate: number, channels: number, bitsPerSamp
   header.write('data', 36);
   header.writeUInt32LE(pcm.length, 40);
   return Buffer.concat([header, pcm]);
+}
+
+/**
+ * Transcribe a short clip with a cheap Gemini text model (audio input).
+ * Used to check that a synthesized name clip says only the name.
+ */
+export async function transcribeAudio(speech: SpeechResult): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+  const response = await fetch(`${geminiGenerateUrl(GEMINI_TRANSCRIBE_MODEL)}?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inlineData: { mimeType: speech.contentType, data: speech.buffer.toString('base64') } },
+          { text: 'Transcribe this audio exactly, word for word. Reply with the transcript only.' },
+        ],
+      }],
+      generationConfig: { temperature: 0, maxOutputTokens: 64 },
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Gemini transcription error ${response.status}: ${await response.text()}`);
+  }
+  const data = await response.json();
+  const text: string = data.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? '').join(' ') ?? '';
+  return text.trim();
+}
+
+function wordCount(text: string): number {
+  return text.toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').split(/\s+/).filter(Boolean).length;
+}
+
+const NAME_ATTEMPTS = 3;
+
+/**
+ * Synthesize a bare name (or possessive, "Sparkle's") and verify it.
+ *
+ * Gemini TTS sometimes pads a one-word prompt with an invented word
+ * ("Daisy Sparkle"), which then gets spliced into every story. Each take is
+ * transcribed and rejected if it has more words than the name; spelling
+ * differences in the transcript are tolerated.
+ */
+export async function synthesizeName(name: string): Promise<SpeechResult> {
+  const expectedWords = wordCount(name);
+  let lastTranscript = '';
+  for (let attempt = 1; attempt <= NAME_ATTEMPTS; attempt++) {
+    const speech = await synthesizeSpeech(name);
+    try {
+      lastTranscript = await transcribeAudio(speech);
+    } catch (error) {
+      // Verification is best-effort: if transcription itself fails, keep the clip.
+      console.warn('[TTS] Could not verify name clip, keeping it:', error);
+      return speech;
+    }
+    const heard = wordCount(lastTranscript);
+    if (heard > 0 && heard <= expectedWords) {
+      return speech;
+    }
+    console.warn(`[TTS] Name clip for "${name}" transcribed as "${lastTranscript}" (attempt ${attempt}/${NAME_ATTEMPTS}), regenerating`);
+  }
+  throw new Error(`Could not synthesize a clean clip for "${name}" (last heard: "${lastTranscript}")`);
 }
