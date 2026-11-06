@@ -189,7 +189,8 @@ function MouthMap({ stage }: { stage: number }) {
 
 export function PuzzlePrototype() {
   const [variant, setVariant] = useState(0);
-  const base = PUZZLES[0];
+  const [puzzleIdx, setPuzzleIdx] = useState(0);
+  const base = PUZZLES[puzzleIdx];
   const variants = useMemo(() => base.variants ?? [base.image], [base]);
   const puzzle = useMemo(() => ({ ...base, image: variants[variant % variants.length] }), [base, variants, variant]);
   const imgOk = useImageOk(puzzle.image);
@@ -260,6 +261,9 @@ export function PuzzlePrototype() {
         </div>
         <button onClick={() => { setCollected(0); setMode('board'); setJustAdded(null); }} className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/10">
           <RotateCcw className="w-4 h-4" /> Reset
+        </button>
+        <button onClick={() => { setPuzzleIdx((i) => (i + 1) % PUZZLES.length); setVariant(0); setMode('board'); }} className="px-3 py-1 rounded-full bg-white/10">
+          Puzzle: {base.title}
         </button>
         {variants.length > 1 && (
           <button onClick={() => setVariant((v) => (v + 1) % variants.length)} className="px-3 py-1 rounded-full bg-white/10">
