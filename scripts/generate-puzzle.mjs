@@ -18,7 +18,8 @@ function loadKey() {
     if (!existsSync(p)) continue;
     // Tolerates export, single/double quotes, trailing comments and CRLF.
     const m = readFileSync(p, 'utf8').match(/^\s*(?:export\s+)?GEMINI_API_KEY\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s#]*))/m);
-    const key = m && (m[1] ?? m[2] ?? m[3] ?? '').trim();
+    // Strip a literal "\n" left behind by some env exports.
+    const key = m && (m[1] ?? m[2] ?? m[3] ?? '').replace(/(\\n)+$/, '').trim();
     if (key) return key;
   }
   throw new Error('GEMINI_API_KEY not found in env, .env.local or .env');
