@@ -5,7 +5,7 @@ import { isSafeKeyPart, isAllowedImageUrl } from '../lib/validation.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 import { GEMINI_IMAGE_URL as GEMINI_API_URL } from '../lib/models.js';
-import { synthesizeSpeech, synthesizeName, isTtsConfigured } from '../lib/tts.js';
+import { synthesizeNarration, synthesizeName, isTtsConfigured } from '../lib/tts.js';
 
 // ElevenLabs for name audio
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -691,7 +691,7 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
-        const speech = await synthesizeSpeech(part.content);
+        const speech = await synthesizeNarration(part.content);
 
         const storagePath = `story-audio/${storyId}/ch${chapterNumber}/seg${segmentOrder}/clip${clipIndex}.${speech.extension}`;
         const blob = await put(storagePath, speech.buffer, {
@@ -755,7 +755,7 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
       } else {
         console.log(`[AudioGen] Generating clip ${clipIndex} for: "${part.content.substring(0, 50)}..."`);
 
-        const speech = await synthesizeSpeech(part.content);
+        const speech = await synthesizeNarration(part.content);
 
         const storagePath = `story-audio/${storyId}/ch${chapterNumber}/${fieldName}/clip${clipIndex}.${speech.extension}`;
         const blob = await put(storagePath, speech.buffer, {

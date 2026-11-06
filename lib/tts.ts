@@ -140,37 +140,89 @@ export async function transcribeAudio(speech: SpeechResult): Promise<string> {
   return text.trim();
 }
 
-function wordCount(text: string): number {
-  return text.toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').split(/\s+/).filter(Boolean).length;
+function normalizeWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[-\u2013\u2014]/g, ' ')
+    .replace(/[^a-z0-9'\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
-const NAME_ATTEMPTS = 3;
+function editDistance(a: string, b: string): number {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function similarWord(a: string, b: string): boolean {
+  return a === b || a.startsWith(b) || b.startsWith(a) || editDistance(a, b) <= 2;
+}
 
 /**
- * Synthesize a bare name (or possessive, "Sparkle's") and verify it.
- *
- * Gemini TTS sometimes pads a one-word prompt with an invented word
- * ("Daisy Sparkle"), which then gets spliced into every story. Each take is
- * transcribed and rejected if it has more words than the name; spelling
- * differences in the transcript are tolerated.
+ * How many words a transcript has beyond what the text should contain.
+ * Returns Infinity when the clip clearly starts with an invented word
+ * (the first transcribed word matches nothing in the first two expected words).
  */
-export async function synthesizeName(name: string): Promise<SpeechResult> {
-  const expectedWords = wordCount(name);
-  let lastTranscript = '';
-  for (let attempt = 1; attempt <= NAME_ATTEMPTS; attempt++) {
-    const speech = await synthesizeSpeech(name);
+function extraWords(expectedText: string, transcript: string): number {
+  const expected = normalizeWords(expectedText);
+  const heard = normalizeWords(transcript);
+  if (heard.length === 0 || expected.length === 0) return 0; // unverifiable, accept
+  const startsRight = expected.slice(0, 2).some((w) => similarWord(heard[0], w));
+  if (!startsRight) return Infinity;
+  return Math.max(0, heard.length - expected.length);
+}
+
+const VERIFY_ATTEMPTS = 4;
+
+/**
+ * Synthesize text and check the result by transcribing it.
+ *
+ * Gemini TTS sometimes invents a word, most often a name, when a clip is a
+ * bare name ("Daisy Sparkle") or a fragment that starts mid-sentence right
+ * after a name slot ("Daisy bounced with excitement"). That word then gets
+ * spliced into every story. Each take is transcribed with a cheap model and
+ * regenerated if it starts with an unexpected word or has more than
+ * `maxExtraWords` words beyond the text. After VERIFY_ATTEMPTS the least-bad
+ * take is kept so one stubborn fragment cannot block a whole segment.
+ */
+export async function synthesizeVerified(text: string, maxExtraWords = 0): Promise<SpeechResult> {
+  let best: { speech: SpeechResult; extra: number } | null = null;
+  for (let attempt = 1; attempt <= VERIFY_ATTEMPTS; attempt++) {
+    const speech = await synthesizeSpeech(text);
+    let transcript: string;
     try {
-      lastTranscript = await transcribeAudio(speech);
+      transcript = await transcribeAudio(speech);
     } catch (error) {
       // Verification is best-effort: if transcription itself fails, keep the clip.
-      console.warn('[TTS] Could not verify name clip, keeping it:', error);
+      console.warn('[TTS] Could not verify clip, keeping it:', error);
       return speech;
     }
-    const heard = wordCount(lastTranscript);
-    if (heard > 0 && heard <= expectedWords) {
+    const extra = extraWords(text, transcript);
+    if (extra <= maxExtraWords) {
       return speech;
     }
-    console.warn(`[TTS] Name clip for "${name}" transcribed as "${lastTranscript}" (attempt ${attempt}/${NAME_ATTEMPTS}), regenerating`);
+    console.warn(
+      `[TTS] Clip for "${text.slice(0, 40)}..." transcribed as "${transcript.slice(0, 60)}" (attempt ${attempt}/${VERIFY_ATTEMPTS}), regenerating`
+    );
+    if (!best || extra < best.extra) best = { speech, extra };
   }
-  throw new Error(`Could not synthesize a clean clip for "${name}" (last heard: "${lastTranscript}")`);
+  console.warn(`[TTS] Keeping least-bad clip for "${text.slice(0, 40)}..." after ${VERIFY_ATTEMPTS} attempts`);
+  return best!.speech;
+}
+
+/** Synthesize a bare name (or possessive): no extra words allowed. */
+export function synthesizeName(name: string): Promise<SpeechResult> {
+  return synthesizeVerified(name, 0);
+}
+
+/** Synthesize a narration fragment; allow one extra word for transcription noise. */
+export function synthesizeNarration(text: string): Promise<SpeechResult> {
+  return synthesizeVerified(text, 1);
 }
