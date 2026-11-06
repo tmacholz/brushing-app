@@ -13,12 +13,16 @@ import { PetAudioManager } from './admin/screens/PetAudioManager.tsx'
 import { ExpressionEditor } from './admin/screens/ExpressionEditor.tsx'
 import { SpriteManager } from './admin/screens/SpriteManager.tsx'
 import { CollectiblesManager } from './admin/screens/CollectiblesManager.tsx'
+import { PuzzlePrototype } from './prototype/PuzzlePrototype.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
         <Routes>
+          {/* Puzzle mode prototype (standalone, no profile needed) */}
+          <Route path="/puzzle-prototype" element={<PuzzlePrototype />} />
+
           {/* Admin routes */}
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="worlds" replace />} />
