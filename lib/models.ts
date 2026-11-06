@@ -26,6 +26,8 @@ export const GEMINI_IMAGE_MODEL =
 // TTS $6; Tim picked Flash with the "Kore" voice from side-by-side samples.
 export const GEMINI_TTS_MODEL = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
 export const GEMINI_TTS_VOICE = process.env.GEMINI_TTS_VOICE || 'Kore';
+// Cheap audio-input model used to verify name clips (lib/tts.ts synthesizeName).
+export const GEMINI_TRANSCRIBE_MODEL = process.env.GEMINI_TRANSCRIBE_MODEL || 'gemini-2.5-flash-lite';
 
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 

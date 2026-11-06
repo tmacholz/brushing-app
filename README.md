@@ -18,6 +18,7 @@ Kids' toothbrushing app: a Vite + React frontend with Vercel serverless function
 | `GEMINI_IMAGE_MODEL` | no | Override the image model (default `gemini-3.1-flash-lite-image`) |
 | `GEMINI_TTS_MODEL` | no | Override the narration model (default `gemini-3.8-flash-tts`) |
 | `GEMINI_TTS_VOICE` | no | Override the narration voice (default `Kore`) |
+| `GEMINI_TRANSCRIBE_MODEL` | no | Audio-input model that checks name clips say only the name (default `gemini-2.5-flash-lite`) |
 | `ALLOWED_IMAGE_HOSTS` | no | Comma-separated extra hosts the server may fetch reference images from (the Vercel Blob host is always allowed) |
 
 `npm run dev` serves the app and the `api/` functions on http://localhost:5173 without a Vercel login.
