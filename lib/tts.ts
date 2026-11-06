@@ -162,7 +162,11 @@ function editDistance(a: string, b: string): number {
 }
 
 function similarWord(a: string, b: string): boolean {
-  return a === b || a.startsWith(b) || b.startsWith(a) || editDistance(a, b) <= 2;
+  if (a === b) return true;
+  // Short words must match exactly: "I" is within edit distance 2 of "at",
+  // which let "I looked at" pass as "looked at".
+  if (a.length < 4 || b.length < 4) return false;
+  return a.startsWith(b) || b.startsWith(a) || editDistance(a, b) <= 2;
 }
 
 /**
