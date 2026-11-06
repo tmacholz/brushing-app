@@ -19,7 +19,8 @@ export interface UseBrushingTimerReturn extends BrushingTimerState {
 
 export function useBrushingTimer(
   onComplete?: () => void,
-  onTick?: (elapsedSeconds: number) => void
+  onTick?: (elapsedSeconds: number) => void,
+  tickMs = 1000 // real milliseconds per timer second; lower only for testing
 ): UseBrushingTimerReturn {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -63,8 +64,8 @@ export function useBrushingTimer(
 
         return next;
       });
-    }, 1000);
-  }, [isComplete, clearTimer]);
+    }, tickMs);
+  }, [isComplete, clearTimer, tickMs]);
 
   const pause = useCallback(() => {
     clearTimer();
