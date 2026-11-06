@@ -2,7 +2,7 @@ import { put } from '@vercel/blob';
 import { getDb } from './db.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
+import { GEMINI_IMAGE_URL as GEMINI_API_URL } from './models.js';
 
 // Sticker style - more graphic/icon style than story illustrations
 const STICKER_STYLE = `Cute collectible sticker design, flat illustration style with bold outlines,

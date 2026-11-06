@@ -1,5 +1,6 @@
 import type { StoryArc, StorySegment, StoryBible, StoryReference, Child, Pet } from '../types';
 import { getCharacterById } from '../data/characters';
+import { apiFetch } from './api';
 
 interface GenerateImageResult {
   imageUrl: string;
@@ -137,7 +138,7 @@ export async function generateImageForSegment(
 
   try {
     console.log('[ImageGen] Calling /api/generate for segment:', segment.id);
-    const response = await fetch('/api/generate', {
+    const response = await apiFetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

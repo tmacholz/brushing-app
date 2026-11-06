@@ -16,6 +16,7 @@ import { TaskCheckIn } from '../components/TaskCheckIn';
 import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
+import { isToday } from '../utils/streakCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl, getPetAudioPossessiveUrl, getPetAudioUrls, getPetAudioPossessiveUrls } from '../services/petAudio';
 import type { ChestReward, TaskCheckInResult } from '../types';
@@ -205,6 +206,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Play completion sound
     playSound('complete');
 
+    // Read this before updateStreak() stamps today's date on the child
+    const isFirstBrushOfDay = !isToday(child.lastBrushDate);
+
     // Update streak and calculate points
     const { newStreak } = await updateStreak();
     const isReplay = replayingChapterIndex !== null;
@@ -216,7 +220,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     const points = calculateSessionPoints(
       newStreak,
       isStoryArcComplete ?? false,
-      true, // isFirstBrushOfDay - simplified for now
+      isFirstBrushOfDay,
       false
     );
 

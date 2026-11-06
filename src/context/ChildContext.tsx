@@ -2,8 +2,10 @@ import { createContext, useContext, useCallback, useMemo, useState, useEffect, t
 import type { Child, StoryArc, ChestReward, EquippedAccessories, TaskConfig, CompletedStoryInfo } from '../types';
 import { DEFAULT_TASKS } from '../types';
 import { usePets } from './PetsContext';
+import { useToast } from './ToastContext';
 import { getBrushById } from '../data/brushes';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
+import { apiFetch } from '../services/api';
 
 const ACTIVE_CHILD_KEY = 'brushquest_active_child_id';
 const OLD_STORAGE_KEY = 'brushquest_data';
@@ -62,7 +64,7 @@ const ChildContext = createContext<ChildContextType | undefined>(undefined);
 // API helper functions
 async function fetchChildrenFromAPI(): Promise<Child[]> {
   try {
-    const res = await fetch('/api/children');
+    const res = await apiFetch('/api/children');
     if (!res.ok) throw new Error('Failed to fetch children');
     const data = await res.json();
     return data.children || [];
@@ -84,7 +86,7 @@ async function createChildInAPI(childData: {
   unlockedWorlds: string[];
 }): Promise<Child | null> {
   try {
-    const res = await fetch('/api/children', {
+    const res = await apiFetch('/api/children', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(childData),
@@ -103,7 +105,7 @@ async function createChildInAPI(childData: {
 
 async function updateChildInAPI(childId: string, updates: Partial<Child>): Promise<Child | null> {
   try {
-    const res = await fetch(`/api/children?id=${childId}`, {
+    const res = await apiFetch(`/api/children?id=${childId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -122,7 +124,7 @@ async function updateChildInAPI(childId: string, updates: Partial<Child>): Promi
 
 async function deleteChildInAPI(childId: string): Promise<boolean> {
   try {
-    const res = await fetch(`/api/children?id=${childId}`, {
+    const res = await apiFetch(`/api/children?id=${childId}`, {
       method: 'DELETE',
     });
     return res.ok;
@@ -143,7 +145,7 @@ async function migrateLegacyData(): Promise<void> {
       const oldChild = JSON.parse(legacyData);
       console.log('[ChildContext] Migrating legacy single-child data:', oldChild.name);
 
-      const res = await fetch('/api/children', {
+      const res = await apiFetch('/api/children', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(oldChild),
@@ -167,7 +169,7 @@ async function migrateLegacyData(): Promise<void> {
         console.log('[ChildContext] Migrating', parsed.children.length, 'children to database');
 
         for (const child of parsed.children) {
-          const res = await fetch('/api/children', {
+          const res = await apiFetch('/api/children', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(child),
@@ -195,6 +197,7 @@ async function migrateLegacyData(): Promise<void> {
 
 export function ChildProvider({ children }: { children: ReactNode }) {
   const { getStarterPets, getPetById } = usePets();
+  const { showToast } = useToast();
 
   const [replayingChapterIndex, setReplayingChapterIndex] = useState<number | null>(null);
   const [allChildren, setAllChildren] = useState<Child[]>([]);
@@ -336,18 +339,29 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     });
   }, [activeChildId]);
 
-  // Update active child
+  // Update active child: optimistic, rolled back if the server rejects it so the
+  // UI never shows points or unlocks that were not saved.
   const updateChild = useCallback(async (updates: Partial<Child>) => {
     if (!activeChildId) return;
 
-    // Optimistic update
+    let previous: Child | undefined;
     setAllChildren((prev) =>
-      prev.map((c) => (c.id === activeChildId ? { ...c, ...updates } : c))
+      prev.map((c) => {
+        if (c.id !== activeChildId) return c;
+        previous = c;
+        return { ...c, ...updates };
+      })
     );
 
-    // Sync to API
-    await updateChildInAPI(activeChildId, updates);
-  }, [activeChildId]);
+    const saved = await updateChildInAPI(activeChildId, updates);
+    if (!saved) {
+      const snapshot = previous;
+      if (snapshot) {
+        setAllChildren((prev) => prev.map((c) => (c.id === activeChildId ? snapshot : c)));
+      }
+      showToast("Couldn't save progress. Check your connection and try again.", 'error');
+    }
+  }, [activeChildId, showToast]);
 
   const addPoints = useCallback(async (points: number) => {
     if (!child) return;
@@ -417,8 +431,9 @@ export function ChildProvider({ children }: { children: ReactNode }) {
 
     await updateChild({
       currentStoryArc: isComplete ? null : updatedStoryArc,
-      completedStoryArcs: isComplete
-        ? [...child.completedStoryArcs, child.currentStoryArc.id]
+      // Store the template id: that is what the story lists compare against.
+      completedStoryArcs: isComplete && !child.completedStoryArcs.includes(child.currentStoryArc.storyTemplateId)
+        ? [...child.completedStoryArcs, child.currentStoryArc.storyTemplateId]
         : child.completedStoryArcs,
       lastCompletedStoryInfo: isComplete ? completedStoryInfo : child.lastCompletedStoryInfo,
     });

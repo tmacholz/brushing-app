@@ -161,8 +161,12 @@ CREATE TABLE IF NOT EXISTS children (
   unlocked_brushes TEXT[] DEFAULT ARRAY['star-swirl'],
   unlocked_worlds TEXT[] DEFAULT ARRAY['magical-forest', 'space-station'],
   current_story_arc JSONB DEFAULT NULL,
-  completed_story_arcs TEXT[] DEFAULT ARRAY[]::TEXT[],
-  last_brush_date TIMESTAMP DEFAULT NULL,
+  completed_story_arcs TEXT[] DEFAULT ARRAY[]::TEXT[], -- story template ids
+  last_completed_story_info JSONB DEFAULT NULL,
+  task_config JSONB DEFAULT NULL,
+  mode VARCHAR(20) NOT NULL DEFAULT 'story', -- 'story' | 'puzzle'
+  mode_progress JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_brush_date DATE DEFAULT NULL, -- local calendar date of the last brush
   name_audio_url TEXT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()

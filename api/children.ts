@@ -1,10 +1,81 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../lib/db.js';
+import { requireAuth, forwardAuthHeaders } from '../lib/auth.js';
+import { getApiBaseUrl } from '../lib/requestUrl.js';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const ELEVENLABS_API_BASE = 'https://api.elevenlabs.io/v1';
 const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
+
+// last_brush_date is a DATE column. The driver may hand it back as a Date or a
+// string; the app always works with a plain YYYY-MM-DD calendar date.
+function toDateString(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof value === 'string') return value.slice(0, 10);
+  return null;
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MODES = ['story', 'puzzle'] as const;
+
+function isNonNegativeInt(v: unknown): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0;
+}
+
+function isStringArray(v: unknown): v is string[] {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string' && x.length <= 200);
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// Returns an error message when a child update/create body has bad values.
+function validateChildFields(body: Record<string, unknown>): string | null {
+  const optionalInts = ['age', 'points', 'totalBrushSessions', 'currentStreak', 'longestStreak'];
+  for (const key of optionalInts) {
+    if (body[key] !== undefined && body[key] !== null && !isNonNegativeInt(body[key])) {
+      return `${key} must be a non-negative integer`;
+    }
+  }
+  if (body.age !== undefined && body.age !== null && ((body.age as number) < 4 || (body.age as number) > 10)) {
+    return 'age must be between 4 and 10';
+  }
+  const optionalStringArrays = [
+    'unlockedPets', 'unlockedBrushes', 'unlockedWorlds', 'completedStoryArcs',
+    'collectedStickers', 'collectedAccessories',
+  ];
+  for (const key of optionalStringArrays) {
+    if (body[key] !== undefined && body[key] !== null && !isStringArray(body[key])) {
+      return `${key} must be an array of strings`;
+    }
+  }
+  if (body.lastBrushDate !== undefined && body.lastBrushDate !== null &&
+      (typeof body.lastBrushDate !== 'string' || !DATE_RE.test(body.lastBrushDate))) {
+    return 'lastBrushDate must be YYYY-MM-DD';
+  }
+  if (body.mode !== undefined && !MODES.includes(body.mode as typeof MODES[number])) {
+    return `mode must be one of: ${MODES.join(', ')}`;
+  }
+  for (const key of ['taskConfig', 'lastCompletedStoryInfo', 'equippedAccessories', 'modeProgress', 'currentStoryArc']) {
+    if (body[key] !== undefined && body[key] !== null && !isPlainObject(body[key])) {
+      return `${key} must be an object`;
+    }
+  }
+  for (const key of ['name', 'characterId', 'activePetId', 'activeBrushId', 'activeWorldId']) {
+    if (body[key] !== undefined && body[key] !== null && (typeof body[key] !== 'string' || (body[key] as string).length > 100)) {
+      return `${key} must be a string of 100 characters or fewer`;
+    }
+  }
+  return null;
+}
 
 // Helper to convert snake_case DB row to camelCase
 function toChild(row: Record<string, unknown>) {
@@ -25,7 +96,11 @@ function toChild(row: Record<string, unknown>) {
     unlockedWorlds: row.unlocked_worlds,
     currentStoryArc: row.current_story_arc,
     completedStoryArcs: row.completed_story_arcs,
-    lastBrushDate: row.last_brush_date,
+    lastBrushDate: toDateString(row.last_brush_date),
+    lastCompletedStoryInfo: row.last_completed_story_info ?? null,
+    taskConfig: row.task_config ?? null,
+    mode: row.mode ?? 'story',
+    modeProgress: row.mode_progress ?? {},
     nameAudioUrl: row.name_audio_url,
     namePossessiveAudioUrl: row.name_possessive_audio_url,
     nameAudioUrls: row.name_audio_urls || [],           // Array of 3 versions for variety
@@ -119,6 +194,7 @@ async function generateNameAudio(name: string, childId: string): Promise<NameAud
 // PUT /api/children?id=xxx - Update a child
 // DELETE /api/children?id=xxx - Delete a child
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAuth(req, res, 'device')) return;
   const sql = getDb();
   const { id } = req.query;
 
@@ -161,7 +237,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         collectedStickers,
         collectedAccessories,
         equippedAccessories,
-      } = req.body;
+        lastCompletedStoryInfo,
+        taskConfig,
+        mode,
+        modeProgress,
+      } = req.body ?? {};
+
+      const invalid = validateChildFields(req.body ?? {});
+      if (invalid) {
+        return res.status(400).json({ error: invalid });
+      }
 
       try {
         const [row] = await sql`
@@ -185,7 +270,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             name_audio_url = COALESCE(${nameAudioUrl}, name_audio_url),
             collected_stickers = COALESCE(${collectedStickers}, collected_stickers),
             collected_accessories = COALESCE(${collectedAccessories}, collected_accessories),
-            equipped_accessories = ${equippedAccessories !== undefined ? JSON.stringify(equippedAccessories) : sql`equipped_accessories`}
+            equipped_accessories = ${equippedAccessories !== undefined ? JSON.stringify(equippedAccessories) : sql`equipped_accessories`},
+            last_completed_story_info = ${lastCompletedStoryInfo !== undefined ? (lastCompletedStoryInfo ? JSON.stringify(lastCompletedStoryInfo) : null) : sql`last_completed_story_info`},
+            task_config = ${taskConfig !== undefined ? (taskConfig ? JSON.stringify(taskConfig) : null) : sql`task_config`},
+            mode = COALESCE(${mode ?? null}, mode),
+            mode_progress = ${modeProgress !== undefined ? JSON.stringify(modeProgress ?? {}) : sql`mode_progress`},
+            updated_at = NOW()
           WHERE id = ${id}
           RETURNING *
         `;
@@ -197,8 +287,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ child: toChild(row) });
       } catch (error) {
         console.error('[Children API] Error updating child:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to update child', details: message });
+        return res.status(500).json({ error: 'Failed to update child' });
       }
     }
 
@@ -231,9 +320,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.log('[Children API] Regenerating audio for child:', id, child.name);
 
           // Call the generate API to get multiple audio versions
-          const generateRes = await fetch(`${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}/api/generate`, {
+          const generateRes = await fetch(`${getApiBaseUrl(req)}/api/generate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...forwardAuthHeaders(req) },
             body: JSON.stringify({
               type: 'nameAudio',
               name: child.name,
@@ -317,7 +406,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       completedStoryArcs = [],
       lastBrushDate = null,
       nameAudioUrl = null,
-    } = req.body;
+      taskConfig = null,
+      lastCompletedStoryInfo = null,
+      mode = 'story',
+      modeProgress = {},
+    } = req.body ?? {};
 
     // Validate required fields
     if (!name || typeof name !== 'string' || name.length > 50) {
@@ -326,6 +419,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!age || typeof age !== 'number' || age < 4 || age > 10) {
       return res.status(400).json({ error: 'Age is required and must be between 4 and 10' });
+    }
+
+    const invalid = validateChildFields(req.body ?? {});
+    if (invalid) {
+      return res.status(400).json({ error: invalid });
     }
 
     try {
@@ -338,7 +436,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           points, total_brush_sessions, current_streak, longest_streak,
           unlocked_pets, unlocked_brushes, unlocked_worlds,
           current_story_arc, completed_story_arcs,
-          last_brush_date, name_audio_url
+          last_brush_date, name_audio_url,
+          task_config, last_completed_story_info, mode, mode_progress
         ) VALUES (
           ${existingId ? sql`${existingId},` : sql``}
           ${name}, ${age}, ${characterId},
@@ -346,7 +445,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ${points}, ${totalBrushSessions}, ${currentStreak}, ${longestStreak},
           ${unlockedPets}, ${unlockedBrushes}, ${unlockedWorlds},
           ${currentStoryArc ? JSON.stringify(currentStoryArc) : null}, ${completedStoryArcs},
-          ${lastBrushDate}, ${nameAudioUrl}
+          ${lastBrushDate}, ${nameAudioUrl},
+          ${taskConfig ? JSON.stringify(taskConfig) : null}, ${lastCompletedStoryInfo ? JSON.stringify(lastCompletedStoryInfo) : null},
+          ${mode}, ${JSON.stringify(modeProgress ?? {})}
         )
         RETURNING *
       `;
@@ -371,8 +472,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json({ child });
     } catch (error) {
       console.error('[Children API] Error creating child:', error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return res.status(500).json({ error: 'Failed to create child', details: message });
+      return res.status(500).json({ error: 'Failed to create child' });
     }
   }
 

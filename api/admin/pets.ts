@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../lib/db.js';
 import { generatePetSuggestions } from '../../lib/ai.js';
+import { requireAuth } from '../../lib/auth.js';
 
 // Unified pets API:
 // GET /api/admin/pets - List all pets and pending suggestions
@@ -10,6 +11,7 @@ import { generatePetSuggestions } from '../../lib/ai.js';
 // PUT /api/admin/pets?id=xxx - Update pet
 // DELETE /api/admin/pets?id=xxx - Delete pet
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
   const { id } = req.query;
 

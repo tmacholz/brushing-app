@@ -1,7 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth.js';
 
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
 const API_BASE = 'https://api.elevenlabs.io/v1';
+// The one narrator voice the app uses. Anything else is rejected so a caller
+// cannot pick arbitrary voices (or inject into the upstream URL).
+const ALLOWED_VOICE_IDS = new Set(['0z8S749Xe6jLCD34QXl1']);
+const ALLOWED_MODEL_IDS = new Set(['eleven_turbo_v2_5', 'eleven_multilingual_v2', 'eleven_flash_v2_5']);
+const MAX_TEXT_LENGTH = 1000;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
@@ -9,14 +15,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  if (!requireAuth(req, res, 'device')) return;
+
   if (!ELEVENLABS_API_KEY) {
     return res.status(500).json({ error: 'API key not configured' });
   }
 
-  const { text, voiceId, modelId, voiceSettings } = req.body;
+  const { text, voiceId, modelId, voiceSettings } = req.body ?? {};
 
-  if (!text || !voiceId) {
+  if (typeof text !== 'string' || text.trim().length === 0 || typeof voiceId !== 'string') {
     return res.status(400).json({ error: 'Missing required fields: text, voiceId' });
+  }
+  if (text.length > MAX_TEXT_LENGTH) {
+    return res.status(400).json({ error: `Text must be ${MAX_TEXT_LENGTH} characters or fewer` });
+  }
+  if (!ALLOWED_VOICE_IDS.has(voiceId)) {
+    return res.status(400).json({ error: 'Unsupported voiceId' });
+  }
+  if (modelId !== undefined && !ALLOWED_MODEL_IDS.has(modelId)) {
+    return res.status(400).json({ error: 'Unsupported modelId' });
   }
 
   try {

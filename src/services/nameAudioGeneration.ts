@@ -1,3 +1,4 @@
+import { apiFetch } from './api';
 interface GenerateNameAudioResult {
   audioUrl: string;
   name: string;
@@ -12,7 +13,7 @@ export async function generateChildNameAudio(
   name: string
 ): Promise<GenerateNameAudioResult | null> {
   try {
-    const response = await fetch('/api/generate', {
+    const response = await apiFetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -52,7 +53,7 @@ export async function generatePetNameAudio(
   name: string
 ): Promise<GenerateNameAudioResult | null> {
   try {
-    const response = await fetch('/api/generate', {
+    const response = await apiFetch('/api/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

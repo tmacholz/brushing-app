@@ -3,6 +3,7 @@ import { put } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
 import { generateStoryPitches, generateOutlineFromIdea, generateStoryBible, generateFullStory, extractStoryReferences, generateStoryboard, type ExistingStory, type StoryboardReference } from '../../../lib/ai.js';
 import { generateWorldImageDirect } from '../../../lib/imageGeneration.js';
+import { requireAuth } from '../../../lib/auth.js';
 
 // Helper to generate world image (calls the shared function directly)
 async function generateWorldImage(worldId: string, worldName: string, worldDescription: string, theme?: string): Promise<string | null> {
@@ -14,8 +15,13 @@ async function generateWorldImage(worldId: string, worldName: string, worldDescr
   }
 }
 
+// Full story generation (bible, chapters, references, storyboard, music) runs
+// in one request; give it the maximum time Vercel allows.
+export const maxDuration = 300;
+
 // Handles all world-specific operations and story creation
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
   const { id } = req.query;
 
@@ -77,6 +83,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // POST - Story operations (pitches, outline, generate) and world image regeneration
   if (req.method === 'POST') {
     const { action, idea, pitchId, count = 3 } = req.body;
+
+    // Set once a story row exists with status 'generating', so a failure
+    // later in the pipeline can mark it instead of leaving it stuck.
+    let generatingStoryId: string | null = null;
 
     try {
       const [world] = await sql`SELECT * FROM worlds WHERE id = ${id}`;
@@ -165,6 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           VALUES (${id}, ${pitch.title}, ${pitch.description}, 5, 'generating', ${JSON.stringify(storyBible)})
           RETURNING *
         `;
+        generatingStoryId = story.id;
 
         // Step 2b: Save bible references to story_references table
         for (let i = 0; i < bibleReferences.length; i++) {
@@ -336,7 +347,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.error('[Story] Storyboard generation failed (non-fatal):', storyboardError);
         }
 
-        // Generate background music asynchronously (fire and forget - don't block response)
+        // Generate background music. This used to be fire-and-forget, but a
+        // serverless function is frozen once it responds, so the work was lost.
         const generateMusicAsync = async () => {
           try {
             const musicPrompt = `Gentle, whimsical instrumental music for a children's story.
@@ -347,7 +359,9 @@ Mood: Wonder, gentle excitement, cozy and safe feeling.
 Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
 
             console.log('[Music] Generating background music for story:', story.id);
-            const musicRes = await fetch('https://api.elevenlabs.io/v1/music/generate', {
+            // POST /v1/music; length in milliseconds.
+            // https://elevenlabs.io/docs/api-reference/music/compose
+            const musicRes = await fetch('https://api.elevenlabs.io/v1/music', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -355,7 +369,7 @@ Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
               },
               body: JSON.stringify({
                 prompt: musicPrompt,
-                duration_seconds: 120,
+                music_length_ms: 120_000,
               }),
             });
 
@@ -376,8 +390,8 @@ Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
           }
         };
 
-        // Fire and forget - don't await
-        generateMusicAsync();
+        // Music failures are logged inside and never fail the story.
+        await generateMusicAsync();
 
         // Fetch complete story
         const [fullStory] = await sql`SELECT * FROM stories WHERE id = ${story.id}`;
@@ -395,6 +409,13 @@ Instruments: Light orchestral, soft piano, gentle strings, subtle chimes.`;
       return res.status(400).json({ error: 'Invalid action' });
     } catch (error) {
       console.error('Error in story operation:', error);
+      if (generatingStoryId) {
+        try {
+          await sql`UPDATE stories SET status = 'failed' WHERE id = ${generatingStoryId} AND status = 'generating'`;
+        } catch (resetError) {
+          console.error('Failed to reset story status:', resetError);
+        }
+      }
       return res.status(500).json({ error: 'Operation failed' });
     }
   }

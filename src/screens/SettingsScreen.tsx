@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { characters, getCharacterById } from '../data/characters';
 import { DEFAULT_TASKS } from '../types';
 import type { TaskConfig } from '../types';
+import { apiFetch } from '../services/api';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -160,7 +161,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     setAudioRegenerateStatus('idle');
 
     try {
-      const res = await fetch(`/api/children?id=${child.id}`, {
+      const res = await apiFetch(`/api/children?id=${child.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'regenerateAudio' }),

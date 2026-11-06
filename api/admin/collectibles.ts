@@ -6,6 +6,7 @@ import {
   saveSticker,
   getCollectibles,
 } from '../../lib/collectibles.js';
+import { requireAuth } from '../../lib/auth.js';
 
 // Helper to format collectible for response
 function formatCollectible(c: Record<string, unknown>) {
@@ -31,6 +32,7 @@ function formatCollectible(c: Record<string, unknown>) {
 // PUT /api/admin/collectibles?id=xxx - Update collectible
 // DELETE /api/admin/collectibles?id=xxx - Delete collectible
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
   const { id } = req.query;
 

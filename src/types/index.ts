@@ -35,8 +35,14 @@ export interface Child {
   collectedAccessories: string[]; // Array of collectible IDs
   equippedAccessories: EquippedAccessories; // Pet ID -> array of accessory IDs
   // Task bonus feature
-  taskConfig: TaskConfig; // Parent-configured tasks for check-in
+  taskConfig: TaskConfig | null; // Parent-configured tasks for check-in (null = defaults)
+  // Ways to play. 'story' is the original chapter-per-brush flow; other modes
+  // keep their progress in modeProgress so the schema does not change per mode.
+  mode: PlayMode;
+  modeProgress: Record<string, unknown>;
 }
+
+export type PlayMode = 'story' | 'puzzle';
 
 // =====================================================
 // Task Bonus System Types

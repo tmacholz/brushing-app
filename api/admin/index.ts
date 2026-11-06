@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../lib/db.js';
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'brushquest-admin';
+import { checkPassword, clearAuthCookies, getAuth, requireAuth, setAuthCookie, type AuthScope } from '../../lib/auth.js';
 
 // Supported audio MIME types for upload
 const SUPPORTED_AUDIO_TYPES = [
@@ -106,24 +105,51 @@ const glowingFlowersStory = {
   ],
 };
 
-// POST /api/admin - auth or migrate based on action
+// GET  /api/admin                                   -> { admin, device } for this browser's cookies
+// POST /api/admin { action: 'auth', password, scope } -> sets signed cookies ('device' default, 'admin' also unlocks device)
+// POST /api/admin { action: 'logout' }
+// POST /api/admin { action: 'migrate' | 'uploadAudio' | 'musicLibrary' }   (admin cookie required)
+//
+// Auth lives here rather than in its own file because the Hobby plan allows
+// at most 12 serverless functions per deployment.
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    return res.status(200).json(getAuth(req));
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { action, password } = req.body;
+  const { action, password, scope = 'device' } = (req.body ?? {}) as { action?: string; password?: unknown; scope?: string };
 
-  // Auth action
-  if (action === 'auth' || !action) {
+  if (action === 'logout') {
+    clearAuthCookies(req, res);
+    return res.status(200).json({ success: true });
+  }
+
+  // Auth action: verify the password and issue signed cookies.
+  if (action === 'auth' || action === 'login' || !action) {
     if (!password) {
       return res.status(400).json({ error: 'Password required' });
     }
-    if (password === ADMIN_PASSWORD) {
-      return res.status(200).json({ success: true });
+    if (scope !== 'admin' && scope !== 'device') {
+      return res.status(400).json({ error: 'Invalid scope' });
     }
-    return res.status(401).json({ error: 'Invalid password' });
+    if (!process.env.ADMIN_PASSWORD) {
+      return res.status(503).json({ error: 'ADMIN_PASSWORD is not configured on the server' });
+    }
+    if (!checkPassword(password)) {
+      return res.status(401).json({ error: 'Invalid password' });
+    }
+    // An admin login also unlocks the device so the same browser can run the kid app.
+    const scopes: AuthScope[] = scope === 'admin' ? ['admin', 'device'] : ['device'];
+    for (const s of scopes) setAuthCookie(req, res, s);
+    return res.status(200).json({ success: true, admin: scope === 'admin', device: true });
   }
+
+  // Everything else (migrate, uploads, music library) is admin-only.
+  if (!requireAuth(req, res, 'admin')) return;
 
   // Migrate action
   if (action === 'migrate') {
@@ -200,7 +226,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({ success: true, results });
     } catch (error) {
-      return res.status(500).json({ error: 'Migration failed', details: String(error) });
+      console.error('Migration failed:', error);
+      return res.status(500).json({ error: 'Migration failed' });
     }
   }
 
