@@ -36,17 +36,17 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
 }
 
 export async function loginDevice(password: string, scope: 'device' | 'admin' = 'device'): Promise<boolean> {
-  const res = await fetch('/api/auth', {
+  const res = await fetch('/api/admin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'login', password, scope }),
+    body: JSON.stringify({ action: 'auth', password, scope }),
   });
   return res.ok;
 }
 
 export async function getAuthStatus(): Promise<{ admin: boolean; device: boolean }> {
   try {
-    const res = await fetch('/api/auth');
+    const res = await fetch('/api/admin');
     if (!res.ok) return { admin: false, device: false };
     return await res.json();
   } catch {
@@ -55,7 +55,7 @@ export async function getAuthStatus(): Promise<{ admin: boolean; device: boolean
 }
 
 export async function logout(): Promise<void> {
-  await fetch('/api/auth', {
+  await fetch('/api/admin', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'logout' }),

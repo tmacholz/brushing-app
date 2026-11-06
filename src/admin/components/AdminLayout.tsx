@@ -82,10 +82,10 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
     try {
       // Sets a signed, HttpOnly admin cookie that every admin API route checks.
-      const res = await fetch('/api/auth', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', password, scope: 'admin' }),
+        body: JSON.stringify({ action: 'auth', password, scope: 'admin' }),
       });
 
       if (res.ok) {
@@ -223,7 +223,7 @@ export function AdminLayout() {
   // Ask the server whether this browser holds a valid admin cookie.
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/auth')
+    fetch('/api/admin')
       .then((res) => (res.ok ? res.json() : { admin: false }))
       .then((auth: { admin?: boolean }) => {
         if (!cancelled) setIsAuthenticated(Boolean(auth.admin));
@@ -251,7 +251,7 @@ export function AdminLayout() {
 
   const handleLogout = async () => {
     localStorage.removeItem('admin_auth');
-    await fetch('/api/auth', {
+    await fetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'logout' }),
