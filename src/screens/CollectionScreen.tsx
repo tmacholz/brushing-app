@@ -72,7 +72,9 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
 
   // Finished puzzles from puzzle mode
   const completedPuzzleIds = new Set(getPuzzleProgress(child).completedPuzzleIds);
-  const completedPuzzleCount = PUZZLES.filter(p => completedPuzzleIds.has(p.id)).length;
+  // Retired puzzles only show for kids who finished them.
+  const shownPuzzles = PUZZLES.filter(p => !p.retired || completedPuzzleIds.has(p.id));
+  const completedPuzzleCount = shownPuzzles.filter(p => completedPuzzleIds.has(p.id)).length;
 
   const handleTabChange = (tab: TabType) => {
     playSound('tap');
@@ -185,7 +187,7 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
                 : 'bg-gray-100 text-gray-600'
             }`}
           >
-            Puzzles ({completedPuzzleCount}/{PUZZLES.length})
+            Puzzles ({completedPuzzleCount}/{shownPuzzles.length})
           </button>
         </div>
       </div>
@@ -199,7 +201,7 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
           </div>
         ) : activeTab === 'puzzles' ? (
           <div className="grid grid-cols-2 gap-3">
-            {PUZZLES.map((p) => {
+            {shownPuzzles.map((p) => {
               const done = completedPuzzleIds.has(p.id);
               return (
                 <motion.button

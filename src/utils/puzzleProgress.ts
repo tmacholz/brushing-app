@@ -45,7 +45,7 @@ export function getPuzzleChoices(progress: PuzzleProgress, siblings: Sibling[] =
   };
   const rank = (p: Puzzle) => (mine.has(p.id) ? 2 : noteFor(p.id) ? 1 : 0);
   return PUZZLES
-    .filter((p) => p.id !== progress.currentPuzzleId)
+    .filter((p) => !p.retired && p.id !== progress.currentPuzzleId)
     .map((p, i) => ({ p, i, r: rank(p) }))
     .sort((a, b) => a.r - b.r || a.i - b.i)
     .slice(0, count)

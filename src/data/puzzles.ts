@@ -18,6 +18,7 @@ export interface Puzzle {
   scene: string;       // the shared world AND the single moment it captures
   layout: string[];    // scene-specific composition rules
   pieces: PuzzlePiece[]; // row-major, 9 entries
+  retired?: boolean;   // no longer offered; kept so kids mid-puzzle can finish it
 }
 
 export const PUZZLES: Puzzle[] = [
@@ -142,7 +143,9 @@ export const PUZZLES: Puzzle[] = [
     ],
   },
   {
+    // Retired: too close to Windy Cove. Still loads for anyone already on it.
     id: 'sunny-cove',
+    retired: true,
     title: 'Sunny Cove',
     image: '/puzzles/sunny-cove.jpg',
     thumb: '/puzzles/sunny-cove-thumb.jpg',
