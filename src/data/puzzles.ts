@@ -18,6 +18,7 @@ export interface Puzzle {
   scene: string;       // the shared world AND the single moment it captures
   layout: string[];    // scene-specific composition rules
   pieces: PuzzlePiece[]; // row-major, 9 entries
+  retired?: boolean;   // no longer offered; kept so kids mid-puzzle can finish it
 }
 
 export const PUZZLES: Puzzle[] = [
@@ -70,7 +71,81 @@ export const PUZZLES: Puzzle[] = [
     ],
   },
   {
+    id: 'space-party',
+    title: 'Space Party',
+    image: '/puzzles/space-party.jpg',
+    thumb: '/puzzles/space-party-thumb.jpg',
+    scene:
+      'outer space on the night of a big birthday party at a friendly space station, at the exact moment a rocket blasts off with the cake and everyone zooms in to celebrate. Stars, swirls and streamers everywhere.',
+    layout: [
+      'Deep blue-purple space with colourful planets and nebula swirls; no ground and no horizon.',
+      'A long glowing streamer of party lights loops through the whole picture from the top-left to the bottom-right, tying the friends together.',
+      'The center rocket blasts upward on a curly exhaust trail that drifts into the cells below it.',
+    ],
+    pieces: [
+      { name: 'Comet Pup', subject: 'a puppy in a space helmet riding a comet like a surfboard, ears flapping', emoji: '☄️' },
+      { name: 'Ringo the Planet', subject: 'a smiling ringed planet with a cat skating around its rings', emoji: '🪐' },
+      { name: 'Luna Bunny', subject: 'a bunny in a spacesuit bouncing high off a crescent moon', emoji: '🌙' },
+      { name: 'Zippy UFO', subject: 'a little green alien waving from a spinning flying saucer, its beam lifting party balloons', emoji: '🛸' },
+      { name: 'Party Rocket', subject: 'a red-and-white rocket blasting off with a giant birthday cake strapped on top', emoji: '🚀' },
+      { name: 'DJ Bolt', subject: 'a round robot DJ on a space station deck, headphones on, music notes flying', emoji: '🤖' },
+      { name: 'Astro Max', subject: 'an astronaut kid floating upside down holding a bunch of star-shaped balloons', emoji: '🧑‍🚀' },
+      { name: 'Hammy the Miner', subject: 'a hamster in a tiny helmet riding a cart across a bumpy asteroid full of sparkly gems', emoji: '🐹' },
+      { name: 'Twinkle the Star Whale', subject: 'a glowing space whale swimming through the stars, blowing a fountain of sparkles', emoji: '🐋' },
+    ],
+  },
+  {
+    id: 'dino-valley',
+    title: 'Dino Valley',
+    image: '/puzzles/dino-valley.jpg',
+    thumb: '/puzzles/dino-valley-thumb.jpg',
+    scene:
+      'a sunny prehistoric valley on splash day, at the exact moment a baby T-rex cannonballs into the lagoon and all the dinosaurs rush in to play. Spray, leaves and excitement everywhere.',
+    layout: [
+      'A river winds in an S-curve from a waterfall at the top-right down through the middle to a big lagoon at the bottom.',
+      'Tall palm-like ferns and a distant gentle smoking mountain in the upper part; no harsh lava.',
+      'Mix near and far: some dinosaurs big and close, others smaller up the valley.',
+    ],
+    pieces: [
+      { name: 'Pip the Pterodactyl', subject: 'a pterodactyl swooping down carrying a picnic basket in its feet', emoji: '🦅' },
+      { name: 'Longneck Lou', subject: 'a tall brachiosaurus stretching to munch leaves from a giant fern tree', emoji: '🦕' },
+      { name: 'Rumble Falls', subject: 'a waterfall tumbling off a cliff with a rainbow in its spray', emoji: '🌈' },
+      { name: 'Trixie Triceratops', subject: 'a triceratops pushing a wooden cart piled with fruit along the riverbank', emoji: '🍉' },
+      { name: 'Splash the T-rex', subject: 'a baby T-rex mid-cannonball into the river, arms tucked, huge splash', emoji: '🦖' },
+      { name: 'Steggy Slide', subject: 'a stegosaurus whooshing down a muddy riverbank slide on its belly', emoji: '🦎' },
+      { name: 'The Nest', subject: 'a nest of eggs hatching, three baby dinosaurs popping out and cheering', emoji: '🥚' },
+      { name: 'Dot the Drummer', subject: 'a little dinosaur floating on a log raft, drumming on the logs', emoji: '🥁' },
+      { name: 'Lagoon Turtle', subject: 'a giant prehistoric turtle in the lagoon giving tiny dinosaurs a ride on its shell', emoji: '🐢' },
+    ],
+  },
+  {
+    id: 'snow-day',
+    title: 'Snow Day',
+    image: '/puzzles/snow-day.jpg',
+    thumb: '/puzzles/snow-day-thumb.jpg',
+    scene:
+      'a snowy arctic hillside on the first snow day, at the exact moment a big snowball fight breaks out and everyone dives into the fun. Flying snow, scarves and cheeks pink with cold.',
+    layout: [
+      'A long sledding track zigzags down the hill from the top-left to the bottom-right, with an icy blue bay along the bottom.',
+      'Soft falling snowflakes everywhere and a pale aurora glowing in the sky.',
+      'Snowballs fly across cell edges between the friends.',
+    ],
+    pieces: [
+      { name: 'Aurora Owl', subject: 'a snowy owl gliding under a green and pink aurora', emoji: '🌌' },
+      { name: 'Igloo House', subject: 'a cozy igloo with a glowing round window and smoke curling from a tiny chimney', emoji: '🧊' },
+      { name: 'Flurry the Fox', subject: 'an arctic fox leaping to catch a flying snowball', emoji: '🦊' },
+      { name: 'Penguin Sled Team', subject: 'three penguins zooming down the hill on one sled, scarves streaming', emoji: '🐧' },
+      { name: 'Bjorn the Polar Bear', subject: 'a polar bear cub throwing a snowball with a big grin', emoji: '🐻‍❄️' },
+      { name: 'Frosty Friend', subject: 'a snowman with a carrot nose waving a stick arm as a snowball whizzes by', emoji: '⛄' },
+      { name: 'Wally the Walrus', subject: 'a walrus building a wobbly snow fort and ducking behind it', emoji: '🦭' },
+      { name: 'Splashy Seals', subject: 'two seals splashing and playing in the icy pool', emoji: '💦' },
+      { name: 'Nori the Narwhal', subject: 'a narwhal popping out of the icy bay with a snowball balanced on its horn', emoji: '🦄' },
+    ],
+  },
+  {
+    // Retired: too close to Windy Cove. Still loads for anyone already on it.
     id: 'sunny-cove',
+    retired: true,
     title: 'Sunny Cove',
     image: '/puzzles/sunny-cove.jpg',
     thumb: '/puzzles/sunny-cove-thumb.jpg',
@@ -109,6 +184,13 @@ export const BRUSH_STAGES = [
 export function getPuzzleById(id: string | null | undefined): Puzzle | undefined {
   return PUZZLES.find((p) => p.id === id);
 }
+
+// Background music while brushing in puzzle mode: an existing ElevenLabs
+// track reused from story mode: "The Mystery of the Stinky Sea Serpent", the
+// loudest and busiest of the six (about 117 BPM). It fades in over ~1.5s and
+// out over the last ~2s, so playback skips those edges (see useBackgroundMusic).
+export const PUZZLE_MUSIC_URL: string | null =
+  'https://lg4pns09v4lekjo7.public.blob.vercel-storage.com/story-music/1bf5d747-d50e-4578-a7a3-64a0fe0d76be.mp3';
 
 // ---------- Voice lines ----------
 // Pre-recorded once with Gemini TTS (scripts/generate-puzzle-voice.mjs) and

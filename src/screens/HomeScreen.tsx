@@ -46,7 +46,7 @@ const getPetEmoji = (petId: string): string => {
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
-  const { child, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter, clearReplayState } = useChild();
+  const { child, allChildren, hasMultipleChildren, setCurrentStoryArc, clearLastCompletedStoryInfo, updateChild, claimChestReward, replayChapter, clearReplayState } = useChild();
   const { playSound } = useAudio();
   const { getPetById } = usePets();
   const { getWorldById, getStoriesForWorld } = useContent();
@@ -56,6 +56,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
   // Replay chapter modal state
   const [replayChapterIndex, setReplayChapterIndex] = useState<number | null>(null);
+  const [switchingPuzzle, setSwitchingPuzzle] = useState(false);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
   const location = useLocation();
@@ -140,7 +141,10 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const puzzleProgress = getPuzzleProgress(child);
   const currentPuzzle = getPuzzleById(puzzleProgress.currentPuzzleId);
   const puzzleFinished = isPuzzleFinished(puzzleProgress);
-  const puzzleChoices = getPuzzleChoices(puzzleProgress);
+  const siblings = allChildren
+    .filter((c) => c.id !== child.id)
+    .map((c) => ({ name: c.name, progress: getPuzzleProgress(c) }));
+  const puzzleChoices = getPuzzleChoices(puzzleProgress, siblings);
 
   const handleModeChange = (mode: PlayMode) => {
     playSound('tap');
@@ -150,7 +154,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const handleChoosePuzzle = (puzzle: Puzzle) => {
     playSound('success');
     updateChild({ modeProgress: withPuzzleProgress(child, startPuzzle(puzzleProgress, puzzle.id)) });
+    setSwitchingPuzzle(false);
   };
+  const choosingPuzzle = !currentPuzzle || puzzleFinished || switchingPuzzle;
 
   const pet = getPetById(child.activePetId);
   const streakLevel = getStreakLevel(child.currentStreak);
@@ -239,7 +245,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           transition={{ delay: 0.15 }}
           className="flex flex-col gap-4"
         >
-          {currentPuzzle && (
+          {currentPuzzle && !switchingPuzzle && (
             <>
               <div className="text-center">
                 <p className="text-xl font-bold text-text">{currentPuzzle.title}</p>
@@ -248,6 +254,14 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                     ? 'You found everyone! 🎉'
                     : `${puzzleProgress.piecesFound} of ${PIECES_PER_PUZZLE} pieces found`}
                 </p>
+                {!puzzleFinished && (
+                  <button
+                    onClick={() => { playSound('tap'); setSwitchingPuzzle(true); }}
+                    className="mt-1 text-sm font-semibold text-primary underline underline-offset-2"
+                  >
+                    Switch puzzle
+                  </button>
+                )}
               </div>
               <PuzzleBoard
                 puzzle={currentPuzzle}
@@ -257,16 +271,31 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             </>
           )}
 
-          {(!currentPuzzle || puzzleFinished) && (
+          {choosingPuzzle && (
             <div>
               <p className="text-lg font-bold text-text mb-2">
-                {currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
+                {switchingPuzzle
+                  ? 'Pick a different puzzle'
+                  : currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
               </p>
+              {switchingPuzzle && puzzleProgress.piecesFound > 0 && (
+                <p className="text-sm text-text/60 mb-2">
+                  Your {puzzleProgress.piecesFound} {puzzleProgress.piecesFound === 1 ? 'piece stays' : 'pieces stay'} saved in {currentPuzzle?.title}.
+                </p>
+              )}
               <PuzzleChooser
                 choices={puzzleChoices}
                 completedIds={puzzleProgress.completedPuzzleIds}
                 onChoose={handleChoosePuzzle}
               />
+              {switchingPuzzle && (
+                <button
+                  onClick={() => { playSound('tap'); setSwitchingPuzzle(false); }}
+                  className="mt-3 w-full py-3 rounded-2xl bg-white/70 font-bold text-text"
+                >
+                  Keep {currentPuzzle?.title}
+                </button>
+              )}
             </div>
           )}
         </motion.div>
@@ -569,7 +598,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       <div className="flex-1" />
 
       {/* Start Brushing Button - hide when showing a completion prompt or puzzle chooser */}
-      {(isPuzzleMode ? currentPuzzle && !puzzleFinished : !completedStoryInfo) && (
+      {(isPuzzleMode ? currentPuzzle && !puzzleFinished && !switchingPuzzle : !completedStoryInfo) && (
         <>
           <motion.button
             initial={{ opacity: 0, y: 20 }}
