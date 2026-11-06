@@ -312,7 +312,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Track audio state for segment advancement
   const advanceTimerRef = useRef<number | null>(null);
   const fallbackTimerRef = useRef<number | null>(null);
+  const errorTimerRef = useRef<number | null>(null);
   const audioStartedForPhaseRef = useRef<string | null>(null);
+  // Phase whose narration errored. The TTS and splicing hooks keep their last
+  // error until their next play, so this records which phase it belongs to.
+  const audioErrorForPhaseRef = useRef<string | null>(null);
   const SEGMENT_BUFFER_MS = 2000; // 2 second buffer between segments after audio completes
   const DEFAULT_PHASE_DURATION_MS = 8000; // Default reading time for phases without duration
   const MIN_FALLBACK_MS = 5000; // Minimum fallback time to give user time to read
@@ -330,6 +334,17 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     }
     return DEFAULT_PHASE_DURATION_MS;
   }, [phase, currentSegment?.durationSeconds]);
+
+  // Remember which phase an audio error belongs to
+  const currentPhaseKeyRef = useRef(currentPhaseKey);
+  useEffect(() => {
+    currentPhaseKeyRef.current = currentPhaseKey;
+  }, [currentPhaseKey]);
+  useEffect(() => {
+    if (ttsError || splicedAudioError) {
+      audioErrorForPhaseRef.current = currentPhaseKeyRef.current;
+    }
+  }, [ttsError, splicedAudioError]);
 
   // Track when audio starts for the current phase
   useEffect(() => {
@@ -359,25 +374,33 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     const fallbackDuration = getFallbackDuration();
 
-    // If there's an audio error, mark audio as failed and give user time to read
-    const hasAudioError = ttsError || splicedAudioError;
-    if (hasAudioError && audioStartedForPhaseRef.current !== currentPhaseKey) {
-      console.log('[Progression] Audio error detected, showing captions and advancing after', fallbackDuration, 'ms:', hasAudioError);
+    // If this phase's narration failed (clip missing, TTS request failed),
+    // show captions and give the child the full reading time before moving on.
+    // This applies whether the failure happened before or after loading began;
+    // previously a failure after loading started advanced after only 2 seconds.
+    const hasAudioError = (ttsError || splicedAudioError) && audioErrorForPhaseRef.current === currentPhaseKey;
+    if (hasAudioError) {
+      console.log('[Progression] Audio error detected, showing captions and advancing after', fallbackDuration, 'ms:', ttsError || splicedAudioError);
 
       // Mark audio as failed to auto-show captions
       if (audioFailedForPhase !== currentPhaseKey) {
         setAudioFailedForPhase(currentPhaseKey);
       }
 
-      if (!advanceTimerRef.current) {
-        advanceTimerRef.current = window.setTimeout(() => {
+      if (!errorTimerRef.current) {
+        errorTimerRef.current = window.setTimeout(() => {
           console.log('[Progression] Advancing due to audio error from', currentPhaseKey);
-          advanceTimerRef.current = null;
+          errorTimerRef.current = null;
           audioStartedForPhaseRef.current = null;
           advanceToNext();
         }, fallbackDuration);
       }
-      return;
+      return () => {
+        if (errorTimerRef.current) {
+          clearTimeout(errorTimerRef.current);
+          errorTimerRef.current = null;
+        }
+      };
     }
 
     // Start fallback timer when entering a new phase (in case audio never starts)
@@ -424,6 +447,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
       return;
     }
 
+    // A failed narration is handled by the error effect above with a full reading delay
+    if ((ttsError || splicedAudioError) && audioErrorForPhaseRef.current === currentPhaseKey) {
+      return;
+    }
+
     // Audio has finished - but only advance if audio actually started for this phase
     if (audioStartedForPhaseRef.current !== currentPhaseKey) {
       // Audio hasn't started yet for this phase, wait (fallback timer will handle)
@@ -448,7 +476,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         advanceTimerRef.current = null;
       }
     };
-  }, [isRunning, narrationEnabled, isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, phase, currentPhaseKey, advanceToNext]);
+  }, [isRunning, narrationEnabled, isSpeaking, isSplicedAudioPlaying, isTTSLoading, isSplicedAudioLoading, phase, currentPhaseKey, advanceToNext, ttsError, splicedAudioError]);
 
   // Also advance if narration is disabled (no audio to wait for)
   useEffect(() => {

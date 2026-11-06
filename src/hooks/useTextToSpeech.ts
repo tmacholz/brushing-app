@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { generateSpeech, clearAudioCache, type TTSOptions } from '../services/elevenLabs';
+import { generateSpeech, clearAudioCache } from '../services/elevenLabs';
 
 interface UseTextToSpeechReturn {
   speak: (text: string) => Promise<void>;
@@ -13,7 +13,7 @@ interface UseTextToSpeechReturn {
   clearCache: () => void;
 }
 
-export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
+export function useTextToSpeech(): UseTextToSpeechReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -50,7 +50,7 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
     setIsPaused(false);
 
     try {
-      const audioUrl = await generateSpeech(text, options);
+      const audioUrl = await generateSpeech(text);
 
       // Check if we've been stopped while loading
       if (currentTextRef.current !== text) {
@@ -84,7 +84,7 @@ export function useTextToSpeech(options?: TTSOptions): UseTextToSpeechReturn {
       setIsSpeaking(false);
       currentTextRef.current = null;
     }
-  }, [options, isSpeaking]);
+  }, [isSpeaking]);
 
   const stop = useCallback(() => {
     if (audioRef.current) {
