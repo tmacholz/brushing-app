@@ -12,6 +12,7 @@ export interface Puzzle {
   id: string;
   title: string;
   image: string;       // path under /public
+  variants?: string[]; // alternate generations to compare in the prototype
   scene: string;       // shared setting that ties the cells together
   pieces: PuzzlePiece[]; // row-major, 9 entries
 }
@@ -21,6 +22,7 @@ export const PUZZLES: Puzzle[] = [
     id: 'sunny-cove',
     title: 'Sunny Cove',
     image: '/puzzles/sunny-cove.png',
+    variants: ['/puzzles/sunny-cove.png', '/puzzles/sunny-cove-2.png', '/puzzles/sunny-cove-3.png'],
     scene:
       'a sunny seaside cove seen as a cross-section: sky in the top row, the sea surface and shoreline in the middle row, and the underwater world in the bottom row. One continuous horizon and waterline run across the whole image.',
     pieces: [
