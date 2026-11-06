@@ -1,3 +1,4 @@
+import { apiFetch } from './api';
 // Custom child-friendly voice from ElevenLabs
 const DEFAULT_VOICE_ID = '0z8S749Xe6jLCD34QXl1';
 
@@ -40,7 +41,7 @@ export async function generateSpeech(
   }
 
   // Call our serverless function instead of ElevenLabs directly
-  const response = await fetch('/api/tts', {
+  const response = await apiFetch('/api/tts', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

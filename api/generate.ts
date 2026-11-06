@@ -1,8 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
+import { requireAuth } from '../lib/auth.js';
+import { isSafeKeyPart, isAllowedImageUrl } from '../lib/validation.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent';
+import { GEMINI_IMAGE_URL as GEMINI_API_URL } from '../lib/models.js';
 
 // ElevenLabs for name audio
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY;
@@ -18,8 +20,18 @@ pastel color palette with vibrant accents.
 
 IMPORTANT SAFETY REQUIREMENTS: This is for a children's app. All characters must be fully clothed and appropriate for young children. No nudity, no exposed skin beyond face/hands/arms. For any aquatic or fantasy characters (mermaids, etc.), ensure they wear child-appropriate clothing covering their torso (shirts, vests, scales that look like clothing, etc.). All content must be G-rated and family-friendly.`;
 
-// Helper to fetch and convert image to base64
+// Helper to fetch and convert image to base64.
+// Only images from our own blob store (or an explicitly allowed host) are
+// fetched, so a caller cannot point the server at internal or arbitrary URLs.
 async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string } | null> {
+  const dataUrl = typeof url === 'string' ? url.match(/^data:([^;]+);base64,(.+)$/) : null;
+  if (dataUrl) {
+    return { mimeType: dataUrl[1], data: dataUrl[2] };
+  }
+  if (!isAllowedImageUrl(url)) {
+    console.warn('[generate] Refusing to fetch image from disallowed URL:', String(url).slice(0, 120));
+    return null;
+  }
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
@@ -145,8 +157,8 @@ async function handleStoryImage(req: StoryImageRequest, res: VercelResponse) {
     storyboardLocationId, storyboardCharacterIds, storyboardObjectIds
   } = req;
 
-  if (!segmentId) {
-    return res.status(400).json({ error: 'Missing required field: segmentId' });
+  if (!isSafeKeyPart(segmentId)) {
+    return res.status(400).json({ error: 'Missing or invalid field: segmentId' });
   }
 
   // Determine if we have storyboard data to build from
@@ -388,6 +400,9 @@ async function handleUserAvatar(req: UserAvatarRequest, res: VercelResponse) {
   if (!photoDataUrl || !childId || !childName) {
     return res.status(400).json({ error: 'Missing required fields for user avatar' });
   }
+  if (!isSafeKeyPart(childId)) {
+    return res.status(400).json({ error: 'Invalid childId' });
+  }
 
   const base64Match = photoDataUrl.match(/^data:([^;]+);base64,(.+)$/);
   if (!base64Match) {
@@ -430,6 +445,9 @@ interface PetAvatarRequest {
 async function handlePetAvatar(req: PetAvatarRequest, res: VercelResponse) {
   const { petId, petName, petDescription, petPersonality } = req;
 
+  if (!isSafeKeyPart(petId)) {
+    return res.status(400).json({ error: 'Invalid petId' });
+  }
   if (!petId || !petName || !petDescription) {
     return res.status(400).json({ error: 'Missing required fields for pet avatar' });
   }
@@ -474,6 +492,9 @@ async function handleWorldImage(req: WorldImageRequest, res: VercelResponse) {
 
   if (!worldId || !worldName || !worldDescription) {
     return res.status(400).json({ error: 'Missing required fields: worldId, worldName, worldDescription' });
+  }
+  if (!isSafeKeyPart(worldId)) {
+    return res.status(400).json({ error: 'Invalid worldId' });
   }
 
   // Determine the central image based on the theme/name
@@ -671,6 +692,9 @@ async function handleSegmentAudio(req: SegmentAudioRequest, res: VercelResponse)
   if (!segmentId || !text || !storyId) {
     return res.status(400).json({ error: 'Missing required fields: segmentId, text, storyId' });
   }
+  if (!isSafeKeyPart(segmentId) || !isSafeKeyPart(storyId) || !Number.isInteger(chapterNumber) || !Number.isInteger(segmentOrder)) {
+    return res.status(400).json({ error: 'Invalid segmentId, storyId, chapterNumber, or segmentOrder' });
+  }
 
   if (!ELEVENLABS_API_KEY) {
     return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
@@ -731,6 +755,9 @@ async function handleChapterAudio(req: ChapterAudioRequest, res: VercelResponse)
 
   if (!chapterId || !text || !storyId || !fieldName) {
     return res.status(400).json({ error: 'Missing required fields: chapterId, text, storyId, fieldName' });
+  }
+  if (!isSafeKeyPart(chapterId) || !isSafeKeyPart(storyId) || !Number.isInteger(chapterNumber) || !['recap', 'cliffhanger', 'teaser'].includes(fieldName)) {
+    return res.status(400).json({ error: 'Invalid chapterId, storyId, chapterNumber, or fieldName' });
   }
 
   if (!ELEVENLABS_API_KEY) {
@@ -803,6 +830,9 @@ async function handleReferenceImage(req: ReferenceImageRequest, res: VercelRespo
 
   if (!referenceId || !referenceType || !name || !description) {
     return res.status(400).json({ error: 'Missing required fields: referenceId, referenceType, name, description' });
+  }
+  if (!isSafeKeyPart(referenceId)) {
+    return res.status(400).json({ error: 'Invalid referenceId' });
   }
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
@@ -923,6 +953,9 @@ async function handleCoverImage(req: CoverImageRequest, res: VercelResponse) {
   if (!storyId || !storyTitle) {
     return res.status(400).json({ error: 'Missing required fields: storyId, storyTitle' });
   }
+  if (!isSafeKeyPart(storyId)) {
+    return res.status(400).json({ error: 'Invalid storyId' });
+  }
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   const referenceDescriptions: string[] = [];
@@ -1019,6 +1052,9 @@ async function handleSpriteGeneration(req: SpriteGenerationRequest, res: VercelR
       error: 'Missing required fields: ownerType, ownerId, poseKey, sourceAvatarUrl, posePrompt',
     });
   }
+  if (!['child', 'pet'].includes(ownerType) || !isSafeKeyPart(ownerId) || !isSafeKeyPart(poseKey)) {
+    return res.status(400).json({ error: 'Invalid ownerType, ownerId, or poseKey' });
+  }
 
   // Fetch the source avatar image
   const avatarData = await fetchImageAsBase64(sourceAvatarUrl);
@@ -1078,6 +1114,9 @@ async function handleNameAudio(req: NameAudioRequest, res: VercelResponse) {
   if (!name || !nameType || !id) {
     console.log('Missing fields:', { name: !!name, nameType: !!nameType, id: !!id });
     return res.status(400).json({ error: 'Missing required fields: name, nameType, id' });
+  }
+  if (!['child', 'pet'].includes(nameType) || !isSafeKeyPart(id)) {
+    return res.status(400).json({ error: 'Invalid nameType or id' });
   }
 
   if (!ELEVENLABS_API_KEY) {
@@ -1195,6 +1234,9 @@ async function handleBackgroundMusic(req: BackgroundMusicRequest, res: VercelRes
   if (!id || !name) {
     return res.status(400).json({ error: 'Missing required fields: worldId/storyId, worldName/storyTitle' });
   }
+  if (!isSafeKeyPart(id)) {
+    return res.status(400).json({ error: 'Invalid worldId/storyId' });
+  }
 
   if (!ELEVENLABS_API_KEY) {
     return res.status(500).json({ error: 'ELEVENLABS_API_KEY not configured' });
@@ -1223,7 +1265,9 @@ Tempo: Medium-upbeat, driving but not frantic
 Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythmic percussion.`);
 
     console.log('Calling ElevenLabs Music API...');
-    const response = await fetch('https://api.elevenlabs.io/v1/music/generate', {
+    // POST /v1/music composes a track; length is given in milliseconds.
+    // https://elevenlabs.io/docs/api-reference/music/compose
+    const response = await fetch(`${ELEVENLABS_API_BASE}/music`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1231,7 +1275,7 @@ Instruments: Playful orchestral, bouncy strings, adventurous brass hints, rhythm
       },
       body: JSON.stringify({
         prompt: musicPrompt,
-        duration_seconds: 120, // 2 minutes
+        music_length_ms: 120_000, // 2 minutes
       }),
     });
 
@@ -1266,7 +1310,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { type } = req.body;
+  const { type } = req.body ?? {};
+
+  // The kid app (device scope) may generate story images, its own avatar, and
+  // name audio. Every other generator is an admin tool.
+  const DEVICE_TYPES = new Set(['image', 'userAvatar', 'user', 'nameAudio']);
+  if (!requireAuth(req, res, DEVICE_TYPES.has(type) ? 'device' : 'admin')) return;
 
   try {
     switch (type) {

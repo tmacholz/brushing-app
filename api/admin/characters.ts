@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../lib/db.js';
+import { requireAuth, forwardAuthHeaders } from '../../lib/auth.js';
+import { getApiBaseUrl } from '../../lib/requestUrl.js';
 
 interface PoseDefinitionRow {
   id: string;
@@ -39,6 +41,7 @@ interface CharacterSpriteRow {
  *   DELETE /api/admin/characters?entity=sprites&ownerType=x&ownerId=y[&poseKey=z]
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
   const { entity } = req.query;
 
@@ -251,10 +254,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             DO UPDATE SET generation_status = 'generating'
           `;
 
-          const generateUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}/api/generate`;
+          const generateUrl = `${getApiBaseUrl(req)}/api/generate`;
           const generateRes = await fetch(generateUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...forwardAuthHeaders(req) },
             body: JSON.stringify({
               type: 'sprite',
               ownerType,
@@ -323,7 +326,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const results = [];
-          const generateUrl = `${process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'}/api/generate`;
+          const generateUrl = `${getApiBaseUrl(req)}/api/generate`;
 
           for (const pose of poses) {
             await sql`
@@ -336,7 +339,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
               const generateRes = await fetch(generateUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', ...forwardAuthHeaders(req) },
                 body: JSON.stringify({
                   type: 'sprite',
                   ownerType,

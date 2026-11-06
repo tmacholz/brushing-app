@@ -81,15 +81,18 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
     setError('');
 
     try {
-      const res = await fetch('/api/admin', {
+      // Sets a signed, HttpOnly admin cookie that every admin API route checks.
+      const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'auth', password }),
+        body: JSON.stringify({ action: 'login', password, scope: 'admin' }),
       });
 
       if (res.ok) {
-        localStorage.setItem('admin_auth', 'true');
+        localStorage.removeItem('admin_auth');
         onLogin();
+      } else if (res.status === 503) {
+        setError('ADMIN_PASSWORD is not set on the server');
       } else {
         setError('Invalid password');
       }
@@ -211,15 +214,29 @@ function NavSectionComponent({ section, isExpanded, onToggle }: {
 
 export function AdminLayout() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['content', 'pets', 'characters', 'assets']));
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Ask the server whether this browser holds a valid admin cookie.
   useEffect(() => {
-    if (localStorage.getItem('admin_auth') === 'true') {
-      setIsAuthenticated(true);
-    }
+    let cancelled = false;
+    fetch('/api/auth')
+      .then((res) => (res.ok ? res.json() : { admin: false }))
+      .then((auth: { admin?: boolean }) => {
+        if (!cancelled) setIsAuthenticated(Boolean(auth.admin));
+      })
+      .catch(() => {
+        if (!cancelled) setIsAuthenticated(false);
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingAuth(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Auto-expand section based on current route
@@ -232,8 +249,13 @@ export function AdminLayout() {
     }
   }, [location.pathname]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('admin_auth');
+    await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    }).catch(() => undefined);
     setIsAuthenticated(false);
     navigate('/admin');
   };
@@ -249,6 +271,10 @@ export function AdminLayout() {
       return newSet;
     });
   };
+
+  if (checkingAuth) {
+    return <div className="min-h-screen bg-slate-900" />;
+  }
 
   if (!isAuthenticated) {
     return <LoginScreen onLogin={() => setIsAuthenticated(true)} />;

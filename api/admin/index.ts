@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { put } from '@vercel/blob';
 import { getDb } from '../../lib/db.js';
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'brushquest-admin';
+import { checkPassword, requireAuth, setAuthCookie } from '../../lib/auth.js';
 
 // Supported audio MIME types for upload
 const SUPPORTED_AUDIO_TYPES = [
@@ -114,16 +113,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { action, password } = req.body;
 
-  // Auth action
+  // Auth action: verify the password and issue signed admin + device cookies.
   if (action === 'auth' || !action) {
     if (!password) {
       return res.status(400).json({ error: 'Password required' });
     }
-    if (password === ADMIN_PASSWORD) {
+    if (!process.env.ADMIN_PASSWORD) {
+      return res.status(503).json({ error: 'ADMIN_PASSWORD is not configured on the server' });
+    }
+    if (checkPassword(password)) {
+      setAuthCookie(req, res, 'admin');
+      setAuthCookie(req, res, 'device');
       return res.status(200).json({ success: true });
     }
     return res.status(401).json({ error: 'Invalid password' });
   }
+
+  // Everything else (migrate, uploads, music library) is admin-only.
+  if (!requireAuth(req, res, 'admin')) return;
 
   // Migrate action
   if (action === 'migrate') {
@@ -200,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({ success: true, results });
     } catch (error) {
-      return res.status(500).json({ error: 'Migration failed', details: String(error) });
+      return res.status(500).json({ error: 'Migration failed' });
     }
   }
 

@@ -1,27 +1,39 @@
+// Streaks are tracked by local calendar day (YYYY-MM-DD in the device's
+// timezone), so an evening brush in the US does not count as "tomorrow".
+
 export const getDateString = (date: Date = new Date()): string => {
-  return date.toISOString().split('T')[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+// Accepts the plain YYYY-MM-DD form the app stores, and tolerates an ISO
+// timestamp from older records by keeping only the date part.
+const normalizeDate = (dateString: string | null): string | null => {
+  if (!dateString) return null;
+  return dateString.slice(0, 10);
 };
 
 export const isToday = (dateString: string | null): boolean => {
-  if (!dateString) return false;
-  return dateString === getDateString();
+  const d = normalizeDate(dateString);
+  return d !== null && d === getDateString();
 };
 
 export const isYesterday = (dateString: string | null): boolean => {
-  if (!dateString) return false;
+  const d = normalizeDate(dateString);
+  if (!d) return false;
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  return dateString === getDateString(yesterday);
+  return d === getDateString(yesterday);
 };
 
 export const calculateStreak = (
   lastBrushDate: string | null,
   currentStreak: number
 ): { newStreak: number; streakBroken: boolean } => {
-  const today = getDateString();
-
   // If already brushed today, streak stays the same
-  if (lastBrushDate === today) {
+  if (isToday(lastBrushDate)) {
     return { newStreak: currentStreak, streakBroken: false };
   }
 

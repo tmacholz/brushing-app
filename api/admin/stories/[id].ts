@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del } from '@vercel/blob';
 import { getDb } from '../../../lib/db.js';
 import { generateStoryBible, generateStoryboard, type StoryboardReference } from '../../../lib/ai.js';
+import { requireAuth } from '../../../lib/auth.js';
 
 interface ImageHistoryItem {
   url: string;
@@ -10,6 +11,7 @@ interface ImageHistoryItem {
 
 // Handles story CRUD, publish operations, and segment updates
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
   const { id, segment: segmentId } = req.query;
 
@@ -71,8 +73,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ chapter });
       } catch (error) {
         console.error('Error updating chapter:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to update chapter', details: message });
+        return res.status(500).json({ error: 'Failed to update chapter' });
       }
     }
 
@@ -187,8 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ segment });
       } catch (error) {
         console.error('Error updating segment:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to update segment', details: message });
+        return res.status(500).json({ error: 'Failed to update segment' });
       }
     }
 
@@ -205,6 +205,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!current) return res.status(404).json({ error: 'Segment not found' });
 
         const currentHistory: ImageHistoryItem[] = current.image_history || [];
+
+        // Only delete a blob this segment actually owns (current image or one in its history).
+        const ownsImage = current.image_url === imageUrl || currentHistory.some(item => item.url === imageUrl);
+        if (!ownsImage) {
+          return res.status(400).json({ error: 'imageUrl does not belong to this segment' });
+        }
 
         // Remove image from history
         const updatedHistory = currentHistory.filter(item => item.url !== imageUrl);
@@ -236,8 +242,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ segment });
       } catch (error) {
         console.error('Error deleting image:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to delete image', details: message });
+        return res.status(500).json({ error: 'Failed to delete image' });
       }
     }
 
@@ -288,8 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ reference });
       } catch (error) {
         console.error('Error updating reference:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to update reference', details: message });
+        return res.status(500).json({ error: 'Failed to update reference' });
       }
     }
 
@@ -357,8 +361,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ story: { ...story, chapters: chaptersWithSegments, references } });
     } catch (error) {
       console.error('[API] Error fetching story:', error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      return res.status(500).json({ error: 'Failed to fetch story', details: message });
+      return res.status(500).json({ error: 'Failed to fetch story' });
     }
   }
 
@@ -548,8 +551,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ storyBible });
       } catch (error) {
         console.error('Error generating Story Bible:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to generate Story Bible', details: message });
+        return res.status(500).json({ error: 'Failed to generate Story Bible' });
       }
     }
 
@@ -652,8 +654,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ references: savedRefs });
       } catch (error) {
         console.error('Error extracting references:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to extract references', details: message });
+        return res.status(500).json({ error: 'Failed to extract references' });
       }
     }
 
@@ -774,8 +775,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (error) {
         console.error('Error generating storyboard:', error);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        return res.status(500).json({ error: 'Failed to generate storyboard', details: message });
+        return res.status(500).json({ error: 'Failed to generate storyboard' });
       }
     }
 

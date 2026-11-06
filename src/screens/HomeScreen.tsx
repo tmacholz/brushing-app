@@ -517,7 +517,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </>
       )}
 
-      {/* DEV: Test Wheel Button */}
+      {/* DEV: Test Wheel Button (local dev builds only) */}
+      {import.meta.env.DEV && (
       <motion.button
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -527,6 +528,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       >
         🎰 Test Wheel (Dev)
       </motion.button>
+      )}
 
       {/* DEV: Test Wheel Modal */}
       {showTestWheel && (

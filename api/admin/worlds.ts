@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../../lib/db.js';
 import { generateWorld } from '../../lib/ai.js';
 import { generateWorldImageDirect } from '../../lib/imageGeneration.js';
+import { requireAuth } from '../../lib/auth.js';
 
 // Helper to generate world image (calls the shared function directly)
 async function generateWorldImage(worldId: string, worldName: string, worldDescription: string, theme?: string): Promise<string | null> {
@@ -13,9 +14,14 @@ async function generateWorldImage(worldId: string, worldName: string, worldDescr
   }
 }
 
+// World image generation can take a while; give the function time to finish
+// instead of dropping the work when the response is sent.
+export const maxDuration = 60;
+
 // GET /api/admin/worlds - List all worlds
 // POST /api/admin/worlds - Create world or generate with AI
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET' && !requireAuth(req, res, 'admin')) return;
   const sql = getDb();
 
   if (req.method === 'GET') {
@@ -49,12 +55,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           RETURNING *
         `;
 
-        // Auto-generate world image in the background
-        generateWorldImage(world.id, worldData.displayName, worldData.description, worldData.theme).then(async (imageUrl) => {
-          if (imageUrl) {
-            await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
-          }
-        });
+        // Generate the world image before responding: a serverless function is
+        // frozen once it returns, so fire-and-forget work was usually lost.
+        const imageUrl = await generateWorldImage(world.id, worldData.displayName, worldData.description, worldData.theme);
+        if (imageUrl) {
+          await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
+          world.background_image_url = imageUrl;
+        }
 
         return res.status(200).json({ world });
       } catch (error) {
@@ -75,12 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         RETURNING *
       `;
 
-      // Auto-generate world image in the background
-      generateWorldImage(world.id, displayName, description, theme || undefined).then(async (imageUrl) => {
-        if (imageUrl) {
-          await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
-        }
-      });
+      const imageUrl = await generateWorldImage(world.id, displayName, description, theme || undefined);
+      if (imageUrl) {
+        await sql`UPDATE worlds SET background_image_url = ${imageUrl} WHERE id = ${world.id}`;
+        world.background_image_url = imageUrl;
+      }
 
       return res.status(201).json({ world });
     } catch (error) {

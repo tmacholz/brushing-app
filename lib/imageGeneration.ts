@@ -1,7 +1,7 @@
 import { put } from '@vercel/blob';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent';
+import { GEMINI_IMAGE_URL as GEMINI_API_URL } from './models.js';
 
 // Consistent style prefix for all images
 const STYLE_PREFIX = `Children's book illustration style, soft watercolor and digital art hybrid,

@@ -16,6 +16,7 @@ import { StorySelectScreen } from './screens/StorySelectScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { CollectionScreen } from './screens/CollectionScreen';
 import { BottomNav } from './components/ui/BottomNav';
+import { UnlockGate } from './components/ui/UnlockGate';
 import type { ScreenName, Pet, StoryWorld } from './types';
 
 const getPetEmoji = (petId: string): string => {
@@ -703,6 +704,8 @@ function AppContent() {
 
 function App() {
   return (
+    <>
+    <UnlockGate />
     <AudioProvider>
       <ContentProvider>
         <PetsProvider>
@@ -712,6 +715,7 @@ function App() {
         </PetsProvider>
       </ContentProvider>
     </AudioProvider>
+    </>
   );
 }
 

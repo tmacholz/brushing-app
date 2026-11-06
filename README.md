@@ -1,3 +1,26 @@
+# BrushQuest
+
+Kids' toothbrushing app: a Vite + React frontend with Vercel serverless functions in `api/`.
+
+## Setup
+
+`npm install`, then create `.env.local` with:
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ADMIN_PASSWORD` | yes | Parent password. Unlocks the kid app on each device (long-lived cookie) and the `/admin` tools (12-hour cookie). The API refuses writes until it is set. |
+| `DATABASE_URL` | yes | Neon Postgres connection string |
+| `BLOB_READ_WRITE_TOKEN` | yes | Vercel Blob store for images and audio |
+| `GEMINI_API_KEY` | for generation | Story text and images |
+| `ELEVENLABS_API_KEY` | for generation | Narration and music |
+| `ALLOWED_IMAGE_HOSTS` | no | Comma-separated extra hosts the server may fetch reference images from (the Vercel Blob host is always allowed) |
+
+`npm run dev` serves the app and the `api/` functions on http://localhost:5173 without a Vercel login.
+
+Database changes live in `lib/migrations/` and are applied by hand (Neon SQL editor), in order. The latest is `012_child_progress_fields.sql`.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
