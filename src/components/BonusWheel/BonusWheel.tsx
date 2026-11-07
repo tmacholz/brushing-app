@@ -14,6 +14,7 @@ interface BonusWheelProps {
   worldId?: string;
   collectedStickers?: string[];
   collectedAccessories?: string[];
+  offerPuzzleKey?: boolean; // puzzle mode with locked puzzles left: add a rare key slot
   onRewardClaimed: (reward: ChestReward) => void;
   onComplete: () => void;
 }
@@ -24,9 +25,15 @@ interface WheelSegment {
   label: string;
   emoji: string;
   color: string;
-  rewardType: 'points' | 'sticker' | 'accessory';
+  rewardType: 'points' | 'sticker' | 'accessory' | 'puzzleKey';
   pointAmount?: number;
+  weight?: number; // chance relative to a normal slot (1)
 }
+
+// Rare: about 1 spin in 20 on an 8-slot wheel.
+const PUZZLE_KEY_SEGMENT: WheelSegment = {
+  id: 'puzzle-key', label: 'Key!', emoji: '🔑', color: '#f59e0b', rewardType: 'puzzleKey', weight: 0.4,
+};
 
 // Base segments that are always available (points)
 const POINT_SEGMENTS: WheelSegment[] = [
@@ -105,6 +112,7 @@ export function BonusWheel({
   worldId,
   collectedStickers = [],
   collectedAccessories = [],
+  offerPuzzleKey = false,
   onRewardClaimed,
   onComplete,
 }: BonusWheelProps) {
@@ -130,7 +138,11 @@ export function BonusWheel({
   });
 
   // Build wheel segments based on availability
-  const wheelSegments = useMemo(() => buildWheelSegments(availability), [availability]);
+  const wheelSegments = useMemo(() => {
+    const segs = buildWheelSegments(availability);
+    // Put the key opposite the first slot so it isn't next to the big prizes.
+    return offerPuzzleKey ? [...segs.slice(0, 4), PUZZLE_KEY_SEGMENT, ...segs.slice(4)] : segs;
+  }, [availability, offerPuzzleKey]);
   const segmentAngle = 360 / wheelSegments.length;
 
   // Load availability on mount and when collected items change
@@ -162,17 +174,26 @@ export function BonusWheel({
       }
 
       // 1. First, randomly select which segment to land on
-      const segmentIndex = Math.floor(Math.random() * wheelSegments.length);
+      //    (weighted, so rare slots like the puzzle key come up less often)
+      const totalWeight = wheelSegments.reduce((sum, s) => sum + (s.weight ?? 1), 0);
+      let pick = Math.random() * totalWeight;
+      let segmentIndex = wheelSegments.length - 1;
+      for (let i = 0; i < wheelSegments.length; i++) {
+        pick -= wheelSegments[i].weight ?? 1;
+        if (pick <= 0) { segmentIndex = i; break; }
+      }
       const landingSegment = wheelSegments[segmentIndex];
 
       // 2. Generate a reward matching the segment type
-      const reward = await generateSpecificReward(
-        landingSegment.rewardType,
-        landingSegment.pointAmount,
-        localCollectedStickers,
-        localCollectedAccessories,
-        worldId
-      );
+      const reward: ChestReward = landingSegment.rewardType === 'puzzleKey'
+        ? { type: 'puzzleKey' }
+        : await generateSpecificReward(
+          landingSegment.rewardType,
+          landingSegment.pointAmount,
+          localCollectedStickers,
+          localCollectedAccessories,
+          worldId
+        );
 
       // 3. Calculate spin: 4-6 full rotations + land on the selected segment
       // The wheel rotates clockwise, pointer is at top
@@ -251,7 +272,7 @@ export function BonusWheel({
   }, 0);
 
   const newItemsEarned = allRewards.filter(
-    r => r.type !== 'points' && r.isNew
+    r => (r.type === 'sticker' || r.type === 'accessory') && r.isNew
   ).length;
 
   // Render the wheel SVG with dynamic segments
@@ -436,7 +457,7 @@ export function BonusWheel({
             transition={{ type: 'spring', damping: 10 }}
             className="text-center"
           >
-            {currentReward.type === 'points' ? (
+            {currentReward.type === 'points' || currentReward.type === 'puzzleKey' ? (
               /* Points reward - show in colored card */
               <motion.div
                 initial={{ y: -50 }}

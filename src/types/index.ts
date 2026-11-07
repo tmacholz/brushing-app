@@ -52,6 +52,9 @@ export interface PuzzleProgress {
   nextPiece?: number | null;      // the mystery square the kid picked to find next
   completedPuzzleIds: string[];   // finished puzzles, oldest first (shown in Collection)
   paused?: Record<string, number[]>; // found pieces of puzzles set aside mid-way, by puzzle id
+  unlocked?: string[];            // puzzles bought with points or a key
+  keys?: number;                  // puzzle keys won on the bonus wheel, not yet used
+  friends?: string[];             // puzzle ids whose hidden friend this kid has found
 }
 
 // =====================================================
@@ -314,7 +317,8 @@ export interface Collectible {
 export type ChestReward =
   | { type: 'points'; amount: number }
   | { type: 'sticker'; collectible: Collectible; isNew: boolean }
-  | { type: 'accessory'; collectible: Collectible; isNew: boolean };
+  | { type: 'accessory'; collectible: Collectible; isNew: boolean }
+  | { type: 'puzzleKey' }; // puzzle mode: unlocks any locked puzzle for free
 
 // Equipped accessories per pet
 export type EquippedAccessories = Record<string, string[]>;

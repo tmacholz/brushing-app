@@ -15,10 +15,11 @@ import { MysteryChest } from '../components/MysteryChest';
 import { TaskCheckIn } from '../components/TaskCheckIn';
 import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
+import { FriendBadge } from '../components/Puzzle/FriendBadge';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
-import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
-import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece } from '../utils/puzzleProgress';
-import { calculateSessionPoints } from '../utils/pointsCalculator';
+import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, friendVoice, secretPieceFor, type VoiceLine } from '../data/puzzles';
+import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece, addPuzzleKey, hasLockedPuzzles } from '../utils/puzzleProgress';
+import { calculateSessionPoints, PUZZLE_COMPLETION_BONUS } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
@@ -29,7 +30,7 @@ const STAGE_SECONDS = TOTAL_SECONDS / BRUSH_STAGES.length;
 // ?fast speeds the timer up 10x so a whole session can be checked in 12 seconds.
 const TICK_MS = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('fast') ? 100 : 1000;
 
-type Phase = 'countdown' | 'brushing' | 'reveal' | 'checkin' | 'wheel' | 'chest';
+type Phase = 'countdown' | 'brushing' | 'reveal' | 'friend' | 'checkin' | 'wheel' | 'chest';
 
 interface PuzzleBrushingScreenProps {
   onComplete: (newPieceIndex: number | null) => void;
@@ -47,6 +48,9 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   const pieceIndex = getNextPiece(startProgress);
   const pieceNumber = Math.min(startProgress.found.length + 1, PIECES_PER_PUZZLE);
   const piece = puzzle?.pieces[pieceIndex];
+  // One piece per puzzle hides a collectible friend (a different piece for each kid).
+  const secretPiece = child && puzzle ? secretPieceFor(child.id, puzzle.id) : -1;
+  const [foundFriend, setFoundFriend] = useState(false);
 
   const [phase, setPhase] = useState<Phase>('countdown');
   const [countdown, setCountdown] = useState(3);
@@ -71,18 +75,29 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
 
     const isFirstBrushOfDay = !isToday(child.lastBrushDate);
     const { newStreak } = await updateStreak();
-    const { next, completed } = addPiece(startProgress);
-    const points = calculateSessionPoints(newStreak, completed, isFirstBrushOfDay, false);
-    await addPoints(points.total);
+    const { next, completed, foundFriend: gotFriend } = addPiece(startProgress, secretPiece);
+    const points = calculateSessionPoints(newStreak, false, isFirstBrushOfDay, false);
+    const total = points.total + (completed ? PUZZLE_COMPLETION_BONUS : 0);
+    await addPoints(total);
     await updateChild({ modeProgress: withPuzzleProgress(child, next) });
 
-    setPointsEarned(points.total);
+    setPointsEarned(total);
     setPuzzleDone(completed);
+    setFoundFriend(gotFriend);
     setPhase('reveal');
     playSound('unlock');
     say(foundVoice(puzzle, pieceIndex));
-    if (completed) setTimeout(() => say(finishedVoice(puzzle)), 2200);
-  }, [child, puzzle, pieceIndex, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
+    if (gotFriend) {
+      // The piece first, then the surprise: the hidden friend pops out.
+      setTimeout(() => {
+        setPhase((ph) => (ph === 'reveal' ? 'friend' : ph));
+        playSound('success');
+        say(friendVoice(puzzle));
+      }, 2600);
+    } else if (completed) {
+      setTimeout(() => say(finishedVoice(puzzle)), 2200);
+    }
+  }, [child, puzzle, pieceIndex, secretPiece, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
 
   const { elapsedSeconds, isRunning, start, pause, resume } = useBrushingTimer(handleTimerComplete, undefined, TICK_MS);
 
@@ -95,6 +110,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     if (puzzle) {
       BRUSH_STAGES.forEach((_, s) => preloadVoice(stageVoice(s)));
       preloadVoice(foundVoice(puzzle, pieceIndex));
+      if (pieceIndex === secretPiece) preloadVoice(friendVoice(puzzle));
     }
     playSound('countdown');
     const t = setInterval(() => {
@@ -134,6 +150,10 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   };
 
   const handleReward = async (reward: ChestReward) => {
+    if (reward.type === 'puzzleKey') {
+      if (child) await updateChild({ modeProgress: withPuzzleProgress(child, addPuzzleKey(getPuzzleProgress(child))) });
+      return;
+    }
     await claimChestReward(reward);
     if (reward.type === 'points') setPointsEarned((p) => p + reward.amount);
   };
@@ -175,6 +195,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         worldId={child.activeWorldId}
         collectedStickers={child.collectedStickers}
         collectedAccessories={child.collectedAccessories}
+        offerPuzzleKey={hasLockedPuzzles(getPuzzleProgress(child))}
         onRewardClaimed={handleReward}
         onComplete={finish}
       />
@@ -189,6 +210,51 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         onRewardClaimed={handleReward}
         onClose={finish}
       />
+    );
+  }
+
+  if (phase === 'friend') {
+    const next = () => {
+      if (puzzleDone) say(finishedVoice(puzzle));
+      setPhase(bonusEnabled ? 'checkin' : 'chest');
+    };
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-violet-200 via-pink-100 to-amber-50 flex flex-col items-center justify-center p-6 gap-5 overflow-hidden">
+        <motion.p initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="text-2xl font-black text-violet-600 text-center">
+          ✨ A hidden friend! ✨
+        </motion.p>
+        <motion.div
+          className="relative"
+          initial={{ scale: 0, rotate: -30 }}
+          animate={{ scale: [0, 1.25, 1], rotate: [-30, 10, 0] }}
+          transition={{ duration: 0.9, type: 'spring' }}
+        >
+          <motion.div
+            className="absolute -inset-8 rounded-full bg-gradient-to-r from-amber-200 via-pink-200 to-violet-200 blur-2xl"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 6, repeat: Infinity, ease: 'linear' }}
+          />
+          <FriendBadge puzzle={puzzle} className="relative w-56 h-56 ring-8 ring-white shadow-2xl text-8xl" />
+        </motion.div>
+        <motion.h1
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.5, type: 'spring' }}
+          className="text-3xl font-black text-accent text-center"
+        >
+          {puzzle.friend.name}
+        </motion.h1>
+        <p className="text-text/70 font-semibold text-center">
+          It was hiding behind {piece.name}!<br />Find all your friends in Collection.
+        </p>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={next}
+          className="bg-primary text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg"
+        >
+          Continue
+        </motion.button>
+      </div>
     );
   }
 
@@ -222,7 +288,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         </p>
         <motion.button
           whileTap={{ scale: 0.95 }}
-          onClick={() => setPhase(bonusEnabled ? 'checkin' : 'chest')}
+          onClick={() => setPhase(foundFriend ? 'friend' : bonusEnabled ? 'checkin' : 'chest')}
           className="bg-primary text-white font-bold py-4 px-12 rounded-full text-xl shadow-lg"
         >
           Continue

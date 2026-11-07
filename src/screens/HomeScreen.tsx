@@ -13,8 +13,9 @@ import { primeSpeechFallback } from '../hooks/usePuzzleVoice';
 import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
-import { getPuzzleById, PIECES_PER_PUZZLE, type Puzzle } from '../data/puzzles';
-import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece } from '../utils/puzzleProgress';
+import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
+import { getPuzzleById, PIECES_PER_PUZZLE, secretPieceFor, type Puzzle } from '../data/puzzles';
+import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
 interface HomeScreenProps {
@@ -57,6 +58,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   // Replay chapter modal state
   const [replayChapterIndex, setReplayChapterIndex] = useState<number | null>(null);
   const [switchingPuzzle, setSwitchingPuzzle] = useState(false);
+  const [unlockTarget, setUnlockTarget] = useState<Puzzle | null>(null);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
   const location = useLocation();
@@ -152,6 +154,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   };
 
   const handleChoosePuzzle = (puzzle: Puzzle) => {
+    if (!isPuzzleUnlocked(puzzleProgress, puzzle)) {
+      playSound('tap');
+      setUnlockTarget(puzzle);
+      return;
+    }
     setSwitchingPuzzle(false);
     if (puzzle.id === puzzleProgress.currentPuzzleId && !puzzleFinished) {
       playSound('tap');
@@ -162,6 +169,20 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
     setSwitchingPuzzle(false);
   };
   const choosingPuzzle = !currentPuzzle || puzzleFinished || switchingPuzzle;
+
+  // Buy a locked puzzle (points or a wheel key) and start it straight away.
+  const handleUnlockPuzzle = (useKey: boolean) => {
+    if (!unlockTarget) return;
+    const result = unlockPuzzle(puzzleProgress, unlockTarget.id, child.points, useKey);
+    if (!result) return;
+    playSound('success');
+    updateChild({
+      points: child.points - result.cost,
+      modeProgress: withPuzzleProgress(child, startPuzzle(result.next, unlockTarget.id)),
+    });
+    setUnlockTarget(null);
+    setSwitchingPuzzle(false);
+  };
 
   // Kids tap a mystery square to choose which piece the next brush finds.
   const handlePickPiece = (index: number) => {
@@ -279,11 +300,17 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 found={puzzleProgress.found}
                 nextPiece={puzzleFinished ? null : getNextPiece(puzzleProgress)}
                 onPick={puzzleFinished ? undefined : handlePickPiece}
+                friendAt={puzzleProgress.friends.includes(currentPuzzle.id) ? secretPieceFor(child.id, currentPuzzle.id) : null}
                 justAdded={newPieceIndex}
               />
               {!puzzleFinished && (
                 <p className="text-center text-sm text-text/60 -mt-1">
                   Tap a <span aria-hidden>❓</span> square to pick which piece to find next
+                </p>
+              )}
+              {!puzzleProgress.friends.includes(currentPuzzle.id) && (
+                <p className="text-center text-sm font-semibold text-violet-600 -mt-2">
+                  ✨ A hidden friend is behind one of these pieces!
                 </p>
               )}
             </>
@@ -296,6 +323,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                   ? 'All puzzles'
                   : currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
               </p>
+              {puzzleProgress.keys > 0 && (
+                <p className="text-sm font-semibold text-amber-600 mb-2">
+                  You have {puzzleProgress.keys} 🔑 {puzzleProgress.keys === 1 ? 'key' : 'keys'}! Tap a 🔒 puzzle to use it.
+                </p>
+              )}
               {switchingPuzzle && puzzleProgress.piecesFound > 0 && (
                 <p className="text-sm text-text/60 mb-2">
                   Your {puzzleProgress.piecesFound} {puzzleProgress.piecesFound === 1 ? 'piece stays' : 'pieces stay'} saved in {currentPuzzle?.title}.
@@ -657,6 +689,16 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
       )}
 
       {/* DEV: Test Wheel Modal */}
+      {unlockTarget && (
+        <UnlockPuzzleModal
+          puzzle={unlockTarget}
+          points={child.points}
+          keys={puzzleProgress.keys}
+          onUnlock={handleUnlockPuzzle}
+          onClose={() => setUnlockTarget(null)}
+        />
+      )}
+
       {showTestWheel && (
         <BonusWheel
           tokensAvailable={3}

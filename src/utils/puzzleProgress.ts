@@ -1,10 +1,12 @@
 import type { Child, PuzzleProgress } from '../types';
-import { PUZZLES, PIECES_PER_PUZZLE, type Puzzle } from '../data/puzzles';
+import { PUZZLES, PIECES_PER_PUZZLE, PUZZLE_UNLOCK_COST, type Puzzle } from '../data/puzzles';
 
 // Parsed progress always carries the found pieces and the paused map.
-export type Progress = PuzzleProgress & { found: number[]; nextPiece: number | null; paused: Record<string, number[]> };
+export type Progress = PuzzleProgress & {
+  found: number[]; nextPiece: number | null; paused: Record<string, number[]>; unlocked: string[]; keys: number; friends: string[];
+};
 
-const EMPTY: Progress = { currentPuzzleId: null, piecesFound: 0, found: [], nextPiece: null, completedPuzzleIds: [], paused: {} };
+const EMPTY: Progress = { currentPuzzleId: null, piecesFound: 0, found: [], nextPiece: null, completedPuzzleIds: [], paused: {}, unlocked: [], keys: 0, friends: [] };
 
 const isPieceIndex = (n: unknown): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < PIECES_PER_PUZZLE;
@@ -38,7 +40,41 @@ export function getPuzzleProgress(child: Pick<Child, 'modeProgress'> | null | un
       ? raw.completedPuzzleIds.filter((id): id is string => typeof id === 'string')
       : [],
     paused,
+    unlocked: Array.isArray(raw.unlocked) ? raw.unlocked.filter((id): id is string => typeof id === 'string') : [],
+    keys: Number.isInteger(raw.keys) && (raw.keys as number) > 0 ? (raw.keys as number) : 0,
+    friends: Array.isArray(raw.friends) ? raw.friends.filter((id): id is string => typeof id === 'string') : [],
   };
+}
+
+// A puzzle is open if it's a free starter, was bought, or the kid has
+// already played it (so nothing started before prices existed gets locked).
+export function isPuzzleUnlocked(progress: Progress, puzzle: Puzzle): boolean {
+  return Boolean(puzzle.free)
+    || progress.unlocked.includes(puzzle.id)
+    || progress.currentPuzzleId === puzzle.id
+    || Boolean(progress.paused[puzzle.id])
+    || progress.completedPuzzleIds.includes(puzzle.id);
+}
+
+export function hasLockedPuzzles(progress: Progress): boolean {
+  return PUZZLES.some((p) => !p.retired && !isPuzzleUnlocked(progress, p));
+}
+
+// Unlock with a key if asked (and one is held), otherwise with points.
+// Returns null when the kid can't afford it.
+export function unlockPuzzle(
+  progress: Progress, puzzleId: string, points: number, useKey: boolean,
+): { next: Progress; cost: number } | null {
+  if (progress.unlocked.includes(puzzleId)) return { next: progress, cost: 0 };
+  const unlocked = [...progress.unlocked, puzzleId];
+  if (useKey) {
+    return progress.keys > 0 ? { next: { ...progress, unlocked, keys: progress.keys - 1 }, cost: 0 } : null;
+  }
+  return points >= PUZZLE_UNLOCK_COST ? { next: { ...progress, unlocked }, cost: PUZZLE_UNLOCK_COST } : null;
+}
+
+export function addPuzzleKey(progress: Progress): Progress {
+  return { ...progress, keys: progress.keys + 1 };
 }
 
 export function withPuzzleProgress(child: Pick<Child, 'modeProgress'>, progress: PuzzleProgress): Record<string, unknown> {
@@ -74,14 +110,15 @@ export interface PuzzleChoice {
   piecesFound: number;   // this kid's pieces of it (9 when done before)
   current: boolean;      // the puzzle the kid is on now
   done: boolean;         // finished before
+  locked: boolean;       // needs points or a key
 }
 
 interface Sibling { name: string; progress: Progress }
 
 // Every puzzle, for the picker. Order: the one being played, ones set aside
-// mid-way, then puzzles nobody in the family has done (so siblings spread
-// out), ones a sibling finished, ones a sibling is on now, and finally this
-// kid's finished ones.
+// mid-way, then open puzzles nobody in the family has done (so siblings
+// spread out), ones a sibling finished, ones a sibling is on now, locked
+// ones, and finally this kid's finished ones.
 export function getPuzzleChoices(progress: Progress, siblings: Sibling[] = []): PuzzleChoice[] {
   const mine = new Set(progress.completedPuzzleIds);
   const siblingDoing = (id: string) =>
@@ -96,7 +133,8 @@ export function getPuzzleChoices(progress: Progress, siblings: Sibling[] = []): 
   const rank = (p: Puzzle) =>
     isCurrent(p.id) ? 0
       : progress.paused[p.id] ? 1
-        : mine.has(p.id) ? 5
+        : mine.has(p.id) ? 6
+          : !isPuzzleUnlocked(progress, p) ? 5
           : siblingDoing(p.id) ? 4
             : noteFor(p.id) ? 3
               : 2;
@@ -110,11 +148,15 @@ export function getPuzzleChoices(progress: Progress, siblings: Sibling[] = []): 
       piecesFound: isCurrent(p.id) || progress.paused[p.id] ? piecesFoundIn(progress, p.id) : mine.has(p.id) ? PIECES_PER_PUZZLE : 0,
       current: isCurrent(p.id),
       done: mine.has(p.id),
+      locked: !isPuzzleUnlocked(progress, p),
     }));
 }
 
-// Progress after one brush: the chosen piece is found; the 9th completes the puzzle.
-export function addPiece(progress: Progress): { next: Progress; pieceIndex: number; completed: boolean } {
+// Progress after one brush: the chosen piece is found; the 9th completes the
+// puzzle. If it's the piece hiding the puzzle's friend, the friend is collected.
+export function addPiece(
+  progress: Progress, secretPiece = -1,
+): { next: Progress; pieceIndex: number; completed: boolean; foundFriend: boolean } {
   const pieceIndex = getNextPiece(progress);
   const found = progress.found.includes(pieceIndex) ? progress.found : [...progress.found, pieceIndex];
   const completed = found.length >= PIECES_PER_PUZZLE;
@@ -122,10 +164,14 @@ export function addPiece(progress: Progress): { next: Progress; pieceIndex: numb
     completed && progress.currentPuzzleId && !progress.completedPuzzleIds.includes(progress.currentPuzzleId)
       ? [...progress.completedPuzzleIds, progress.currentPuzzleId]
       : progress.completedPuzzleIds;
+  const id = progress.currentPuzzleId;
+  const foundFriend = pieceIndex === secretPiece && id !== null && !progress.friends.includes(id);
+  const friends = foundFriend && id ? [...progress.friends, id] : progress.friends;
   return {
-    next: { ...progress, found, piecesFound: found.length, nextPiece: null, completedPuzzleIds },
+    next: { ...progress, found, piecesFound: found.length, nextPiece: null, completedPuzzleIds, friends },
     pieceIndex,
     completed,
+    foundFriend,
   };
 }
 

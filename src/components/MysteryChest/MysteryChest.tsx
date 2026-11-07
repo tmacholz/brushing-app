@@ -229,7 +229,7 @@ export function MysteryChest({
               />
 
               {/* Icon or image */}
-              {reward.type === 'points' ? (
+              {reward.type === 'points' || reward.type === 'puzzleKey' ? (
                 <motion.div
                   animate={{ rotate: [0, 360] }}
                   transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}

@@ -1,6 +1,8 @@
 const BASE_POINTS = 10;
 const STREAK_BONUS_MULTIPLIER = 2;
 const STORY_ARC_COMPLETION_BONUS = 25;
+// Finishing a puzzle (9 brushes) is a bigger milestone, and helps pay for the next one.
+export const PUZZLE_COMPLETION_BONUS = 50;
 const FIRST_BRUSH_BONUS = 5;
 const SECOND_BRUSH_BONUS = 5;
 

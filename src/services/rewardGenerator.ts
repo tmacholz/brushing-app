@@ -308,5 +308,12 @@ export function getRewardDisplayInfo(reward: ChestReward): {
         emoji: '✨',
         color: 'from-purple-400 to-indigo-600',
       };
+    case 'puzzleKey':
+      return {
+        title: 'Puzzle Key!',
+        subtitle: 'Unlock any puzzle for free',
+        emoji: '🔑',
+        color: 'from-amber-400 to-orange-500',
+      };
   }
 }

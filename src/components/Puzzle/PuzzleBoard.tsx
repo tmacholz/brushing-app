@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import type { Puzzle } from '../../data/puzzles';
 import { PIECES_PER_PUZZLE } from '../../data/puzzles';
 import { PieceArt } from './PuzzleArt';
+import { FriendBadge } from './FriendBadge';
 
 interface PuzzleBoardProps {
   puzzle: Puzzle;
@@ -9,12 +10,13 @@ interface PuzzleBoardProps {
   nextPiece?: number | null;  // the mystery square that glows as "next"
   onPick?: (index: number) => void; // tap a mystery square to make it next
   justAdded?: number | null;  // piece index that should animate in
+  friendAt?: number | null;   // piece where this kid found the hidden friend
   size?: string;              // CSS width of the board
 }
 
 // The 3x3 board. Found pieces show their art, the rest are mystery tiles,
 // the next one glows. When all nine are found the gaps close into one picture.
-export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded = null, size = 'min(86vw, 52vh, 440px)' }: PuzzleBoardProps) {
+export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded = null, friendAt = null, size = 'min(86vw, 52vh, 440px)' }: PuzzleBoardProps) {
   const complete = found.length >= PIECES_PER_PUZZLE;
   return (
     <motion.div
@@ -39,7 +41,10 @@ export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded
               >
                 <PieceArt puzzle={puzzle} index={i} />
               </motion.div>
-              <span className="sr-only">{p.name}</span>
+              {i === friendAt && (
+                <FriendBadge puzzle={puzzle} className="absolute bottom-1 right-1 w-[38%] h-[38%] ring-2 ring-white shadow-md text-xl" />
+              )}
+              <span className="sr-only">{p.name}{i === friendAt ? `, with ${puzzle.friend.name}` : ''}</span>
             </div>
           );
         }
