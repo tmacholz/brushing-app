@@ -206,6 +206,8 @@ const { getPetById } = usePets();
 
     // If this story is already in progress, just go to brushing
     if (child.currentStoryArc?.storyTemplateId === story.id) {
+      // Picking a story means playing story mode, even if puzzle mode was on.
+      if (child.mode !== 'story') updateChild({ mode: 'story' });
       onStartStory();
       return;
     }
@@ -223,8 +225,8 @@ const { getPetById } = usePets();
   const startStory = (story: StoryTemplate) => {
     playSound('success');
 
-    // Update active world
-    updateChild({ activeWorldId: worldId });
+    // Update active world, and switch to story mode in case puzzle mode was on
+    updateChild({ activeWorldId: worldId, mode: 'story' });
 
     // Create new story arc from the story template
     const newStoryArc = personalizeStory(

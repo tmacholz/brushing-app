@@ -14,7 +14,7 @@ import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { getPuzzleById, PIECES_PER_PUZZLE, type Puzzle } from '../data/puzzles';
-import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress } from '../utils/puzzleProgress';
+import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
 interface HomeScreenProps {
@@ -152,11 +152,22 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   };
 
   const handleChoosePuzzle = (puzzle: Puzzle) => {
+    setSwitchingPuzzle(false);
+    if (puzzle.id === puzzleProgress.currentPuzzleId && !puzzleFinished) {
+      playSound('tap');
+      return;
+    }
     playSound('success');
     updateChild({ modeProgress: withPuzzleProgress(child, startPuzzle(puzzleProgress, puzzle.id)) });
     setSwitchingPuzzle(false);
   };
   const choosingPuzzle = !currentPuzzle || puzzleFinished || switchingPuzzle;
+
+  // Kids tap a mystery square to choose which piece the next brush finds.
+  const handlePickPiece = (index: number) => {
+    playSound('tap');
+    updateChild({ modeProgress: withPuzzleProgress(child, choosePiece(puzzleProgress, index)) });
+  };
 
   const pet = getPetById(child.activePetId);
   const streakLevel = getStreakLevel(child.currentStreak);
@@ -265,9 +276,16 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
               </div>
               <PuzzleBoard
                 puzzle={currentPuzzle}
-                piecesFound={puzzleProgress.piecesFound}
+                found={puzzleProgress.found}
+                nextPiece={puzzleFinished ? null : getNextPiece(puzzleProgress)}
+                onPick={puzzleFinished ? undefined : handlePickPiece}
                 justAdded={newPieceIndex}
               />
+              {!puzzleFinished && (
+                <p className="text-center text-sm text-text/60 -mt-1">
+                  Tap a <span aria-hidden>❓</span> square to pick which piece to find next
+                </p>
+              )}
             </>
           )}
 
@@ -275,7 +293,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             <div>
               <p className="text-lg font-bold text-text mb-2">
                 {switchingPuzzle
-                  ? 'Pick a different puzzle'
+                  ? 'All puzzles'
                   : currentPuzzle ? 'Pick your next puzzle!' : 'Pick a puzzle to start!'}
               </p>
               {switchingPuzzle && puzzleProgress.piecesFound > 0 && (
@@ -285,7 +303,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
               )}
               <PuzzleChooser
                 choices={puzzleChoices}
-                completedIds={puzzleProgress.completedPuzzleIds}
                 onChoose={handleChoosePuzzle}
               />
               {switchingPuzzle && (

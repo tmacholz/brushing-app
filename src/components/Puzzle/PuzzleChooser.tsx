@@ -1,46 +1,70 @@
 import { motion } from 'framer-motion';
-import type { Puzzle } from '../../data/puzzles';
+import { PIECES_PER_PUZZLE, type Puzzle } from '../../data/puzzles';
 import type { PuzzleChoice } from '../../utils/puzzleProgress';
 
 interface PuzzleChooserProps {
   choices: PuzzleChoice[];
-  completedIds: string[];
   onChoose: (puzzle: Puzzle) => void;
 }
 
-// Kids pick their next puzzle. Previews are blurred so the picture is still a
-// surprise; the emojis hint at who's hiding inside.
-export function PuzzleChooser({ choices, completedIds, onChoose }: PuzzleChooserProps) {
+// Every puzzle, each with a progress bar. Unfinished previews are blurred so
+// the picture stays a surprise; finished ones show the whole picture.
+export function PuzzleChooser({ choices, onChoose }: PuzzleChooserProps) {
   return (
     <div className="grid gap-3">
-      {choices.map(({ puzzle: p, note, piecesFound }, i) => (
-        <motion.button
-          key={p.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 + i * 0.08 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={() => onChoose(p)}
-          className="flex items-center gap-3 bg-white rounded-2xl p-3 shadow-sm text-left"
-        >
-          <div
-            className="w-16 h-16 rounded-xl bg-cover bg-center shrink-0 grid place-items-center text-white font-black text-xl"
-            style={{ backgroundImage: `url(${p.thumb})` }}
+      {choices.map(({ puzzle: p, note, piecesFound, current, done }, i) => {
+        const pct = Math.round((piecesFound / PIECES_PER_PUZZLE) * 100);
+        const status = current
+          ? 'Playing now'
+          : piecesFound > 0 && piecesFound < PIECES_PER_PUZZLE
+            ? 'Keep going'
+            : done ? 'Done! Play again?' : null;
+        return (
+          <motion.button
+            key={p.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 + i * 0.05 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => onChoose(p)}
+            className={`flex items-center gap-3 bg-white rounded-2xl p-3 shadow-sm text-left ${current ? 'ring-2 ring-primary' : ''}`}
           >
-            ?
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-text">
-              {p.title}
-              {piecesFound > 0 ? (
-                <span className="ml-2 text-xs font-medium text-amber-600">{piecesFound} of 9 found</span>
-              ) : completedIds.includes(p.id) && <span className="ml-2 text-xs font-medium text-success">Done before</span>}
-            </p>
-            {note && <p className="text-xs font-medium text-secondary">{note}</p>}
-            <p className="text-lg tracking-wide">{p.pieces.slice(0, 4).map((x) => x.emoji).join(' ')} …</p>
-          </div>
-        </motion.button>
-      ))}
+            <div
+              className="w-16 h-16 rounded-xl bg-cover bg-center shrink-0 grid place-items-center text-white font-black text-xl"
+              style={{ backgroundImage: `url(${done ? p.image : p.thumb})` }}
+            >
+              {done ? '' : '?'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-text flex items-baseline gap-2">
+                <span className="truncate">{p.title}</span>
+                {status && (
+                  <span className={`text-xs font-medium shrink-0 ${done && !current && piecesFound >= PIECES_PER_PUZZLE ? 'text-success' : 'text-amber-600'}`}>
+                    {status}
+                  </span>
+                )}
+              </p>
+              {note && <p className="text-xs font-medium text-secondary">{note}</p>}
+              <div className="mt-1.5 flex items-center gap-2">
+                <div
+                  className="flex-1 h-2.5 rounded-full bg-slate-200 overflow-hidden"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={PIECES_PER_PUZZLE}
+                  aria-valuenow={piecesFound}
+                  aria-label={`${piecesFound} of ${PIECES_PER_PUZZLE} pieces found`}
+                >
+                  <div
+                    className={`h-full rounded-full ${piecesFound >= PIECES_PER_PUZZLE ? 'bg-success' : 'bg-amber-400'}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-xs font-bold text-text/60 tabular-nums">{piecesFound}/{PIECES_PER_PUZZLE}</span>
+              </div>
+            </div>
+          </motion.button>
+        );
+      })}
     </div>
   );
 }
