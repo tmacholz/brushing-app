@@ -17,8 +17,8 @@ import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
 import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
-import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece } from '../utils/puzzleProgress';
-import { calculateSessionPoints } from '../utils/pointsCalculator';
+import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece, addPuzzleKey, hasLockedPuzzles } from '../utils/puzzleProgress';
+import { calculateSessionPoints, PUZZLE_COMPLETION_BONUS } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { DEFAULT_TASKS } from '../types';
@@ -72,11 +72,12 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     const isFirstBrushOfDay = !isToday(child.lastBrushDate);
     const { newStreak } = await updateStreak();
     const { next, completed } = addPiece(startProgress);
-    const points = calculateSessionPoints(newStreak, completed, isFirstBrushOfDay, false);
-    await addPoints(points.total);
+    const points = calculateSessionPoints(newStreak, false, isFirstBrushOfDay, false);
+    const total = points.total + (completed ? PUZZLE_COMPLETION_BONUS : 0);
+    await addPoints(total);
     await updateChild({ modeProgress: withPuzzleProgress(child, next) });
 
-    setPointsEarned(points.total);
+    setPointsEarned(total);
     setPuzzleDone(completed);
     setPhase('reveal');
     playSound('unlock');
@@ -134,6 +135,10 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   };
 
   const handleReward = async (reward: ChestReward) => {
+    if (reward.type === 'puzzleKey') {
+      if (child) await updateChild({ modeProgress: withPuzzleProgress(child, addPuzzleKey(getPuzzleProgress(child))) });
+      return;
+    }
     await claimChestReward(reward);
     if (reward.type === 'points') setPointsEarned((p) => p + reward.amount);
   };
@@ -175,6 +180,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         worldId={child.activeWorldId}
         collectedStickers={child.collectedStickers}
         collectedAccessories={child.collectedAccessories}
+        offerPuzzleKey={hasLockedPuzzles(getPuzzleProgress(child))}
         onRewardClaimed={handleReward}
         onComplete={finish}
       />
