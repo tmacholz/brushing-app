@@ -102,7 +102,7 @@ export const PUZZLES: Puzzle[] = [
       'A long glowing streamer of party lights loops through the whole picture from the top-left to the bottom-right, tying the friends together.',
       'The center rocket blasts upward on a curly exhaust trail that drifts into the cells below it.',
     ],
-    friend: { name: 'Zoop the Star Puff', emoji: '✨', image: '/puzzles/friends/space-party.webp', subject: 'a tiny round fluffy star creature with wiggly antennae, sparkly freckles and a party hat' },
+    friend: { name: 'Zoop the Space Puff', emoji: '✨', image: '/puzzles/friends/space-party.webp', subject: 'a tiny round fluffy yellow space puff with bobbly glowing antennae and a party hat' },
     pieces: [
       { name: 'Comet Pup', subject: 'a puppy in a space helmet riding a comet like a surfboard, ears flapping', emoji: '☄️' },
       { name: 'Ringo the Planet', subject: 'a smiling ringed planet with a cat skating around its rings', emoji: '🪐' },
