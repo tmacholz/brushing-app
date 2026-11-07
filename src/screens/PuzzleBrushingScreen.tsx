@@ -17,7 +17,7 @@ import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
 import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, type VoiceLine } from '../data/puzzles';
-import { getPuzzleProgress, withPuzzleProgress, addPiece } from '../utils/puzzleProgress';
+import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece } from '../utils/puzzleProgress';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
 import type { ChestReward, TaskCheckInResult } from '../types';
@@ -44,7 +44,8 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   // Freeze the puzzle and progress at the start of the session.
   const [startProgress] = useState(() => getPuzzleProgress(child));
   const puzzle = getPuzzleById(startProgress.currentPuzzleId);
-  const pieceIndex = Math.min(startProgress.piecesFound, PIECES_PER_PUZZLE - 1);
+  const pieceIndex = getNextPiece(startProgress);
+  const pieceNumber = Math.min(startProgress.found.length + 1, PIECES_PER_PUZZLE);
   const piece = puzzle?.pieces[pieceIndex];
 
   const [phase, setPhase] = useState<Phase>('countdown');
@@ -215,7 +216,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
           {piece.emoji} {piece.name}!
         </motion.h1>
         <p className="text-text/70 font-semibold text-center">
-          {puzzleDone ? `That's all ${PIECES_PER_PUZZLE} pieces of ${puzzle.title}! 🎉` : `Piece ${pieceIndex + 1} of ${PIECES_PER_PUZZLE}`}
+          {puzzleDone ? `That's all ${PIECES_PER_PUZZLE} pieces of ${puzzle.title}! 🎉` : `Piece ${pieceNumber} of ${PIECES_PER_PUZZLE}`}
           <br />
           You earned {pointsEarned} points!
         </p>
@@ -294,7 +295,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
       </div>
 
       <p className="text-text/60 font-semibold text-center">
-        Scrub away the bubbles to find piece {pieceIndex + 1} of {PIECES_PER_PUZZLE} in {puzzle.title}!
+        Scrub away the bubbles to find piece {pieceNumber} of {PIECES_PER_PUZZLE} in {puzzle.title}!
       </p>
 
       <AnimatePresence>

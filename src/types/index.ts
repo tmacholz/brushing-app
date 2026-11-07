@@ -47,9 +47,11 @@ export type PlayMode = 'story' | 'puzzle';
 // Puzzle mode progress, stored at child.modeProgress.puzzle.
 export interface PuzzleProgress {
   currentPuzzleId: string | null; // null = kid still needs to pick one
-  piecesFound: number;            // pieces found in the current puzzle
+  piecesFound: number;            // how many pieces of the current puzzle are found
+  found?: number[];               // which pieces (0-8, row-major) are found; older saves only have piecesFound
+  nextPiece?: number | null;      // the mystery square the kid picked to find next
   completedPuzzleIds: string[];   // finished puzzles, oldest first (shown in Collection)
-  paused?: Record<string, number>; // pieces found in puzzles set aside mid-way, by puzzle id
+  paused?: Record<string, number[]>; // found pieces of puzzles set aside mid-way, by puzzle id
 }
 
 // =====================================================
