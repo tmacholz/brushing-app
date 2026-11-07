@@ -3,10 +3,10 @@ import { PUZZLES, PIECES_PER_PUZZLE, PUZZLE_UNLOCK_COST, type Puzzle } from '../
 
 // Parsed progress always carries the found pieces and the paused map.
 export type Progress = PuzzleProgress & {
-  found: number[]; nextPiece: number | null; paused: Record<string, number[]>; unlocked: string[]; keys: number;
+  found: number[]; nextPiece: number | null; paused: Record<string, number[]>; unlocked: string[]; keys: number; friends: string[];
 };
 
-const EMPTY: Progress = { currentPuzzleId: null, piecesFound: 0, found: [], nextPiece: null, completedPuzzleIds: [], paused: {}, unlocked: [], keys: 0 };
+const EMPTY: Progress = { currentPuzzleId: null, piecesFound: 0, found: [], nextPiece: null, completedPuzzleIds: [], paused: {}, unlocked: [], keys: 0, friends: [] };
 
 const isPieceIndex = (n: unknown): n is number =>
   typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < PIECES_PER_PUZZLE;
@@ -42,6 +42,7 @@ export function getPuzzleProgress(child: Pick<Child, 'modeProgress'> | null | un
     paused,
     unlocked: Array.isArray(raw.unlocked) ? raw.unlocked.filter((id): id is string => typeof id === 'string') : [],
     keys: Number.isInteger(raw.keys) && (raw.keys as number) > 0 ? (raw.keys as number) : 0,
+    friends: Array.isArray(raw.friends) ? raw.friends.filter((id): id is string => typeof id === 'string') : [],
   };
 }
 
@@ -151,8 +152,11 @@ export function getPuzzleChoices(progress: Progress, siblings: Sibling[] = []): 
     }));
 }
 
-// Progress after one brush: the chosen piece is found; the 9th completes the puzzle.
-export function addPiece(progress: Progress): { next: Progress; pieceIndex: number; completed: boolean } {
+// Progress after one brush: the chosen piece is found; the 9th completes the
+// puzzle. If it's the piece hiding the puzzle's friend, the friend is collected.
+export function addPiece(
+  progress: Progress, secretPiece = -1,
+): { next: Progress; pieceIndex: number; completed: boolean; foundFriend: boolean } {
   const pieceIndex = getNextPiece(progress);
   const found = progress.found.includes(pieceIndex) ? progress.found : [...progress.found, pieceIndex];
   const completed = found.length >= PIECES_PER_PUZZLE;
@@ -160,10 +164,14 @@ export function addPiece(progress: Progress): { next: Progress; pieceIndex: numb
     completed && progress.currentPuzzleId && !progress.completedPuzzleIds.includes(progress.currentPuzzleId)
       ? [...progress.completedPuzzleIds, progress.currentPuzzleId]
       : progress.completedPuzzleIds;
+  const id = progress.currentPuzzleId;
+  const foundFriend = pieceIndex === secretPiece && id !== null && !progress.friends.includes(id);
+  const friends = foundFriend && id ? [...progress.friends, id] : progress.friends;
   return {
-    next: { ...progress, found, piecesFound: found.length, nextPiece: null, completedPuzzleIds },
+    next: { ...progress, found, piecesFound: found.length, nextPiece: null, completedPuzzleIds, friends },
     pieceIndex,
     completed,
+    foundFriend,
   };
 }
 

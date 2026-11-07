@@ -54,6 +54,7 @@ export interface PuzzleProgress {
   paused?: Record<string, number[]>; // found pieces of puzzles set aside mid-way, by puzzle id
   unlocked?: string[];            // puzzles bought with points or a key
   keys?: number;                  // puzzle keys won on the bonus wheel, not yet used
+  friends?: string[];             // puzzle ids whose hidden friend this kid has found
 }
 
 // =====================================================

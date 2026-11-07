@@ -14,7 +14,7 @@ import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
-import { getPuzzleById, PIECES_PER_PUZZLE, type Puzzle } from '../data/puzzles';
+import { getPuzzleById, PIECES_PER_PUZZLE, secretPieceFor, type Puzzle } from '../data/puzzles';
 import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
@@ -300,11 +300,17 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 found={puzzleProgress.found}
                 nextPiece={puzzleFinished ? null : getNextPiece(puzzleProgress)}
                 onPick={puzzleFinished ? undefined : handlePickPiece}
+                friendAt={puzzleProgress.friends.includes(currentPuzzle.id) ? secretPieceFor(child.id, currentPuzzle.id) : null}
                 justAdded={newPieceIndex}
               />
               {!puzzleFinished && (
                 <p className="text-center text-sm text-text/60 -mt-1">
                   Tap a <span aria-hidden>❓</span> square to pick which piece to find next
+                </p>
+              )}
+              {!puzzleProgress.friends.includes(currentPuzzle.id) && (
+                <p className="text-center text-sm font-semibold text-violet-600 -mt-2">
+                  ✨ A hidden friend is behind one of these pieces!
                 </p>
               )}
             </>

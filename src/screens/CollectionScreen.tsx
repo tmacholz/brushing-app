@@ -7,12 +7,14 @@ import { useAudio } from '../context/AudioContext';
 import type { Collectible } from '../types';
 import { PUZZLES, type Puzzle } from '../data/puzzles';
 import { getPuzzleProgress } from '../utils/puzzleProgress';
+import { FriendBadge } from '../components/Puzzle/FriendBadge';
 
 interface CollectionScreenProps {
   onBack: () => void;
 }
 
-type TabType = 'stickers' | 'accessories' | 'puzzles';
+// Accessories are hidden for now; puzzle mode's hidden friends take their tab.
+type TabType = 'stickers' | 'friends' | 'puzzles';
 
 export function CollectionScreen({ onBack }: CollectionScreenProps) {
   const { child } = useChild();
@@ -49,7 +51,6 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
 
   // Filter collectibles by type
   const stickers = allCollectibles.filter(c => c.type === 'sticker');
-  const accessories = allCollectibles.filter(c => c.type === 'accessory');
 
   // Group stickers by world
   const stickersByWorld = stickers.reduce((acc, sticker) => {
@@ -68,12 +69,15 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
 
   // Count collected items
   const collectedStickerCount = stickers.filter(s => collectedStickers.has(s.id)).length;
-  const collectedAccessoryCount = accessories.filter(a => collectedAccessories.has(a.id)).length;
 
   // Finished puzzles from puzzle mode
   const completedPuzzleIds = new Set(getPuzzleProgress(child).completedPuzzleIds);
   // Retired puzzles only show for kids who finished them.
   const shownPuzzles = PUZZLES.filter(p => !p.retired || completedPuzzleIds.has(p.id));
+  // Hidden friends from puzzle mode (retired puzzles only if already found)
+  const foundFriends = new Set(getPuzzleProgress(child).friends);
+  const friendPuzzles = PUZZLES.filter(p => !p.retired || foundFriends.has(p.id));
+  const foundFriendCount = friendPuzzles.filter(p => foundFriends.has(p.id)).length;
   const completedPuzzleCount = shownPuzzles.filter(p => completedPuzzleIds.has(p.id)).length;
 
   const handleTabChange = (tab: TabType) => {
@@ -170,14 +174,14 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
             Stickers ({collectedStickerCount}/{stickers.length})
           </button>
           <button
-            onClick={() => handleTabChange('accessories')}
+            onClick={() => handleTabChange('friends')}
             className={`flex-1 py-2 px-4 rounded-full font-medium transition-all ${
-              activeTab === 'accessories'
+              activeTab === 'friends'
                 ? 'bg-purple-500 text-white'
                 : 'bg-gray-100 text-gray-600'
             }`}
           >
-            Accessories ({collectedAccessoryCount}/{accessories.length})
+            Friends ({foundFriendCount}/{friendPuzzles.length})
           </button>
           <button
             onClick={() => handleTabChange('puzzles')}
@@ -248,19 +252,24 @@ export function CollectionScreen({ onBack }: CollectionScreenProps) {
             </div>
           )
         ) : (
-          accessories.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-6xl mb-4">✨</p>
-              <p className="text-gray-600">No accessories available yet!</p>
-              <p className="text-gray-400 text-sm mt-2">
-                Rare accessories will appear here when earned
-              </p>
-            </div>
-          ) : (
+          <div>
+            <p className="text-sm text-gray-500 mb-3 text-center">
+              Every puzzle hides a friend behind one of its pieces. Find them all!
+            </p>
             <div className="grid grid-cols-3 gap-3">
-              {accessories.map(renderCollectibleCard)}
+              {friendPuzzles.map((p) => {
+                const found = foundFriends.has(p.id);
+                return (
+                  <div key={p.id} className="bg-white rounded-2xl p-2 shadow-sm flex flex-col items-center text-center">
+                    <FriendBadge puzzle={p} hidden={!found} className="w-full aspect-square text-4xl" />
+                    <p className={`mt-1.5 text-xs font-semibold leading-tight ${found ? 'text-gray-800' : 'text-gray-400'}`}>
+                      {found ? p.friend.name : `Hiding in ${p.title}`}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-          )
+          </div>
         )}
       </div>
 

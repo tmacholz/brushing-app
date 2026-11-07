@@ -10,6 +10,15 @@ export interface PuzzlePiece {
   emoji: string;       // shown in name chips and as fallback art
 }
 
+// A collectible creature hidden behind one piece of each puzzle. Which piece
+// differs per kid (see secretPieceFor), so siblings can't just tell each other.
+export interface HiddenFriend {
+  name: string;
+  emoji: string;       // fallback if the image is missing
+  image: string;       // path under /public
+  subject: string;     // prompt text for scripts/generate-friend.mjs
+}
+
 export interface Puzzle {
   id: string;
   title: string;
@@ -20,6 +29,7 @@ export interface Puzzle {
   pieces: PuzzlePiece[]; // row-major, 9 entries
   retired?: boolean;   // no longer offered; kept so kids mid-puzzle can finish it
   free?: boolean;      // starter puzzle; the rest are unlocked with points or a wheel key
+  friend: HiddenFriend;
 }
 
 // Price of a locked puzzle. A kid earns roughly this much over the nine
@@ -41,6 +51,7 @@ export const PUZZLES: Puzzle[] = [
       'Mix near and far: some subjects are big and close to the viewer, others smaller and further back up the hill.',
       'A zipline, a rope bridge, the path and the stream connect neighbouring cells.',
     ],
+    friend: { name: 'Glimmer the Forest Sprite', emoji: '🧚', image: '/puzzles/friends/treetop-village.webp', subject: 'a tiny glowing forest sprite with leaf wings, an acorn cap hat and a lantern' },
     pieces: [
       { name: 'Hoot the Owl', subject: 'an owl mail carrier swooping down with a bag of party invitations flying out behind it', emoji: '🦉' },
       { name: 'The Treehouse', subject: 'a round treehouse with glowing lanterns and bunting, a door flung open', emoji: '🏡' },
@@ -66,6 +77,7 @@ export const PUZZLES: Puzzle[] = [
       'The center whale breaches right through the sea surface: half in the air, half underwater, with a huge arcing splash.',
       'The kite string runs from the kite down to the puffin in the sailboat. The lighthouse beam sweeps toward the whale. The sun\'s rays slant diagonally across the sky.',
     ],
+    friend: { name: 'Pearl the Baby Sea Dragon', emoji: '🐉', image: '/puzzles/friends/windy-cove.webp', subject: 'a baby sea dragon, turquoise with frilly fins, hugging a shiny pearl' },
     pieces: [
       { name: 'Kiki the Kite', subject: 'a red kite swooping in a loop, its string trailing down toward the sailboat below', emoji: '🪁' },
       { name: 'Pip the Balloon', subject: 'a rainbow hot air balloon tipping in the wind, a little bear in the basket waving and holding on to its hat', emoji: '🎈' },
@@ -90,6 +102,7 @@ export const PUZZLES: Puzzle[] = [
       'A long glowing streamer of party lights loops through the whole picture from the top-left to the bottom-right, tying the friends together.',
       'The center rocket blasts upward on a curly exhaust trail that drifts into the cells below it.',
     ],
+    friend: { name: 'Zoop the Star Puff', emoji: '✨', image: '/puzzles/friends/space-party.webp', subject: 'a tiny round fluffy star creature with wiggly antennae, sparkly freckles and a party hat' },
     pieces: [
       { name: 'Comet Pup', subject: 'a puppy in a space helmet riding a comet like a surfboard, ears flapping', emoji: '☄️' },
       { name: 'Ringo the Planet', subject: 'a smiling ringed planet with a cat skating around its rings', emoji: '🪐' },
@@ -114,6 +127,7 @@ export const PUZZLES: Puzzle[] = [
       'Tall palm-like ferns and a distant gentle smoking mountain in the upper part; no harsh lava.',
       'Mix near and far: some dinosaurs big and close, others smaller up the valley.',
     ],
+    friend: { name: 'Pebble the Hatchling', emoji: '🥚', image: '/puzzles/friends/dino-valley.webp', subject: 'a baby dinosaur peeking out of a cracked speckled egg, waving one little arm' },
     pieces: [
       { name: 'Pip the Pterodactyl', subject: 'a pterodactyl swooping down carrying a picnic basket in its feet', emoji: '🦅' },
       { name: 'Longneck Lou', subject: 'a tall brachiosaurus stretching to munch leaves from a giant fern tree', emoji: '🦕' },
@@ -138,6 +152,7 @@ export const PUZZLES: Puzzle[] = [
       'Soft falling snowflakes everywhere and a pale aurora glowing in the sky.',
       'Snowballs fly across cell edges between the friends.',
     ],
+    friend: { name: 'Fluff the Baby Yeti', emoji: '❄️', image: '/puzzles/friends/snow-day.webp', subject: 'a baby yeti with fluffy white fur, a striped scarf and rosy cheeks, holding a snowball' },
     pieces: [
       { name: 'Aurora Owl', subject: 'a snowy owl gliding under a green and pink aurora', emoji: '🌌' },
       { name: 'Igloo House', subject: 'a cozy igloo with a glowing round window and smoke curling from a tiny chimney', emoji: '🧊' },
@@ -162,6 +177,7 @@ export const PUZZLES: Puzzle[] = [
       'A long rainbow ribbon trails behind the dragon and swoops through the whole picture from the top-left to the bottom-right.',
       'Clouds overlap cell edges so neighbours share the same cloud banks.',
     ],
+    friend: { name: 'Nimbus the Cloud Kitten', emoji: '☁️', image: '/puzzles/friends/cloud-castle.webp', subject: 'a kitten made of a fluffy cloud, with a little rainbow tail and sparkly eyes' },
     pieces: [
       { name: 'Puff the Dragon', subject: 'a small round green dragon swooping through a rainbow, ribbon streaming from its tail', emoji: '🐉' },
       { name: 'Sky Castle', subject: 'a pink and white castle with pointy towers sitting on a big cloud, flags flapping', emoji: '🏰' },
@@ -186,6 +202,7 @@ export const PUZZLES: Puzzle[] = [
       'One curling vine racetrack winds through every cell, from the top-left down to the bottom-right finish line of pebbles.',
       'Dewdrops, petals and pollen float across cell edges.',
     ],
+    friend: { name: 'Goldie the Golden Beetle', emoji: '🪲', image: '/puzzles/friends/bug-garden.webp', subject: 'a shiny golden beetle wearing a tiny crown, sitting on a leaf' },
     pieces: [
       { name: 'Bumble Ben', subject: 'a fuzzy bumblebee waving a checkered flag to start the race', emoji: '🐝' },
       { name: 'Sunny Sunflower', subject: 'a giant sunflower with a happy face leaning in to watch', emoji: '🌻' },
@@ -210,6 +227,7 @@ export const PUZZLES: Puzzle[] = [
       'A winding dirt path runs from the barn at the top-center down through the whole picture to the bottom-right, with the parade moving along it.',
       'Strings of colourful bunting flags cross between neighbouring cells.',
     ],
+    friend: { name: 'Buttercup the Chick', emoji: '🐣', image: '/puzzles/friends/farm-fair.webp', subject: 'a tiny golden-yellow chick wearing a flower bonnet, peeping happily' },
     pieces: [
       { name: 'Rooster Ray', subject: 'a rooster on a fence post crowing loudly, feathers puffed', emoji: '🐓' },
       { name: 'Big Red Barn', subject: 'a big red barn with its doors flung open and hay flying out', emoji: '🛖' },
@@ -234,6 +252,7 @@ export const PUZZLES: Puzzle[] = [
       'A toy train track loops and climbs through the whole picture from the top-left down to the bottom-right, crossing between shelves.',
       'Strings, ribbons and yo-yo strings cross cell edges to tie neighbours together.',
     ],
+    friend: { name: 'Tick the Wind-up Penguin', emoji: '🐧', image: '/puzzles/friends/toy-shop.webp', subject: 'a wind-up tin toy penguin with a brass key on its back, mid-waddle' },
     pieces: [
       { name: 'Captain Teddy', subject: 'a teddy bear swinging from the curtain on a yo-yo string', emoji: '🧸' },
       { name: 'Moon Window', subject: 'a big round moon smiling through the shop window, a cat silhouette on the sill', emoji: '🌙' },
@@ -260,6 +279,7 @@ export const PUZZLES: Puzzle[] = [
       'There is exactly ONE waterline: a single straight horizontal sea surface across the full width at about 55% of the image height. The middle-row subjects sit on it.',
       'Everything below the waterline, including the whole bottom row, is underwater.',
     ],
+    friend: { name: 'Coral the Rainbow Crab', emoji: '🦀', image: '/puzzles/friends/sunny-cove.webp', subject: 'a hermit crab with a sparkly rainbow shell, waving a claw' },
     pieces: [
       { name: 'Kiki the Kite', subject: 'a red diamond kite with a long bow-tie tail, flying high', emoji: '🪁' },
       { name: 'Pip the Balloon', subject: 'a rainbow hot air balloon with a happy face drifting through fluffy clouds', emoji: '🎈' },
@@ -284,6 +304,21 @@ export const BRUSH_STAGES = [
   { label: 'bottom left' },
   { label: 'bottom right' },
 ];
+
+// Which piece hides the friend, per kid and puzzle. Stable, but different for
+// each child, so it stays a surprise.
+export function secretPieceFor(childId: string, puzzleId: string): number {
+  let h = 2166136261;
+  for (const c of `${childId}:${puzzleId}`) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return (h >>> 0) % PIECES_PER_PUZZLE;
+}
+
+export function buildFriendPrompt(p: Puzzle): string {
+  return `A single cute collectible creature for a children's app: ${p.friend.subject}. It is the secret friend hidden in a "${p.title}" picture (${p.scene.split(',')[0]}).
+
+Full body, centered, filling most of the frame, facing the viewer with a big friendly smile. Bright, warm children's picture-book style with soft rounded shapes, gentle gradients and expressive eyes, suitable for ages 3-8.
+Plain flat soft cream background with nothing else in it. No text, letters, border or frame.`;
+}
 
 export function getPuzzleById(id: string | null | undefined): Puzzle | undefined {
   return PUZZLES.find((p) => p.id === id);
@@ -320,12 +355,19 @@ export const finishedVoice = (puzzle: Puzzle): VoiceLine => ({
   text: `You finished ${puzzle.title}! Amazing brushing!`,
 });
 
+export const friendVoice = (puzzle: Puzzle): VoiceLine => ({
+  key: `${puzzle.id}-friend`,
+  text: `Wow, a hidden friend! It's ${puzzle.friend.name}!`,
+});
+
 export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.mp3`;
 
 export function allVoiceLines(): VoiceLine[] {
   return [
     ...BRUSH_STAGES.map((_, i) => stageVoice(i)),
     ...PUZZLES.flatMap((p) => [...p.pieces.map((_, i) => foundVoice(p, i)), finishedVoice(p)]),
+    // Newer lines last, so the daily TTS quota records the core lines first.
+    ...PUZZLES.map((p) => friendVoice(p)),
   ];
 }
 
