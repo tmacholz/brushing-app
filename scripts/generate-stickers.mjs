@@ -111,8 +111,10 @@ const sqlStr = (v) => (v == null ? 'NULL' : `'${String(v).replace(/'/g, "''")}'`
 function printSql() {
   const rows = STICKERS.map((s) => {
     const world = s.world ? `(SELECT id::text FROM worlds WHERE name = ${sqlStr(s.world)})` : 'NULL';
-    const desc = s.world ? 'A special sticker from this world' : 'A special reward sticker!';
-    return `  ('sticker', ${sqlStr(`sticker-${s.id}`)}, ${sqlStr(s.name)}, ${sqlStr(desc)}, ${sqlStr(`/stickers/${s.id}.png`)}, ${sqlStr(s.rarity)}, ${world}, true)`;
+    const desc = s.world
+      ? `'A special sticker from ' || (SELECT display_name FROM worlds WHERE name = ${sqlStr(s.world)})`
+      : sqlStr('A special reward sticker!');
+    return `  ('sticker', ${sqlStr(`sticker-${s.id}`)}, ${sqlStr(s.name)}, ${desc}, ${sqlStr(`/stickers/${s.id}.png`)}, ${sqlStr(s.rarity)}, ${world}, true)`;
   });
   console.log(`INSERT INTO collectibles (type, name, display_name, description, image_url, rarity, world_id, is_published)
 VALUES
