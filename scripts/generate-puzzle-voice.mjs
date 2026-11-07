@@ -4,10 +4,11 @@
 //   node scripts/generate-puzzle-voice.mjs          # only missing clips
 //   node scripts/generate-puzzle-voice.mjs --force  # re-record everything
 //
-// Writes public/puzzles/voice/<key>.wav. Reads GEMINI_API_KEY from the
+// Writes public/puzzles/voice/<key>.mp3 (needs ffmpeg). Reads GEMINI_API_KEY from the
 // environment or .env.local. Runs one request every 7 seconds to stay under
 // the 10-per-minute TTS limit; ~34 clips use about a third of the daily quota.
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
@@ -42,7 +43,7 @@ const key = loadKey();
 const outDir = resolve(root, 'public/puzzles/voice');
 mkdirSync(outDir, { recursive: true });
 
-const todo = allVoiceLines().filter((l) => force || !existsSync(resolve(outDir, `${l.key}.wav`)));
+const todo = allVoiceLines().filter((l) => force || !existsSync(resolve(outDir, `${l.key}.mp3`)));
 console.log(`${todo.length} clips to record with ${model} / ${voice}`);
 
 for (const [i, line] of todo.entries()) {
@@ -67,6 +68,12 @@ for (const [i, line] of todo.entries()) {
       const mime = part.inlineData.mimeType ?? '';
       const rate = Number(/rate=(\d+)/.exec(mime)?.[1] ?? 24000);
       writeFileSync(resolve(outDir, `${line.key}.wav`), mime.includes('wav') ? raw : pcmToWav(raw, rate));
+      // The app plays small mp3s (about 17 KB each). The 0.8 volume leaves headroom, since Gemini's clips peak at full scale.
+      const wav = resolve(outDir, `${line.key}.wav`);
+      const mp3 = resolve(outDir, `${line.key}.mp3`);
+      const ff = spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', wav, '-af', 'volume=0.8', '-ac', '1', '-c:a', 'libmp3lame', '-b:a', '48k', mp3]);
+      if (ff.status === 0) unlinkSync(wav);
+      else console.warn(`  ffmpeg failed or is missing; left ${line.key}.wav (convert it to .mp3 for the app)`);
       console.log(`✓ ${line.key}: ${line.text}`);
       break;
     }

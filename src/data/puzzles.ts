@@ -216,7 +216,7 @@ export const finishedVoice = (puzzle: Puzzle): VoiceLine => ({
   text: `You finished ${puzzle.title}! Amazing brushing!`,
 });
 
-export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.wav`;
+export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.mp3`;
 
 export function allVoiceLines(): VoiceLine[] {
   return [
