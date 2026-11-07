@@ -19,11 +19,18 @@ export interface Puzzle {
   layout: string[];    // scene-specific composition rules
   pieces: PuzzlePiece[]; // row-major, 9 entries
   retired?: boolean;   // no longer offered; kept so kids mid-puzzle can finish it
+  free?: boolean;      // starter puzzle; the rest are unlocked with points or a wheel key
 }
+
+// Price of a locked puzzle. A kid earns roughly this much over the nine
+// brushes it takes to finish a puzzle (per-brush points, chest and the
+// puzzle-complete bonus), so finishing one pays for the next.
+export const PUZZLE_UNLOCK_COST = 250;
 
 export const PUZZLES: Puzzle[] = [
   {
     id: 'treetop-village',
+    free: true,
     title: 'Treetop Village',
     image: '/puzzles/treetop-village.jpg',
     thumb: '/puzzles/treetop-village-thumb.jpg',
@@ -48,6 +55,7 @@ export const PUZZLES: Puzzle[] = [
   },
   {
     id: 'windy-cove',
+    free: true,
     title: 'Windy Cove',
     image: '/puzzles/windy-cove.jpg',
     thumb: '/puzzles/windy-cove-thumb.jpg',
@@ -140,6 +148,102 @@ export const PUZZLES: Puzzle[] = [
       { name: 'Wally the Walrus', subject: 'a walrus building a wobbly snow fort and ducking behind it', emoji: '🦭' },
       { name: 'Splashy Seals', subject: 'two seals splashing and playing in the icy pool', emoji: '💦' },
       { name: 'Nori the Narwhal', subject: 'a narwhal popping out of the icy bay with a snowball balanced on its horn', emoji: '🦄' },
+    ],
+  },
+  {
+    id: 'cloud-castle',
+    title: 'Cloud Castle',
+    image: '/puzzles/cloud-castle.jpg',
+    thumb: '/puzzles/cloud-castle-thumb.jpg',
+    scene:
+      'a kingdom of fluffy clouds high in the sky at sunrise, at the exact moment a friendly dragon swoops through a rainbow and everyone flies along behind it in a grand sky parade.',
+    layout: [
+      'Pastel sunrise sky with big puffy clouds at different heights; no ground anywhere.',
+      'A long rainbow ribbon trails behind the dragon and swoops through the whole picture from the top-left to the bottom-right.',
+      'Clouds overlap cell edges so neighbours share the same cloud banks.',
+    ],
+    pieces: [
+      { name: 'Puff the Dragon', subject: 'a small round green dragon swooping through a rainbow, ribbon streaming from its tail', emoji: '🐉' },
+      { name: 'Sky Castle', subject: 'a pink and white castle with pointy towers sitting on a big cloud, flags flapping', emoji: '🏰' },
+      { name: 'Captain Goose', subject: 'a goose in a captain hat steering a little flying ship with propellers', emoji: '🪿' },
+      { name: 'Bounce Bear', subject: 'a teddy bear bouncing on a springy cloud like a trampoline, arms up', emoji: '🧸' },
+      { name: 'Wishing Star', subject: 'a big smiling star tossing sparkles down onto the parade', emoji: '⭐' },
+      { name: 'Balloon Bunny', subject: 'a bunny floating up holding a bunch of colourful balloons', emoji: '🎈' },
+      { name: 'Paper Plane Pip', subject: 'a mouse in goggles zooming on a folded paper plane', emoji: '✈️' },
+      { name: 'Wind Whistler', subject: 'a cheeky cloud with puffed cheeks blowing a gust that sends leaves and feathers spinning', emoji: '🌬️' },
+      { name: 'Hoot the Pilot', subject: 'an owl in a scarf flying a tiny hot air balloon basket', emoji: '🦉' },
+    ],
+  },
+  {
+    id: 'bug-garden',
+    title: 'Bug Garden',
+    image: '/puzzles/bug-garden.jpg',
+    thumb: '/puzzles/bug-garden-thumb.jpg',
+    scene:
+      'a sunny vegetable garden seen up close at bug size, with giant leaves, flowers and dewdrops, at the exact moment the bugs hold a big race along a winding vine.',
+    layout: [
+      'Giant green leaves, flower heads and plant stems fill the frame; sky peeks through only at the top.',
+      'One curling vine racetrack winds through every cell, from the top-left down to the bottom-right finish line of pebbles.',
+      'Dewdrops, petals and pollen float across cell edges.',
+    ],
+    pieces: [
+      { name: 'Bumble Ben', subject: 'a fuzzy bumblebee waving a checkered flag to start the race', emoji: '🐝' },
+      { name: 'Sunny Sunflower', subject: 'a giant sunflower with a happy face leaning in to watch', emoji: '🌻' },
+      { name: 'Flutter', subject: 'a butterfly with bright wings swooping low over the vine', emoji: '🦋' },
+      { name: 'Speedy Snail', subject: 'a snail with a racing stripe on its shell zooming along on a skateboard', emoji: '🐌' },
+      { name: 'Lady Dot', subject: 'a ladybug riding a dandelion seed like a glider', emoji: '🐞' },
+      { name: 'Hopper', subject: 'a grasshopper leaping high over a dewdrop, legs stretched', emoji: '🦗' },
+      { name: 'Ant Crew', subject: 'three ants pushing a giant strawberry like a cart along the vine', emoji: '🐜' },
+      { name: 'Wiggles the Worm', subject: 'a pink worm popping out of a carrot top, cheering', emoji: '🪱' },
+      { name: 'Glow Gus', subject: 'a firefly with a glowing tail holding up a little trophy at the finish line', emoji: '🏆' },
+    ],
+  },
+  {
+    id: 'farm-fair',
+    title: 'Farm Fair',
+    image: '/puzzles/farm-fair.jpg',
+    thumb: '/puzzles/farm-fair-thumb.jpg',
+    scene:
+      'a sunny country farm on fair day with rolling green hills, a red barn and bunting, at the exact moment the animals burst out of the barn for the big fair parade.',
+    layout: [
+      'Rolling green hills with a blue sky and a few clouds in the top third only.',
+      'A winding dirt path runs from the barn at the top-center down through the whole picture to the bottom-right, with the parade moving along it.',
+      'Strings of colourful bunting flags cross between neighbouring cells.',
+    ],
+    pieces: [
+      { name: 'Rooster Ray', subject: 'a rooster on a fence post crowing loudly, feathers puffed', emoji: '🐓' },
+      { name: 'Big Red Barn', subject: 'a big red barn with its doors flung open and hay flying out', emoji: '🛖' },
+      { name: 'Windy Mill', subject: 'a windmill with sails spinning fast, a bird riding one sail', emoji: '🌾' },
+      { name: 'Pig Pal', subject: 'a pig sliding happily down a muddy hill on its belly', emoji: '🐷' },
+      { name: 'Tractor Ted', subject: 'a little red tractor pulling a wagon full of pumpkins, a puppy driving', emoji: '🚜' },
+      { name: 'Goat Jump', subject: 'a goat leaping over a hay bale mid-jump', emoji: '🐐' },
+      { name: 'Duck Band', subject: 'three ducklings marching in a line playing tiny drums and trumpets', emoji: '🦆' },
+      { name: 'Moo Moo', subject: 'a cow in a flower crown waving a ribbon prize', emoji: '🐄' },
+      { name: 'Lamb Loop', subject: 'a fluffy lamb rolling down the hill like a ball, giggling', emoji: '🐑' },
+    ],
+  },
+  {
+    id: 'toy-shop',
+    title: 'Toy Shop Night',
+    image: '/puzzles/toy-shop.jpg',
+    thumb: '/puzzles/toy-shop-thumb.jpg',
+    scene:
+      'a cosy old toy shop at night, lit by moonlight from the window and a warm lamp, at the exact moment the toys come alive and start a big game of chase across the shelves.',
+    layout: [
+      'Wooden shelves at different heights and a big moonlit window at the top; warm golden lamplight.',
+      'A toy train track loops and climbs through the whole picture from the top-left down to the bottom-right, crossing between shelves.',
+      'Strings, ribbons and yo-yo strings cross cell edges to tie neighbours together.',
+    ],
+    pieces: [
+      { name: 'Captain Teddy', subject: 'a teddy bear swinging from the curtain on a yo-yo string', emoji: '🧸' },
+      { name: 'Moon Window', subject: 'a big round moon smiling through the shop window, a cat silhouette on the sill', emoji: '🌙' },
+      { name: 'Choo Choo', subject: 'a little wind-up train puffing steam and zooming around a loop', emoji: '🚂' },
+      { name: 'Robo Rex', subject: 'a tin robot dinosaur chasing a bouncing ball', emoji: '🦖' },
+      { name: 'Dolly Dash', subject: 'a rag doll riding a rocking horse at full gallop', emoji: '🐴' },
+      { name: 'Spinning Top', subject: 'a striped spinning top whirling with sparkles flying off it', emoji: '🌀' },
+      { name: 'Block Tower', subject: 'a wobbly tower of letter blocks tipping over while a mouse catches the top block', emoji: '🧱' },
+      { name: 'Jack-in-the-Box', subject: 'a smiling jack-in-the-box springing up and waving', emoji: '🎁' },
+      { name: 'Loopy Plane', subject: 'a toy airplane looping overhead trailing a ribbon', emoji: '🛩️' },
     ],
   },
   {
