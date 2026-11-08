@@ -56,6 +56,12 @@ export function isPuzzleUnlocked(progress: Progress, puzzle: Puzzle): boolean {
     || progress.completedPuzzleIds.includes(puzzle.id);
 }
 
+// Secret puzzles (keyAfter) only take a key, and only once the kid has
+// finished enough puzzles. Returns how many more they need to finish (0 = ready).
+export function puzzlesToFinishFor(progress: Progress, puzzle: Puzzle): number {
+  return Math.max(0, (puzzle.keyAfter ?? 0) - progress.completedPuzzleIds.length);
+}
+
 export function hasLockedPuzzles(progress: Progress): boolean {
   return PUZZLES.some((p) => !p.retired && !isPuzzleUnlocked(progress, p));
 }
@@ -66,6 +72,8 @@ export function unlockPuzzle(
   progress: Progress, puzzleId: string, points: number, useKey: boolean,
 ): { next: Progress; cost: number } | null {
   if (progress.unlocked.includes(puzzleId)) return { next: progress, cost: 0 };
+  const puzzle = PUZZLES.find((p) => p.id === puzzleId);
+  if (puzzle?.keyAfter && (!useKey || puzzlesToFinishFor(progress, puzzle) > 0)) return null;
   const unlocked = [...progress.unlocked, puzzleId];
   if (useKey) {
     return progress.keys > 0 ? { next: { ...progress, unlocked, keys: progress.keys - 1 }, cost: 0 } : null;
@@ -111,6 +119,8 @@ export interface PuzzleChoice {
   current: boolean;      // the puzzle the kid is on now
   done: boolean;         // finished before
   locked: boolean;       // needs points or a key
+  keyOnly: boolean;      // secret puzzle: opens with a key, never points
+  toFinish: number;      // secret puzzle: more puzzles to finish before a key works
 }
 
 interface Sibling { name: string; progress: Progress }
@@ -149,6 +159,8 @@ export function getPuzzleChoices(progress: Progress, siblings: Sibling[] = []): 
       current: isCurrent(p.id),
       done: mine.has(p.id),
       locked: !isPuzzleUnlocked(progress, p),
+      keyOnly: Boolean(p.keyAfter),
+      toFinish: puzzlesToFinishFor(progress, p),
     }));
 }
 

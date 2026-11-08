@@ -9,6 +9,7 @@ interface PuzzleBoardProps {
   found: number[];            // which pieces are found (0-8, row-major)
   nextPiece?: number | null;  // the mystery square that glows as "next"
   onPick?: (index: number) => void; // tap a mystery square to make it next
+  onView?: (index: number) => void; // tap a found piece to see it bigger
   justAdded?: number | null;  // piece index that should animate in
   friendAt?: number | null;   // piece where this kid found the hidden friend
   size?: string;              // CSS width of the board
@@ -16,7 +17,7 @@ interface PuzzleBoardProps {
 
 // The 3x3 board. Found pieces show their art, the rest are mystery tiles,
 // the next one glows. When all nine are found the gaps close into one picture.
-export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded = null, friendAt = null, size = 'min(86vw, 52vh, 440px)' }: PuzzleBoardProps) {
+export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, onView, justAdded = null, friendAt = null, size = 'min(86vw, 52vh, 440px)' }: PuzzleBoardProps) {
   const complete = found.length >= PIECES_PER_PUZZLE;
   return (
     <motion.div
@@ -31,8 +32,13 @@ export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded
         const isNext = i === nextPiece && !complete;
         const tileClass = `relative overflow-hidden ${complete ? '' : 'rounded-xl'} ${isNext ? 'ring-4 ring-amber-300 animate-pulse' : ''}`;
         if (have) {
+          const Tile = onView ? 'button' : 'div';
           return (
-            <div key={i} className={tileClass}>
+            <Tile
+              key={i}
+              className={`${tileClass} ${onView ? 'active:scale-95 transition-transform' : ''}`}
+              {...(onView ? { type: 'button' as const, onClick: () => onView(i) } : {})}
+            >
               <motion.div
                 className="absolute inset-0"
                 initial={i === justAdded ? { scale: 1.8, opacity: 0, rotate: -10 } : false}
@@ -45,7 +51,7 @@ export function PuzzleBoard({ puzzle, found, nextPiece = null, onPick, justAdded
                 <FriendBadge puzzle={puzzle} className="absolute bottom-1 right-1 w-[38%] h-[38%] ring-2 ring-white shadow-md text-xl" />
               )}
               <span className="sr-only">{p.name}{i === friendAt ? `, with ${puzzle.friend.name}` : ''}</span>
-            </div>
+            </Tile>
           );
         }
         return onPick ? (

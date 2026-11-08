@@ -64,6 +64,12 @@ export function AudioProvider({ children }: { children: ReactNode }) {
   // Initialize Web Audio context
   const initWebAudio = useCallback(() => {
     if (!audioContextRef.current) {
+      // Safari 17+: play app sounds even when the iPhone's silent switch is on,
+      // like the music and story audio do.
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) {
+        try { session.type = 'playback'; } catch { /* unsupported */ }
+      }
       audioContextRef.current = new (window.AudioContext ||
         (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       setIsReady(true);

@@ -14,8 +14,9 @@ import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
-import { getPuzzleById, PIECES_PER_PUZZLE, secretPieceFor, type Puzzle } from '../data/puzzles';
-import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle } from '../utils/puzzleProgress';
+import { PieceViewer } from '../components/Puzzle/PieceViewer';
+import { getPuzzleById, secretPieceFor, type Puzzle } from '../data/puzzles';
+import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle, puzzlesToFinishFor } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
 interface HomeScreenProps {
@@ -59,6 +60,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [replayChapterIndex, setReplayChapterIndex] = useState<number | null>(null);
   const [switchingPuzzle, setSwitchingPuzzle] = useState(false);
   const [unlockTarget, setUnlockTarget] = useState<Puzzle | null>(null);
+  const [viewingPiece, setViewingPiece] = useState<number | null>(null);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
   const location = useLocation();
@@ -281,11 +283,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             <>
               <div className="text-center">
                 <p className="text-xl font-bold text-text">{currentPuzzle.title}</p>
-                <p className="text-sm text-text/60">
-                  {puzzleFinished
-                    ? 'You found everyone! 🎉'
-                    : `${puzzleProgress.piecesFound} of ${PIECES_PER_PUZZLE} pieces found`}
-                </p>
+                {puzzleFinished && <p className="text-sm text-text/60">You found everyone! 🎉</p>}
                 {!puzzleFinished && (
                   <button
                     onClick={() => { playSound('tap'); setSwitchingPuzzle(true); }}
@@ -300,18 +298,17 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 found={puzzleProgress.found}
                 nextPiece={puzzleFinished ? null : getNextPiece(puzzleProgress)}
                 onPick={puzzleFinished ? undefined : handlePickPiece}
+                onView={(i) => { playSound('tap'); setViewingPiece(i); }}
                 friendAt={puzzleProgress.friends.includes(currentPuzzle.id) ? secretPieceFor(child.id, currentPuzzle.id) : null}
                 justAdded={newPieceIndex}
               />
-              {!puzzleFinished && (
-                <p className="text-center text-sm text-text/60 -mt-1">
-                  Tap a <span aria-hidden>❓</span> square to pick which piece to find next
-                </p>
-              )}
-              {!puzzleProgress.friends.includes(currentPuzzle.id) && (
-                <p className="text-center text-sm font-semibold text-violet-600 -mt-2">
-                  ✨ A hidden friend is behind one of these pieces!
-                </p>
+              {viewingPiece !== null && (
+                <PieceViewer
+                  puzzle={currentPuzzle}
+                  index={viewingPiece}
+                  withFriend={puzzleProgress.friends.includes(currentPuzzle.id) && secretPieceFor(child.id, currentPuzzle.id) === viewingPiece}
+                  onClose={() => setViewingPiece(null)}
+                />
               )}
             </>
           )}
@@ -656,7 +653,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={handleStartBrushing}
-            className="w-full bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg"
+            className={`w-full ${isPuzzleMode ? 'mt-6' : ''} bg-gradient-to-r from-primary to-primary/80 text-white text-xl font-bold py-5 rounded-2xl shadow-lg`}
           >
             {isPuzzleMode
               ? `FIND PIECE ${puzzleProgress.piecesFound + 1}`
@@ -694,6 +691,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           puzzle={unlockTarget}
           points={child.points}
           keys={puzzleProgress.keys}
+          toFinish={puzzlesToFinishFor(puzzleProgress, unlockTarget)}
           onUnlock={handleUnlockPuzzle}
           onClose={() => setUnlockTarget(null)}
         />
