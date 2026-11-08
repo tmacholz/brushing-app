@@ -15,7 +15,7 @@ import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
 import { getPuzzleById, PIECES_PER_PUZZLE, secretPieceFor, type Puzzle } from '../data/puzzles';
-import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle } from '../utils/puzzleProgress';
+import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle, puzzlesToFinishFor } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
 interface HomeScreenProps {
@@ -694,6 +694,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           puzzle={unlockTarget}
           points={child.points}
           keys={puzzleProgress.keys}
+          toFinish={puzzlesToFinishFor(puzzleProgress, unlockTarget)}
           onUnlock={handleUnlockPuzzle}
           onClose={() => setUnlockTarget(null)}
         />

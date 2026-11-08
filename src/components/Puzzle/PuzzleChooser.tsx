@@ -12,7 +12,7 @@ interface PuzzleChooserProps {
 export function PuzzleChooser({ choices, onChoose }: PuzzleChooserProps) {
   return (
     <div className="grid gap-3">
-      {choices.map(({ puzzle: p, note, piecesFound, current, done, locked }, i) => {
+      {choices.map(({ puzzle: p, note, piecesFound, current, done, locked, keyOnly, toFinish }, i) => {
         const pct = Math.round((piecesFound / PIECES_PER_PUZZLE) * 100);
         const status = locked
           ? null
@@ -35,7 +35,7 @@ export function PuzzleChooser({ choices, onChoose }: PuzzleChooserProps) {
               className="w-16 h-16 rounded-xl bg-cover bg-center shrink-0 grid place-items-center text-white font-black text-xl"
               style={{ backgroundImage: `url(${done ? p.image : p.thumb})` }}
             >
-              {locked ? '🔒' : done ? '' : '?'}
+              {locked ? (keyOnly ? '🗝️' : '🔒') : done ? '' : '?'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="font-bold text-text flex items-baseline gap-2">
@@ -47,7 +47,13 @@ export function PuzzleChooser({ choices, onChoose }: PuzzleChooserProps) {
                 )}
               </p>
               {note && <p className="text-xs font-medium text-secondary">{note}</p>}
-              {locked ? (
+              {locked && keyOnly ? (
+                <p className="mt-1 text-sm font-bold text-violet-600">
+                  {toFinish > 0
+                    ? `Secret! Finish ${toFinish} more puzzle${toFinish > 1 ? 's' : ''} to find it`
+                    : 'Secret! Open it with a 🔑 key'}
+                </p>
+              ) : locked ? (
                 <p className="mt-1 text-sm font-bold text-amber-600">Unlock for {PUZZLE_UNLOCK_COST} ⭐</p>
               ) : (
               <div className="mt-1.5 flex items-center gap-2">

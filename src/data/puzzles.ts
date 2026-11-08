@@ -29,6 +29,7 @@ export interface Puzzle {
   pieces: PuzzlePiece[]; // row-major, 9 entries
   retired?: boolean;   // no longer offered; kept so kids mid-puzzle can finish it
   free?: boolean;      // starter puzzle; the rest are unlocked with points or a wheel key
+  keyAfter?: number;   // secret puzzle: key only, offered once this many puzzles are finished
   friend: HiddenFriend;
 }
 
@@ -263,6 +264,86 @@ export const PUZZLES: Puzzle[] = [
       { name: 'Block Tower', subject: 'a wobbly tower of letter blocks tipping over while a mouse catches the top block', emoji: '🧱' },
       { name: 'Jack-in-the-Box', subject: 'a smiling jack-in-the-box springing up and waving', emoji: '🎁' },
       { name: 'Loopy Plane', subject: 'a toy airplane looping overhead trailing a ribbon', emoji: '🛩️' },
+    ],
+  },
+  // ---- Secret puzzles: opened only with a 🔑 key, and only once the kid has
+  // finished 1, 2 and 3 puzzles respectively. ----
+  {
+    id: 'pirate-ship',
+    keyAfter: 1,
+    title: 'Pirate Ship',
+    image: '/puzzles/pirate-ship.jpg',
+    thumb: '/puzzles/pirate-ship-thumb.jpg',
+    scene:
+      'a friendly pirate ship crew of animals on a bright, breezy day, at the exact moment they spot treasure island and everyone rushes to look. Billowing sails, rolling waves and spray everywhere.',
+    layout: [
+      'The ship is seen from a low, tilted angle, riding up a big wave, so its deck slants diagonally across the middle of the picture.',
+      'Tall masts and billowing sails fill the top; the treasure island with one palm tree is small and far away in one top corner.',
+      'Ropes, the rigging net, a flag streaming in the wind and the spyglass\'s line of sight cross cell edges to tie neighbours together.',
+    ],
+    friend: { name: 'Bubbles the Baby Kraken', emoji: '🦑', image: '/puzzles/friends/pirate-ship.webp', subject: 'a tiny friendly baby kraken, coral pink with big shiny eyes, wearing a little captain\'s hat and blowing bubbles' },
+    pieces: [
+      { name: 'Polly the Parrot', subject: 'a green parrot in a tiny bandana swooping down from the crow\'s nest, squawking happily', emoji: '🦜' },
+      { name: 'The Lookout', subject: 'a raccoon in the crow\'s nest peering through a long brass spyglass toward the island', emoji: '🔭' },
+      { name: 'Treasure Island', subject: 'a little sandy island with one palm tree and a big X in the sand, far away on the sparkling sea', emoji: '🏝️' },
+      { name: 'Rope Swing', subject: 'a monkey swinging across the deck on a rope, one arm stretched out', emoji: '🐒' },
+      { name: 'Captain Whiskers', subject: 'a cat captain in a big feathered hat at the ship\'s wheel, pointing ahead', emoji: '🐱' },
+      { name: 'Jolly Flag', subject: 'a striped pirate flag with a smiling sun on it, streaming in the wind from the back of the ship', emoji: '🏴‍☠️' },
+      { name: 'Map Mouse', subject: 'a mouse holding up a huge treasure map that flaps in the breeze', emoji: '🗺️' },
+      { name: 'Treasure Chest', subject: 'an open treasure chest spilling shiny gold coins and pearls across the deck', emoji: '💰' },
+      { name: 'Splashy Dolphins', subject: 'two dolphins leaping alongside the ship through the bow spray', emoji: '🐬' },
+    ],
+  },
+  {
+    id: 'robot-workshop',
+    keyAfter: 2,
+    title: 'Robot Workshop',
+    image: '/puzzles/robot-workshop.jpg',
+    thumb: '/puzzles/robot-workshop-thumb.jpg',
+    scene:
+      'a bright, cluttered inventor\'s workshop full of friendly robots, at the exact moment the giant new robot switches on for the first time and sparks, gears and confetti burst everywhere.',
+    layout: [
+      'A curving conveyor belt sweeps from the top-left down to the bottom-right, with gadgets riding along it.',
+      'Workbenches, shelves and pipes at different heights and depths; big round windows let in warm daylight from above.',
+      'Cables, pipes, sparks and flying gears cross cell edges to tie neighbours together.',
+    ],
+    friend: { name: 'Sprocket the Robo-Pup', emoji: '🤖', image: '/puzzles/friends/robot-workshop.webp', subject: 'a small round robot puppy with floppy metal ears, a wagging spring tail and glowing blue eyes' },
+    pieces: [
+      { name: 'Whirly Drone', subject: 'a little propeller drone zooming past carrying a wrench', emoji: '🚁' },
+      { name: 'Gear Wheel', subject: 'a huge spinning golden gear with a hamster running inside it like a wheel', emoji: '⚙️' },
+      { name: 'Professor Owl', subject: 'an owl inventor in goggles cheering with a clipboard', emoji: '🦉' },
+      { name: 'Bolt the Helper', subject: 'a boxy robot with extendable arms juggling bolts and screws', emoji: '🔩' },
+      { name: 'Big Botty', subject: 'a giant friendly robot switching on, eyes lighting up, arms raised in a wave', emoji: '🤖' },
+      { name: 'Spark Station', subject: 'a tesla coil fizzing with harmless purple sparks while a cat\'s fur stands up', emoji: '⚡' },
+      { name: 'Roller Rover', subject: 'a little wheeled robot zooming along the conveyor belt with a tiny flag', emoji: '🛞' },
+      { name: 'Magnet Mouse', subject: 'a mouse holding a giant horseshoe magnet that pulls spoons and paperclips flying toward it', emoji: '🧲' },
+      { name: 'Bubble Bot', subject: 'a round robot blowing a stream of soap bubbles from a pipe', emoji: '🫧' },
+    ],
+  },
+  {
+    id: 'dragon-mountain',
+    keyAfter: 3,
+    title: 'Dragon Mountain',
+    image: '/puzzles/dragon-mountain.jpg',
+    thumb: '/puzzles/dragon-mountain-thumb.jpg',
+    scene:
+      'a magical mountain at sunset where friendly dragons live, at the exact moment the mother dragon lifts off from the peak and every dragon soars up after her. Wind, glowing embers and swirling clouds everywhere.',
+    layout: [
+      'One tall mountain rises diagonally from the bottom-left to a peak near the top-right, with waterfalls and caves on its slopes.',
+      'A warm orange and purple sunset sky with swirling clouds; some dragons big and close, others small and far away.',
+      'Trails of sparkly embers, waterfalls, wings and long tails cross cell edges to tie neighbours together.',
+    ],
+    friend: { name: 'Ember the Baby Phoenix', emoji: '🐦‍🔥', image: '/puzzles/friends/dragon-mountain.webp', subject: 'a fluffy baby phoenix chick with soft red, orange and gold feathers and a tiny flame-shaped crest' },
+    pieces: [
+      { name: 'Cloud Rider', subject: 'a small blue dragon surfing on a swirling cloud, wings spread', emoji: '☁️' },
+      { name: 'Sky Mama', subject: 'a big gentle green dragon lifting off from the peak, wings wide open against the sunset', emoji: '🐉' },
+      { name: 'Sunset Peak', subject: 'the snowy mountain peak glowing gold, with a little dragon flag fluttering on top', emoji: '🏔️' },
+      { name: 'Twin Wings', subject: 'two baby dragons doing a loop-the-loop around each other, leaving a sparkle trail', emoji: '✨' },
+      { name: 'Crystal Cave', subject: 'a glowing cave full of colorful crystals with a dragon peeking out and waving', emoji: '💎' },
+      { name: 'Rainbow Falls', subject: 'a tall waterfall with a rainbow in its spray and a dragon splashing in the pool', emoji: '🌈' },
+      { name: 'Egg Nest', subject: 'a cozy nest with a spotted dragon egg cracking open and a tiny dragon popping its head out', emoji: '🥚' },
+      { name: 'Knight Bunny', subject: 'a bunny in shiny toy armor riding a little dragon like a pony', emoji: '🐰' },
+      { name: 'Ember Lizard', subject: 'a tiny red dragon blowing a smoke ring that floats away', emoji: '🔥' },
     ],
   },
   {
