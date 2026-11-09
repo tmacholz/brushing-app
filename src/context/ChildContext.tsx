@@ -1,6 +1,6 @@
 import { createContext, useContext, useCallback, useMemo, useState, useEffect, type ReactNode } from 'react';
 import type { Child, StoryArc, ChestReward, EquippedAccessories, TaskConfig, CompletedStoryInfo } from '../types';
-import { DEFAULT_TASKS } from '../types';
+import { resolveTaskConfig } from '../utils/tasks';
 import { usePets } from './PetsContext';
 import { useToast } from './ToastContext';
 import { getBrushById } from '../data/brushes';
@@ -279,10 +279,7 @@ export function ChildProvider({ children }: { children: ReactNode }) {
         unlockedPets: starterPetIds,
         unlockedBrushes: ['star-swirl'],
         unlockedWorlds: ['magical-forest', 'space-station'],
-        taskConfig: {
-          enabled: true,
-          tasks: DEFAULT_TASKS,
-        },
+        taskConfig: resolveTaskConfig(null),
       };
 
       const newChild = await createChildInAPI(childData);

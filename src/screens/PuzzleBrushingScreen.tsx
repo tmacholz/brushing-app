@@ -22,7 +22,7 @@ import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece, addPuzzl
 import { calculateSessionPoints, PUZZLE_COMPLETION_BONUS } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
 import type { ChestReward, TaskCheckInResult } from '../types';
-import { DEFAULT_TASKS } from '../types';
+import { resolveTaskConfig, pickTasksForBrushing } from '../utils/tasks';
 
 const TOTAL_SECONDS = 120;
 const STAGE_SECONDS = TOTAL_SECONDS / BRUSH_STAGES.length;
@@ -146,8 +146,11 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
 
   const stageProgress = (q: number) => Math.max(0, Math.min(1, (elapsedSeconds - q * STAGE_SECONDS) / STAGE_SECONDS));
 
-  const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
-  const bonusEnabled = taskConfig.enabled && taskConfig.tasks.some((t) => t.enabled);
+  // The 2 random questions for this brushing (re-picked only if the config changes)
+  const taskConfigKey = JSON.stringify(child?.taskConfig ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const checkInTasks = useMemo(() => pickTasksForBrushing(resolveTaskConfig(child?.taskConfig)), [taskConfigKey]);
+  const bonusEnabled = checkInTasks.length > 0;
   const pet = child ? getPetById(child.activePetId) : undefined;
 
   const finish = () => {
@@ -185,7 +188,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   if (phase === 'checkin') {
     return (
       <TaskCheckIn
-        tasks={taskConfig.tasks}
+        tasks={checkInTasks}
         pet={pet ?? null}
         onComplete={(_r: TaskCheckInResult[], tokens: number) => {
           setTokensEarned(tokens);

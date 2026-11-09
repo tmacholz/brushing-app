@@ -66,21 +66,32 @@ export interface TaskConfig {
   tasks: TaskDefinition[];
 }
 
+export type TaskTime = 'morning' | 'night';
+
 export interface TaskDefinition {
   id: string;
   question: string; // e.g., "Did you go potty today?"
   shortLabel: string; // e.g., "Potty"
   emoji: string; // e.g., "🚽"
   enabled: boolean;
+  times?: TaskTime[]; // which brushings can ask it (missing = both)
 }
 
-// Default tasks available for parents to configure
+// How many questions the check-in asks per brushing (picked at random)
+export const TASKS_PER_BRUSHING = 2;
+
+// Default tasks available for parents to configure. Question text, labels and
+// emoji always come from here; a child's saved config only keeps enabled/times.
 export const DEFAULT_TASKS: TaskDefinition[] = [
-  { id: 'potty', question: 'Did you go potty?', shortLabel: 'Potty', emoji: '🚽', enabled: true },
-  { id: 'toys', question: 'Did you clean up your toys?', shortLabel: 'Toys', emoji: '🧸', enabled: true },
-  { id: 'hands', question: 'Did you wash your hands?', shortLabel: 'Hands', emoji: '🧼', enabled: false },
-  { id: 'dressed', question: 'Did you get dressed?', shortLabel: 'Dressed', emoji: '👕', enabled: false },
-  { id: 'polite', question: 'Did you say please and thank you?', shortLabel: 'Polite', emoji: '🙏', enabled: false },
+  { id: 'potty', question: 'Did you go potty?', shortLabel: 'Potty', emoji: '🚽', enabled: true, times: ['morning', 'night'] },
+  { id: 'toys', question: 'Did you clean up your toys?', shortLabel: 'Toys', emoji: '🧸', enabled: true, times: ['night'] },
+  { id: 'hands', question: 'Did you wash your hands?', shortLabel: 'Hands', emoji: '🧼', enabled: false, times: ['morning', 'night'] },
+  { id: 'dressed', question: 'Did you dress yourself?', shortLabel: 'Dressed', emoji: '👕', enabled: false, times: ['morning'] },
+  { id: 'polite', question: 'Did you say please and thank you?', shortLabel: 'Polite', emoji: '🙏', enabled: false, times: ['morning', 'night'] },
+  { id: 'kind', question: 'Were you kind at school?', shortLabel: 'Kind at school', emoji: '💛', enabled: true, times: ['night'] },
+  { id: 'helper', question: 'Did you help mom or dad today?', shortLabel: 'Helper', emoji: '🤝', enabled: true, times: ['night'] },
+  { id: 'protein', question: 'Did you eat protein for breakfast?', shortLabel: 'Protein breakfast', emoji: '🍳', enabled: true, times: ['morning'] },
+  { id: 'dinner', question: 'Did you eat a good dinner?', shortLabel: 'Good dinner', emoji: '🍽️', enabled: true, times: ['night'] },
 ];
 
 export interface TaskCheckInResult {
