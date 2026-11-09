@@ -20,7 +20,8 @@ import { isToday } from '../utils/streakCalculator';
 // Image generation is now done in admin, images come pre-populated from database
 import { getPetAudioUrl, getPetAudioPossessiveUrl, getPetAudioUrls, getPetAudioPossessiveUrls } from '../services/petAudio';
 import type { ChestReward, TaskCheckInResult } from '../types';
-import { DEFAULT_TASKS } from '../types';
+import type { TaskDefinition } from '../types';
+import { resolveTaskConfig, pickTasksForBrushing } from '../utils/tasks';
 
 // Helper to replace any remaining placeholder tokens before TTS
 const replaceStoryPlaceholders = (text: string, childName: string, petName: string): string => {
@@ -57,6 +58,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [showBonusWheel, setShowBonusWheel] = useState(false);
   const [tokensEarned, setTokensEarned] = useState(0);
   const [hasBonusFlow, setHasBonusFlow] = useState(false); // Track if bonus flow is enabled
+  const [checkInTasks, setCheckInTasks] = useState<TaskDefinition[]>([]); // the 2 random questions for this brushing
   const [hasExited, setHasExited] = useState(false); // Prevent rendering after exit
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const hasTriggeredCompletionRef = useRef(false); // Prevent duplicate completion triggers
@@ -231,11 +233,11 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     await completeChapter(chapterIndex);
 
     // Check if task bonus feature is enabled
-    const taskConfig = child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
-    const enabledTasks = taskConfig.tasks.filter(t => t.enabled);
+    const picked = pickTasksForBrushing(resolveTaskConfig(child.taskConfig));
+    setCheckInTasks(picked);
 
     // Track if bonus flow is available
-    const bonusEnabled = taskConfig.enabled && enabledTasks.length > 0;
+    const bonusEnabled = picked.length > 0;
     setHasBonusFlow(bonusEnabled);
 
     // Always show "Amazing job" completion screen first
@@ -842,10 +844,9 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   // Render task check-in overlay
   if (showTaskCheckIn) {
-    const taskConfig = child?.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS };
     return (
       <TaskCheckIn
-        tasks={taskConfig.tasks}
+        tasks={checkInTasks}
         pet={pet ?? null}
         onComplete={handleTaskCheckInComplete}
       />

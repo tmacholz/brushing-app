@@ -5,8 +5,9 @@ import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { useToast } from '../context/ToastContext';
 import { characters, getCharacterById } from '../data/characters';
-import { DEFAULT_TASKS } from '../types';
-import type { TaskConfig } from '../types';
+import { TASKS_PER_BRUSHING } from '../types';
+import type { TaskConfig, TaskTime } from '../types';
+import { resolveTaskConfig } from '../utils/tasks';
 import { apiFetch } from '../services/api';
 import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 
@@ -37,6 +38,16 @@ function TaskBonusSettings({
       ...taskConfig,
       tasks: updatedTasks,
     });
+  };
+
+  const handleToggleTime = (taskId: string, time: TaskTime) => {
+    const updatedTasks = taskConfig.tasks.map((t) => {
+      if (t.id !== taskId) return t;
+      const times = t.times ?? ['morning', 'night'];
+      const next = times.includes(time) ? times.filter((x) => x !== time) : [...times, time];
+      return next.length ? { ...t, times: next } : t; // keep at least one
+    });
+    onUpdate({ ...taskConfig, tasks: updatedTasks });
   };
 
   return (
@@ -71,41 +82,60 @@ function TaskBonusSettings({
           className="space-y-3"
         >
           <p className="text-sm text-text/70 mb-3">
-            Select which tasks to ask about:
+            Select which tasks to ask about, and whether to ask them at morning or night brushing:
           </p>
 
-          {taskConfig.tasks.map((task) => (
-            <motion.button
-              key={task.id}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => handleToggleTask(task.id)}
-              className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-colors ${
-                task.enabled
-                  ? 'border-primary bg-primary/5'
-                  : 'border-gray-200 bg-gray-50'
-              }`}
-            >
-              <span className="text-2xl">{task.emoji}</span>
-              <div className="flex-1 text-left">
-                <p className={`font-medium ${
-                  task.enabled ? 'text-text' : 'text-text/50'
-                }`}>
-                  {task.shortLabel}
-                </p>
-                <p className="text-xs text-text/60">{task.question}</p>
+          {taskConfig.tasks.map((task) => {
+            const times = task.times ?? ['morning', 'night'];
+            return (
+              <div
+                key={task.id}
+                className={`w-full rounded-xl border-2 transition-colors ${
+                  task.enabled ? 'border-primary bg-primary/5' : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleToggleTask(task.id)}
+                  className="w-full flex items-center gap-3 p-3"
+                >
+                  <span className="text-2xl">{task.emoji}</span>
+                  <div className="flex-1 text-left">
+                    <p className={`font-medium ${task.enabled ? 'text-text' : 'text-text/50'}`}>
+                      {task.shortLabel}
+                    </p>
+                    <p className="text-xs text-text/60">{task.question}</p>
+                  </div>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                    task.enabled ? 'border-primary bg-primary' : 'border-gray-300'
+                  }`}>
+                    {task.enabled && <Check className="w-4 h-4 text-white" />}
+                  </div>
+                </motion.button>
+                {task.enabled && (
+                  <div className="flex gap-2 px-3 pb-3 pl-14">
+                    {(['morning', 'night'] as TaskTime[]).map((time) => {
+                      const on = times.includes(time);
+                      return (
+                        <button
+                          key={time}
+                          onClick={() => handleToggleTime(task.id, time)}
+                          className={`text-xs font-medium px-3 py-1 rounded-full border transition-colors ${
+                            on ? 'bg-primary text-white border-primary' : 'bg-white text-text/50 border-gray-300'
+                          }`}
+                        >
+                          {time === 'morning' ? '☀️ Morning' : '🌙 Night'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                task.enabled
-                  ? 'border-primary bg-primary'
-                  : 'border-gray-300'
-              }`}>
-                {task.enabled && <Check className="w-4 h-4 text-white" />}
-              </div>
-            </motion.button>
-          ))}
+            );
+          })}
 
           <p className="text-xs text-text/50 text-center mt-4">
-            Each completed task earns 1 bonus spin on the wheel!
+            Each brushing asks {TASKS_PER_BRUSHING} of the checked questions that fit the time of day, picked at random. Each "yes" earns 1 bonus spin on the wheel!
           </p>
         </motion.div>
       )}
@@ -370,7 +400,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
         {/* Task Bonus Settings */}
         <TaskBonusSettings
-          taskConfig={child.taskConfig ?? { enabled: true, tasks: DEFAULT_TASKS }}
+          taskConfig={resolveTaskConfig(child.taskConfig)}
           onUpdate={(config) => {
             playSound('tap');
             updateTaskConfig(config);
