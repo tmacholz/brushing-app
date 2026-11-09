@@ -426,6 +426,12 @@ export const stageVoice = (stage: number): VoiceLine => ({
     : `Now brush your ${BRUSH_STAGES[stage].label} teeth!`,
 });
 
+export const getReadyVoice: VoiceLine = { key: 'get-ready', text: 'Get ready!' };
+export const greatJobVoice: VoiceLine = { key: 'great-job', text: 'Great job!' };
+
+// A short celebratory fanfare played when a piece is revealed.
+export const FANFARE_URL = '/puzzles/sfx/fanfare.mp3';
+
 export const foundVoice = (puzzle: Puzzle, index: number): VoiceLine => ({
   key: `${puzzle.id}-${index}`,
   text: `You found ${puzzle.pieces[index].name}!`,
@@ -445,6 +451,8 @@ export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.mp3`;
 
 export function allVoiceLines(): VoiceLine[] {
   return [
+    getReadyVoice,
+    greatJobVoice,
     ...BRUSH_STAGES.map((_, i) => stageVoice(i)),
     ...PUZZLES.flatMap((p) => [...p.pieces.map((_, i) => foundVoice(p, i)), finishedVoice(p)]),
     // Newer lines last, so the daily TTS quota records the core lines first.

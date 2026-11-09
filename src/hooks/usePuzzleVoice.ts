@@ -47,6 +47,8 @@ function speak(text: string) {
   window.speechSynthesis.speak(u);
 }
 
+export type SequenceItem = VoiceLine | { url: string };
+
 export function usePuzzleVoice(enabled: boolean) {
   const { isMuted } = useAudio();
   const enabledRef = useRef(enabled && !isMuted);
@@ -61,6 +63,53 @@ export function usePuzzleVoice(enabled: boolean) {
     if (el && !el.paused) el.pause();
     if ('speechSynthesis' in window) window.speechSynthesis.cancel();
   }, []);
+
+  // Plays one line and resolves when it has finished (or failed).
+  const playOne = useCallback(async (item: SequenceItem, id: number): Promise<void> => {
+    const el = getVoiceElement();
+    const isUrl = 'url' in item;
+    const clip = el ? (isUrl ? true : await hasClip(item.key)) : false;
+    if (id !== playId.current || !enabledRef.current) return;
+    if (el && clip) {
+      el.src = isUrl ? item.url : voiceClipUrl(item.key);
+      el.volume = 1;
+      const done = new Promise<void>((resolve) => {
+        const finish = () => { el.removeEventListener('ended', finish); el.removeEventListener('pause', finish); el.removeEventListener('error', finish); resolve(); };
+        el.addEventListener('ended', finish);
+        el.addEventListener('pause', finish);
+        el.addEventListener('error', finish);
+      });
+      try {
+        await el.play();
+        await done;
+        return;
+      } catch {
+        if (id !== playId.current) return;
+      }
+    }
+    if (isUrl || !('speechSynthesis' in window)) return;
+    await new Promise<void>((resolve) => {
+      const u = new SpeechSynthesisUtterance(item.text);
+      u.rate = 1.0;
+      u.pitch = 1.15;
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+      setTimeout(resolve, 6000); // some browsers never fire onend
+    });
+  }, []);
+
+  // Plays clips back to back (e.g. fanfare, "Great job!", "You found..."),
+  // resolving when the last one ends. Any new play or stop cuts it short.
+  const playSequence = useCallback(async (items: SequenceItem[]) => {
+    if (!enabledRef.current) return;
+    stop();
+    const id = playId.current;
+    for (const item of items) {
+      if (id !== playId.current || !enabledRef.current) return;
+      await playOne(item, id);
+    }
+  }, [stop, playOne]);
 
   const play = useCallback(async (line: VoiceLine) => {
     if (!enabledRef.current) return;
@@ -85,7 +134,7 @@ export function usePuzzleVoice(enabled: boolean) {
 
   useEffect(() => stop, [stop]);
 
-  return { play, preload, stop };
+  return { play, playSequence, preload, stop };
 }
 
 // iOS only lets audio play later if it was started inside a tap. Call this

@@ -17,7 +17,7 @@ import { BonusWheel } from '../components/BonusWheel';
 import { usePets } from '../context/PetsContext';
 import { FriendBadge } from '../components/Puzzle/FriendBadge';
 import { PieceArt, FoamQuadrant, MouthMap } from '../components/Puzzle/PuzzleArt';
-import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, stageVoice, foundVoice, finishedVoice, friendVoice, secretPieceFor, type VoiceLine } from '../data/puzzles';
+import { getPuzzleById, PIECES_PER_PUZZLE, BRUSH_STAGES, PUZZLE_MUSIC_URL, FANFARE_URL, getReadyVoice, greatJobVoice, stageVoice, foundVoice, finishedVoice, friendVoice, secretPieceFor, type VoiceLine } from '../data/puzzles';
 import { getPuzzleProgress, withPuzzleProgress, addPiece, getNextPiece, addPuzzleKey, hasLockedPuzzles } from '../utils/puzzleProgress';
 import { calculateSessionPoints, PUZZLE_COMPLETION_BONUS } from '../utils/pointsCalculator';
 import { isToday } from '../utils/streakCalculator';
@@ -63,7 +63,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   const exitConfirmRef = useRef(false);
   useEffect(() => { exitConfirmRef.current = showExitConfirm; }, [showExitConfirm]);
   // Voice lines are pre-recorded clips, so brushing never spends TTS quota.
-  const { play: playVoice, preload: preloadVoice, stop: stopSpeaking } = usePuzzleVoice(voiceOn);
+  const { play: playVoice, playSequence, preload: preloadVoice, stop: stopSpeaking } = usePuzzleVoice(voiceOn);
   const say = useCallback((line: VoiceLine) => {
     playVoice(line).catch(() => { /* chime already played; voice is a bonus */ });
   }, [playVoice]);
@@ -85,19 +85,23 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     setPuzzleDone(completed);
     setFoundFriend(gotFriend);
     setPhase('reveal');
-    playSound('unlock');
-    say(foundVoice(puzzle, pieceIndex));
+    // Fanfare, "Great job!", then the piece's name.
+    const shownAt = Date.now();
+    const celebration = playSequence([{ url: FANFARE_URL }, greatJobVoice, foundVoice(puzzle, pieceIndex)]).catch(() => {});
+    const afterCelebration = (minMs: number, fn: () => void) => {
+      void celebration.then(() => setTimeout(fn, Math.max(400, minMs - (Date.now() - shownAt))));
+    };
     if (gotFriend) {
       // The piece first, then the surprise: the hidden friend pops out.
-      setTimeout(() => {
+      afterCelebration(2600, () => {
         setPhase((ph) => (ph === 'reveal' ? 'friend' : ph));
         playSound('success');
         say(friendVoice(puzzle));
-      }, 2600);
+      });
     } else if (completed) {
-      setTimeout(() => say(finishedVoice(puzzle)), 2200);
+      afterCelebration(2200, () => say(finishedVoice(puzzle)));
     }
-  }, [child, puzzle, pieceIndex, secretPiece, startProgress, playSound, updateStreak, addPoints, updateChild, say]);
+  }, [child, puzzle, pieceIndex, secretPiece, startProgress, playSound, updateStreak, addPoints, updateChild, say, playSequence]);
 
   const { elapsedSeconds, isRunning, start, pause, resume } = useBrushingTimer(handleTimerComplete, undefined, TICK_MS);
 
@@ -108,7 +112,9 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
   useEffect(() => {
     if (phase !== 'countdown') return;
     if (puzzle) {
+      say(getReadyVoice);
       BRUSH_STAGES.forEach((_, s) => preloadVoice(stageVoice(s)));
+      preloadVoice(greatJobVoice);
       preloadVoice(foundVoice(puzzle, pieceIndex));
       if (pieceIndex === secretPiece) preloadVoice(friendVoice(puzzle));
     }
