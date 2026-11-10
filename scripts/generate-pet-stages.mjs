@@ -26,6 +26,8 @@ function loadKey() {
 
 // id -> stage 1 image (path under public/) and what each stage adds.
 export const PET_STAGES = {
+  bubbles: { src: 'pets/stages/bubbles-1.webp', what: 'floating fish', s2: 'a bigger young fish with longer flowing fins and a few more bubbles around it', s3: 'a grown-up graceful fish with long rainbow-tipped flowing fins, surrounded by a ring of shiny bubbles' },
+  fern: { src: 'pets/stages/fern-1.webp', what: 'little forest dragon', s2: 'a bigger young dragon with bigger leafy wings and small horns', s3: 'a grown-up forest dragon with large leafy wings spread, little flowers growing on its back and a proud friendly pose' },
   'friend:treetop-village': { src: 'puzzles/friends/treetop-village.webp', what: 'forest sprite', s2: 'a bit taller with bigger leaf wings and a brighter lantern', s3: 'a grown-up forest sprite with large shimmering leaf wings, a little leafy cape and a glowing lantern staff' },
   'friend:windy-cove': { src: 'puzzles/friends/windy-cove.webp', what: 'sea dragon', s2: 'a bigger young sea dragon with longer fins and a longer tail, still hugging its pearl', s3: 'a grown-up sea dragon with big flowing frilly fins, small horns and a pearl necklace' },
   'friend:space-party': { src: 'puzzles/friends/space-party.webp', what: 'space puff', s2: 'a bigger fluffier space puff with longer glowing antennae', s3: 'a grown-up space puff, extra fluffy, with a ring of tiny orbiting stars around it and glowing antennae' },
