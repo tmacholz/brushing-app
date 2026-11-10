@@ -3,20 +3,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import type { TaskDefinition, TaskCheckInResult, Pet } from '../../types';
 import { useAudio } from '../../context/AudioContext';
+import { usePuzzleVoice } from '../../hooks/usePuzzleVoice';
+import { taskIntroVoice, taskQuestionVoice, taskYesVoice, taskNotYetVoice, taskSummaryVoice } from '../../data/puzzles';
 
 interface TaskCheckInProps {
   tasks: TaskDefinition[];
   pet: Pet | null;
   onComplete: (results: TaskCheckInResult[], tokensEarned: number) => void;
+  voice?: boolean; // read the questions aloud (default on; the global mute still applies)
 }
 
 type CheckInPhase = 'intro' | 'question' | 'celebration' | 'encouragement' | 'summary';
 
-const CELEBRATION_DURATION = 1800; // 1.8 seconds for celebration/encouragement
-const INTRO_DURATION = 1500; // 1.5 seconds for intro
+// Long enough for the voice line on each screen to finish.
+const CELEBRATION_DURATION = 2700; // celebration/encouragement
+const INTRO_DURATION = 2700;
 
-export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
+export function TaskCheckIn({ tasks, pet, onComplete, voice = true }: TaskCheckInProps) {
   const { playSound } = useAudio();
+  const { play: playVoice } = usePuzzleVoice(voice);
   const [phase, setPhase] = useState<CheckInPhase>('intro');
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [results, setResults] = useState<TaskCheckInResult[]>([]);
@@ -25,6 +30,16 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
   const enabledTasks = tasks.filter(t => t.enabled);
   const currentTask = enabledTasks[currentTaskIndex];
   const isLastTask = currentTaskIndex >= enabledTasks.length - 1;
+
+  // Read each screen aloud: the intro, every question, and the replies.
+  useEffect(() => {
+    if (phase === 'intro') playVoice(taskIntroVoice);
+    else if (phase === 'question' && currentTask) playVoice(taskQuestionVoice(currentTask));
+    else if (phase === 'celebration') playVoice(taskYesVoice);
+    else if (phase === 'encouragement') playVoice(taskNotYetVoice);
+    else if (phase === 'summary') playVoice(taskSummaryVoice);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, currentTask?.id, playVoice]);
 
   // Move to next question or summary
   const moveToNext = useCallback(() => {
