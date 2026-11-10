@@ -9,6 +9,7 @@ import { useCharacterSprites } from '../hooks/useCharacterSprites';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
+import { addBuddyBrush, buddyPet, withPetProgress } from '../utils/petProgress';
 import { useContent } from '../context/ContentContext';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
@@ -37,7 +38,7 @@ interface BrushingScreenProps {
 }
 
 export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
-  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward, replayingChapterIndex, clearReplayState } = useChild();
+  const { child, updateStreak, addPoints, setCurrentStoryArc, completeChapter, claimChestReward, updateChild, replayingChapterIndex, clearReplayState } = useChild();
   const { playSound, getWebAudioContext } = useAudio();
   const { getPetById } = usePets();
   const { getStoriesForWorld, getStoryById, getWorldById } = useContent();
@@ -232,6 +233,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
     // Mark chapter as complete
     await completeChapter(chapterIndex);
+
+    // The buddy pet grows from every finished brush, in story mode too.
+    const buddy = buddyPet(child, getPetById(child.activePetId)?.name);
+    await updateChild({ modeProgress: withPetProgress(child.modeProgress, addBuddyBrush(child, buddy.id)) });
 
     // Check if task bonus feature is enabled
     const picked = pickTasksForBrushing(resolveTaskConfig(child.taskConfig));

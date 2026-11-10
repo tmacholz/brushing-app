@@ -472,9 +472,19 @@ export function allVoiceLines(tasks: { id: string; question: string }[] = []): V
     ...PUZZLES.flatMap((p) => [...p.pieces.map((_, i) => foundVoice(p, i)), finishedVoice(p)]),
     // Newer lines last, so the daily TTS quota records the core lines first.
     ...PUZZLES.map((p) => friendVoice(p)),
+    levelUpVoice(2),
+    levelUpVoice(3),
     ...taskVoiceLines(tasks),
   ];
 }
+
+// Said by a pet when it reaches stage 2 or 3 (see data/petRoster.ts).
+export const levelUpVoice = (stage: number): VoiceLine => ({
+  key: `pet-levelup-${stage}`,
+  text: stage >= 3
+    ? "Wow, look at me! I'm all grown up! Thank you for brushing with me!"
+    : "Look how big I'm getting! Keep brushing with me!",
+});
 
 const POSITIONS = [
   'top-left', 'top-center', 'top-right',
