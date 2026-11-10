@@ -437,6 +437,12 @@ export const foundVoice = (puzzle: Puzzle, index: number): VoiceLine => ({
   text: `You found ${puzzle.pieces[index].name}!`,
 });
 
+// Just the piece's name ("Hoot the Owl!"), said when a kid taps a found piece to view it.
+export const pieceNameVoice = (puzzle: Puzzle, index: number): VoiceLine => ({
+  key: `${puzzle.id}-${index}-name`,
+  text: `${puzzle.pieces[index].name}!`,
+});
+
 export const finishedVoice = (puzzle: Puzzle): VoiceLine => ({
   key: `${puzzle.id}-done`,
   text: `You finished ${puzzle.title}! Amazing brushing!`,
@@ -475,6 +481,9 @@ export function allVoiceLines(tasks: { id: string; question: string }[] = []): V
     levelUpVoice(2),
     levelUpVoice(3),
     ...taskVoiceLines(tasks),
+    // Piece names for the viewer, retired puzzles last.
+    ...[...PUZZLES].sort((a, b) => Number(!!a.retired) - Number(!!b.retired))
+      .flatMap((p) => p.pieces.map((_, i) => pieceNameVoice(p, i))),
   ];
 }
 
