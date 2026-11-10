@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen, RotateCcw } from 'lucide-react';
@@ -9,13 +9,13 @@ import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
 import { BonusWheel } from '../components/BonusWheel/BonusWheel';
-import { primeSpeechFallback, usePuzzleVoice } from '../hooks/usePuzzleVoice';
+import { primeSpeechFallback, usePuzzleVoice, checkClip, knownClip } from '../hooks/usePuzzleVoice';
 import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
 import { PieceViewer } from '../components/Puzzle/PieceViewer';
-import { getPuzzleById, secretPieceFor, foundVoice, friendVoice, voiceClipUrl, type Puzzle } from '../data/puzzles';
+import { getPuzzleById, secretPieceFor, foundVoice, friendVoice, pieceNameVoice, voiceClipUrl, type Puzzle } from '../data/puzzles';
 import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle, puzzlesToFinishFor } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
@@ -62,6 +62,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [unlockTarget, setUnlockTarget] = useState<Puzzle | null>(null);
   const [viewingPiece, setViewingPiece] = useState<number | null>(null);
   const { playSequence: playVoiceSequence, stop: stopVoice } = usePuzzleVoice(true);
+  // Look up which name-only clips exist, so a tap can start one right away (iPhone).
+  const homePuzzle = child ? getPuzzleById(getPuzzleProgress(child).currentPuzzleId) : undefined;
+  useEffect(() => {
+    homePuzzle?.pieces.forEach((_, i) => checkClip(pieceNameVoice(homePuzzle, i).key));
+  }, [homePuzzle]);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
   const location = useLocation();
@@ -302,10 +307,12 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 onView={(i) => {
                   playSound('tap');
                   setViewingPiece(i);
-                  // Say the piece's name ("You found ...!"), plus the hidden friend if it's here.
-                  // Clips are passed as URLs so play() starts inside this tap, which iPhone needs.
+                  // Say the piece's name ("Hoot the Owl!", or "You found ...!" until that clip
+                  // is recorded), plus the hidden friend if it's here. Clips are passed as URLs
+                  // so play() starts inside this tap, which iPhone needs.
                   const hasFriend = puzzleProgress.friends.includes(currentPuzzle.id) && secretPieceFor(child.id, currentPuzzle.id) === i;
-                  const lines = [foundVoice(currentPuzzle, i), ...(hasFriend ? [friendVoice(currentPuzzle)] : [])];
+                  const nameLine = pieceNameVoice(currentPuzzle, i);
+                  const lines = [knownClip(nameLine.key) ? nameLine : foundVoice(currentPuzzle, i), ...(hasFriend ? [friendVoice(currentPuzzle)] : [])];
                   playVoiceSequence(lines.map((l) => ({ url: voiceClipUrl(l.key) })));
                 }}
                 friendAt={puzzleProgress.friends.includes(currentPuzzle.id) ? secretPieceFor(child.id, currentPuzzle.id) : null}

@@ -39,6 +39,13 @@ function hasClip(key: string): Promise<boolean> {
   return p;
 }
 
+/** Checks a clip in the background; until the answer is in, knownClip says false. */
+const knownClips = new Set<string>();
+export function checkClip(key: string) {
+  hasClip(key).then((ok) => { if (ok) knownClips.add(key); });
+}
+export const knownClip = (key: string) => knownClips.has(key);
+
 function speak(text: string) {
   if (!('speechSynthesis' in window)) return;
   const u = new SpeechSynthesisUtterance(text);
