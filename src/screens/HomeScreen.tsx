@@ -12,13 +12,13 @@ import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
 import { BonusWheel } from '../components/BonusWheel/BonusWheel';
-import { primeSpeechFallback } from '../hooks/usePuzzleVoice';
+import { primeSpeechFallback, usePuzzleVoice } from '../hooks/usePuzzleVoice';
 import { PlayModeToggle } from '../components/ui/PlayModeToggle';
 import { PuzzleBoard } from '../components/Puzzle/PuzzleBoard';
 import { PuzzleChooser } from '../components/Puzzle/PuzzleChooser';
 import { UnlockPuzzleModal } from '../components/Puzzle/UnlockPuzzleModal';
 import { PieceViewer } from '../components/Puzzle/PieceViewer';
-import { getPuzzleById, secretPieceFor, type Puzzle } from '../data/puzzles';
+import { getPuzzleById, secretPieceFor, foundVoice, friendVoice, voiceClipUrl, type Puzzle } from '../data/puzzles';
 import { getPuzzleProgress, getPuzzleChoices, isPuzzleFinished, startPuzzle, withPuzzleProgress, getNextPiece, choosePiece, isPuzzleUnlocked, unlockPuzzle, puzzlesToFinishFor } from '../utils/puzzleProgress';
 import type { ScreenName, StoryTemplate, ChestReward, PlayMode } from '../types';
 
@@ -47,6 +47,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [switchingPuzzle, setSwitchingPuzzle] = useState(false);
   const [unlockTarget, setUnlockTarget] = useState<Puzzle | null>(null);
   const [viewingPiece, setViewingPiece] = useState<number | null>(null);
+  const { playSequence: playVoiceSequence, stop: stopVoice } = usePuzzleVoice(true);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
   const location = useLocation();
@@ -300,7 +301,15 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                 found={puzzleProgress.found}
                 nextPiece={puzzleFinished ? null : getNextPiece(puzzleProgress)}
                 onPick={puzzleFinished ? undefined : handlePickPiece}
-                onView={(i) => { playSound('tap'); setViewingPiece(i); }}
+                onView={(i) => {
+                  playSound('tap');
+                  setViewingPiece(i);
+                  // Say the piece's name ("You found ...!"), plus the hidden friend if it's here.
+                  // Clips are passed as URLs so play() starts inside this tap, which iPhone needs.
+                  const hasFriend = puzzleProgress.friends.includes(currentPuzzle.id) && secretPieceFor(child.id, currentPuzzle.id) === i;
+                  const lines = [foundVoice(currentPuzzle, i), ...(hasFriend ? [friendVoice(currentPuzzle)] : [])];
+                  playVoiceSequence(lines.map((l) => ({ url: voiceClipUrl(l.key) })));
+                }}
                 friendAt={puzzleProgress.friends.includes(currentPuzzle.id) ? secretPieceFor(child.id, currentPuzzle.id) : null}
                 justAdded={newPieceIndex}
               />
@@ -309,7 +318,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
                   puzzle={currentPuzzle}
                   index={viewingPiece}
                   withFriend={puzzleProgress.friends.includes(currentPuzzle.id) && secretPieceFor(child.id, currentPuzzle.id) === viewingPiece}
-                  onClose={() => setViewingPiece(null)}
+                  onClose={() => { stopVoice(); setViewingPiece(null); }}
                 />
               )}
             </>

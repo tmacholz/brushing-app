@@ -1,4 +1,4 @@
-// Record the puzzle-mode voice lines once with Gemini TTS (same model and
+// Record the puzzle-mode and task check-in voice lines once with Gemini TTS (same model and
 // voice as story narration) and save them as static clips:
 //
 //   node scripts/generate-puzzle-voice.mjs          # only missing clips
@@ -37,13 +37,14 @@ function pcmToWav(pcm, sampleRate) {
 }
 
 const { allVoiceLines } = await import(pathToFileURL(resolve(root, 'src/data/puzzles.ts')).href);
+const { DEFAULT_TASKS } = await import(pathToFileURL(resolve(root, 'src/types/index.ts')).href);
 const model = process.env.GEMINI_TTS_MODEL || 'gemini-3.8-flash-tts';
 const voice = process.env.GEMINI_TTS_VOICE || 'Kore';
 const key = loadKey();
 const outDir = resolve(root, 'public/puzzles/voice');
 mkdirSync(outDir, { recursive: true });
 
-const todo = allVoiceLines().filter((l) => force || !existsSync(resolve(outDir, `${l.key}.mp3`)));
+const todo = allVoiceLines(DEFAULT_TASKS).filter((l) => force || !existsSync(resolve(outDir, `${l.key}.mp3`)));
 console.log(`${todo.length} clips to record with ${model} / ${voice}`);
 
 for (const [i, line] of todo.entries()) {
