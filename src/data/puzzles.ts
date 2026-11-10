@@ -449,7 +449,22 @@ export const friendVoice = (puzzle: Puzzle): VoiceLine => ({
 
 export const voiceClipUrl = (key: string) => `/puzzles/voice/${key}.mp3`;
 
-export function allVoiceLines(): VoiceLine[] {
+// Task bonus check-in (after brushing, in both modes). Each question is read
+// aloud from its own clip; the question text comes from DEFAULT_TASKS.
+export const taskQuestionVoice = (task: { id: string; question: string }): VoiceLine => ({
+  key: `task-${task.id}`,
+  text: task.question,
+});
+export const taskIntroVoice: VoiceLine = { key: 'task-intro', text: "Great brushing! Let's check in." };
+export const taskYesVoice: VoiceLine = { key: 'task-yes', text: 'Awesome! You earned a token!' };
+export const taskNotYetVoice: VoiceLine = { key: 'task-not-yet', text: "No worries! You'll get it next time!" };
+export const taskSummaryVoice: VoiceLine = { key: 'task-summary', text: 'Time to spin the bonus wheel!' };
+
+export function taskVoiceLines(tasks: { id: string; question: string }[]): VoiceLine[] {
+  return [taskIntroVoice, ...tasks.map(taskQuestionVoice), taskYesVoice, taskNotYetVoice, taskSummaryVoice];
+}
+
+export function allVoiceLines(tasks: { id: string; question: string }[] = []): VoiceLine[] {
   return [
     getReadyVoice,
     greatJobVoice,
@@ -457,6 +472,7 @@ export function allVoiceLines(): VoiceLine[] {
     ...PUZZLES.flatMap((p) => [...p.pieces.map((_, i) => foundVoice(p, i)), finishedVoice(p)]),
     // Newer lines last, so the daily TTS quota records the core lines first.
     ...PUZZLES.map((p) => friendVoice(p)),
+    ...taskVoiceLines(tasks),
   ];
 }
 

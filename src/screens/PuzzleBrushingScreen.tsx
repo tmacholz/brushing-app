@@ -190,6 +190,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
       <TaskCheckIn
         tasks={checkInTasks}
         pet={pet ?? null}
+        voice={voiceOn}
         onComplete={(_r: TaskCheckInResult[], tokens: number) => {
           setTokensEarned(tokens);
           setPhase('wheel');

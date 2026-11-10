@@ -13,6 +13,7 @@ import { useContent } from '../context/ContentContext';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
 import { TaskCheckIn } from '../components/TaskCheckIn';
+import { primeSpeechFallback } from '../hooks/usePuzzleVoice';
 import { BonusWheel } from '../components/BonusWheel';
 import { personalizeStory, rePersonalizeStoryArc, refreshStoryArcContent } from '../utils/storyGenerator';
 import { calculateSessionPoints } from '../utils/pointsCalculator';
@@ -250,6 +251,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     setShowInitialCompletion(false);
 
     if (hasBonusFlow) {
+      // This tap unlocks the voice element so the questions can be read aloud on iPhone.
+      primeSpeechFallback();
       // Show task check-in flow
       setShowTaskCheckIn(true);
     } else {
