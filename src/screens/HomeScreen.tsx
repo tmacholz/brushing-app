@@ -182,6 +182,11 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const pet = getPetById(child.activePetId);
   const petProgress = getPetProgress(child);
   const buddy = buddyPet(child, pet?.name);
+  const buddyCard = (
+    <div className="mb-5">
+      <BuddyCard pet={buddy} brushes={petBrushes(petProgress, buddy.id)} onClick={() => handleNavigate('pet-select')} />
+    </div>
+  );
   const levelUp = pendingLevelUp(child);
   const streakLevel = getStreakLevel(child.currentStreak);
   const hasStoryInProgress = child.currentStoryArc !== null;
@@ -257,10 +262,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </div>
       </motion.div>
 
-      {/* Buddy pet: grows with every brush */}
-      <div className="mb-5">
-        <BuddyCard pet={buddy} brushes={petBrushes(petProgress, buddy.id)} onClick={() => handleNavigate('pet-select')} />
-      </div>
+      {/* Buddy pet: grows with every brush (in puzzle mode it sits below the board and button) */}
+      {!isPuzzleMode && buddyCard}
 
       {levelUp && (
         <LevelUpCelebration
@@ -631,6 +634,8 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           </motion.p>
         </>
       )}
+
+      {isPuzzleMode && <div className="mt-6">{buddyCard}</div>}
 
       {/* DEV: Test Wheel Button (local dev builds only) */}
       {import.meta.env.DEV && (
