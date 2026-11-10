@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Flame, Star, Sparkles, ChevronDown, Check, PartyPopper, Globe, BookOpen, RotateCcw } from 'lucide-react';
+import { Flame, Star, ChevronDown, Check, PartyPopper, Globe, BookOpen, RotateCcw } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
+import { BuddyCard } from '../components/Pets/BuddyCard';
+import { LevelUpCelebration } from '../components/Pets/LevelUpCelebration';
+import { buddyPet, getPetProgress, markLevelUpSeen, pendingLevelUp, petBrushes, withPetProgress } from '../utils/petProgress';
 import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
 import { personalizeStory } from '../utils/storyGenerator';
@@ -28,23 +31,6 @@ const getGreeting = (): string => {
   if (hour < 12) return 'Good morning';
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
-};
-
-const getPetEmoji = (petId: string): string => {
-  switch (petId) {
-    case 'sparkle':
-      return '⭐';
-    case 'bubbles':
-      return '🐠';
-    case 'cosmo':
-      return '🤖';
-    case 'fern':
-      return '🐉';
-    case 'captain-whiskers':
-      return '🐱';
-    default:
-      return '✨';
-  }
 };
 
 export function HomeScreen({ onNavigate }: HomeScreenProps) {
@@ -193,6 +179,9 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   };
 
   const pet = getPetById(child.activePetId);
+  const petProgress = getPetProgress(child);
+  const buddy = buddyPet(child, pet?.name);
+  const levelUp = pendingLevelUp(child);
   const streakLevel = getStreakLevel(child.currentStreak);
   const hasStoryInProgress = child.currentStoryArc !== null;
 
@@ -266,6 +255,19 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
           </div>
         </div>
       </motion.div>
+
+      {/* Buddy pet: grows with every brush */}
+      <div className="mb-5">
+        <BuddyCard pet={buddy} brushes={petBrushes(petProgress, buddy.id)} onClick={() => handleNavigate('pet-select')} />
+      </div>
+
+      {levelUp && (
+        <LevelUpCelebration
+          pet={levelUp.pet}
+          stage={levelUp.stage}
+          onDone={() => updateChild({ modeProgress: withPetProgress(child.modeProgress, markLevelUpSeen(child, levelUp.pet.id, levelUp.stage)) })}
+        />
+      )}
 
       {/* Way to play */}
       <div className="mb-5 max-w-xs w-full mx-auto">
@@ -347,57 +349,6 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
         </motion.div>
       ) : (
         <>
-      {/* Pet Display - smaller */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.8 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.15, type: 'spring', damping: 12 }}
-        className="flex flex-col items-center mb-6"
-      >
-        <motion.button
-          onClick={() => handleNavigate('pet-select')}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="relative focus:outline-none"
-        >
-          <motion.div
-            animate={{
-              y: [0, -6, 0],
-            }}
-            transition={{
-              duration: 3,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
-            className="relative"
-          >
-            {/* Pet circle - smaller */}
-            <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center shadow-lg overflow-hidden">
-              {pet?.avatarUrl ? (
-                <img src={pet.avatarUrl} alt={pet.displayName} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-6xl">{getPetEmoji(child.activePetId)}</span>
-              )}
-            </div>
-
-            {/* Sparkle effects */}
-            <motion.div
-              className="absolute -top-1 -right-1"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-            >
-              <Sparkles className="w-6 h-6 text-accent" />
-            </motion.div>
-          </motion.div>
-
-          {pet && (
-            <p className="mt-2 text-lg font-medium text-text">
-              {pet.displayName}
-            </p>
-          )}
-        </motion.button>
-      </motion.div>
-
       {/* Chapter Progression - Responsive */}
       {hasStoryInProgress && child.currentStoryArc && (
         <motion.div

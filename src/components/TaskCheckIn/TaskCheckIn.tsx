@@ -3,6 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import type { TaskDefinition, TaskCheckInResult, Pet } from '../../types';
 import { useAudio } from '../../context/AudioContext';
+import { useChild } from '../../context/ChildContext';
+import { PetArt } from '../Pets/PetArt';
+import { buddyPet, getPetProgress, petStage } from '../../utils/petProgress';
 
 interface TaskCheckInProps {
   tasks: TaskDefinition[];
@@ -17,6 +20,10 @@ const INTRO_DURATION = 1500; // 1.5 seconds for intro
 
 export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
   const { playSound } = useAudio();
+  const { child } = useChild();
+  // The buddy asks the questions, drawn at its current stage.
+  const buddy = child ? buddyPet(child, pet?.name) : null;
+  const buddyStage = buddy && child ? petStage(getPetProgress(child), buddy.id) : 1;
   const [phase, setPhase] = useState<CheckInPhase>('intro');
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
   const [results, setResults] = useState<TaskCheckInResult[]>([]);
@@ -151,13 +158,13 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
             <motion.div
               animate={{ y: [0, -10, 0] }}
               transition={{ duration: 1.5, repeat: Infinity }}
-              className="text-8xl mb-6"
+              className="text-8xl mb-6 flex justify-center"
             >
-              {getPetEmoji()}
+              {buddy ? <PetArt pet={buddy} stage={buddyStage} className="w-40 h-40" /> : getPetEmoji()}
             </motion.div>
             <h1 className="text-3xl font-bold text-white mb-2">Great brushing!</h1>
             <p className="text-white/80 text-lg">
-              {pet?.displayName || 'Your buddy'} wants to check in...
+              {buddy?.name || pet?.displayName || 'Your buddy'} wants to check in...
             </p>
           </motion.div>
         )}
@@ -178,7 +185,7 @@ export function TaskCheckIn({ tasks, pet, onComplete }: TaskCheckInProps) {
               className="mb-8"
             >
               <div className="inline-block bg-white/20 backdrop-blur-sm rounded-full p-6">
-                <span className="text-6xl">{getPetEmoji()}</span>
+                {buddy ? <PetArt pet={buddy} stage={buddyStage} className="w-20 h-20" /> : <span className="text-6xl">{getPetEmoji()}</span>}
               </div>
             </motion.div>
 
