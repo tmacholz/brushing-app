@@ -203,7 +203,7 @@ export const PUZZLES: Puzzle[] = [
       'One curling vine racetrack winds through every cell, from the top-left down to the bottom-right finish line of pebbles.',
       'Dewdrops, petals and pollen float across cell edges.',
     ],
-    friend: { name: 'Goldie the Golden Beetle', emoji: '🪲', image: '/puzzles/friends/bug-garden.webp', subject: 'a shiny golden beetle wearing a tiny crown, sitting on a leaf' },
+    friend: { name: 'Goldie the Golden Beetle', emoji: '🪲', image: '/puzzles/friends/bug-garden.webp', subject: 'a shiny golden beetle sitting on a leaf' },
     pieces: [
       { name: 'Bumble Ben', subject: 'a fuzzy bumblebee waving a checkered flag to start the race', emoji: '🐝' },
       { name: 'Sunny Sunflower', subject: 'a giant sunflower with a happy face leaning in to watch', emoji: '🌻' },
@@ -281,7 +281,7 @@ export const PUZZLES: Puzzle[] = [
       'Tall masts and billowing sails fill the top; the treasure island with one palm tree is small and far away in one top corner.',
       'Ropes, the rigging net, a flag streaming in the wind and the spyglass\'s line of sight cross cell edges to tie neighbours together.',
     ],
-    friend: { name: 'Bubbles the Baby Kraken', emoji: '🦑', image: '/puzzles/friends/pirate-ship.webp', subject: 'a tiny friendly baby kraken, coral pink with big shiny eyes, wearing a little captain\'s hat and blowing bubbles' },
+    friend: { name: 'Squirt the Baby Kraken', emoji: '🦑', image: '/puzzles/friends/pirate-ship.webp', subject: 'a tiny friendly baby kraken, coral pink with big shiny eyes, wearing a little captain\'s hat and blowing bubbles' },
     pieces: [
       { name: 'Polly the Parrot', subject: 'a green parrot in a tiny bandana swooping down from the crow\'s nest, squawking happily', emoji: '🦜' },
       { name: 'The Lookout', subject: 'a raccoon in the crow\'s nest peering through a long brass spyglass toward the island', emoji: '🔭' },
