@@ -475,6 +475,9 @@ export function allVoiceLines(tasks: { id: string; question: string }[] = []): V
     levelUpVoice(2),
     levelUpVoice(3),
     ...taskVoiceLines(tasks),
+    feedIntroVoice,
+    ...feedYumVoices,
+    feedLoveVoice,
   ];
 }
 
@@ -485,6 +488,16 @@ export const levelUpVoice = (stage: number): VoiceLine => ({
     ? "Wow, look at me! I'm all grown up! Thank you for brushing with me!"
     : "Look how big I'm getting! Keep brushing with me!",
 });
+
+// Feeding screen after brushing (components/Pets/PetFeeding.tsx).
+export const feedIntroVoice: VoiceLine = { key: 'feed-intro', text: 'Snack time! Tap a snack to feed your pet.' };
+export const feedYumVoices: VoiceLine[] = [
+  { key: 'feed-yum-1', text: 'Yum!' },
+  { key: 'feed-yum-2', text: 'Mmm, tasty!' },
+  { key: 'feed-yum-3', text: 'Num num num!' },
+];
+// A fully grown pet gets a heart instead of growing.
+export const feedLoveVoice: VoiceLine = { key: 'feed-love', text: 'I love you!' };
 
 const POSITIONS = [
   'top-left', 'top-center', 'top-right',

@@ -25,7 +25,7 @@ interface WheelSegment {
   label: string;
   emoji: string;
   color: string;
-  rewardType: 'points' | 'sticker' | 'accessory' | 'puzzleKey';
+  rewardType: 'points' | 'sticker' | 'puzzleKey' | 'snack';
   pointAmount?: number;
   weight?: number; // chance relative to a normal slot (1)
 }
@@ -49,14 +49,10 @@ const STICKER_SEGMENTS: WheelSegment[] = [
   { id: 'sticker-2', label: 'Sticker', emoji: '🎨', color: '#f9a8d4', rewardType: 'sticker' },
 ];
 
-// Accessory segment (only shown if accessories are available)
-const ACCESSORY_SEGMENT: WheelSegment = {
-  id: 'accessory', label: 'Rare!', emoji: '✨', color: '#a78bfa', rewardType: 'accessory',
-};
-
-// Bonus segment (extra points, always available)
-const BONUS_SEGMENT: WheelSegment = {
-  id: 'bonus', label: 'Bonus!', emoji: '🎁', color: '#22d3ee', rewardType: 'points', pointAmount: 20,
+// Pet snack: goes in the snack bag and is fed to a pet after brushing.
+// One normal slot, so about 1 spin in 8.
+const SNACK_SEGMENT: WheelSegment = {
+  id: 'snack', label: 'Snack!', emoji: '🍎', color: '#ef4444', rewardType: 'snack',
 };
 
 /**
@@ -75,12 +71,7 @@ function buildWheelSegments(availability: RewardAvailability): WheelSegment[] {
 
   segments.push(POINT_SEGMENTS[1]); // 10 pts
 
-  // Add accessory or bonus depending on availability
-  if (availability.accessoriesAvailable) {
-    segments.push(ACCESSORY_SEGMENT);
-  } else {
-    segments.push(BONUS_SEGMENT);
-  }
+  segments.push(SNACK_SEGMENT);
 
   segments.push(POINT_SEGMENTS[2]); // 15 pts
 
@@ -91,15 +82,11 @@ function buildWheelSegments(availability: RewardAvailability): WheelSegment[] {
 
   segments.push(POINT_SEGMENTS[3]); // 25 pts
 
-  // Add bonus segment if we haven't already (when accessories were available)
-  if (availability.accessoriesAvailable) {
-    segments.push(BONUS_SEGMENT);
-  } else if (!availability.stickersAvailable) {
-    // If no stickers and no accessories, add more point variety
-    segments.push({ id: 'pts-10b', label: '10 pts', emoji: '⭐', color: '#fdba74', rewardType: 'points', pointAmount: 10 });
-  } else {
-    // Add extra bonus for variety
+  if (availability.stickersAvailable) {
     segments.push({ id: 'bonus-2', label: 'Bonus!', emoji: '🎁', color: '#67e8f9', rewardType: 'points', pointAmount: 15 });
+  } else {
+    // No stickers left: more point variety instead
+    segments.push({ id: 'pts-10b', label: '10 pts', emoji: '⭐', color: '#fdba74', rewardType: 'points', pointAmount: 10 });
   }
 
   return segments;
@@ -187,6 +174,8 @@ export function BonusWheel({
       // 2. Generate a reward matching the segment type
       const reward: ChestReward = landingSegment.rewardType === 'puzzleKey'
         ? { type: 'puzzleKey' }
+        : landingSegment.rewardType === 'snack'
+        ? { type: 'snack', amount: 1 }
         : await generateSpecificReward(
           landingSegment.rewardType,
           landingSegment.pointAmount,
@@ -270,6 +259,8 @@ export function BonusWheel({
     if (r.type === 'points') return sum + r.amount;
     return sum;
   }, 0);
+
+  const snacksEarned = allRewards.reduce((sum, r) => (r.type === 'snack' ? sum + r.amount : sum), 0);
 
   const newItemsEarned = allRewards.filter(
     r => (r.type === 'sticker' || r.type === 'accessory') && r.isNew
@@ -457,7 +448,7 @@ export function BonusWheel({
             transition={{ type: 'spring', damping: 10 }}
             className="text-center"
           >
-            {currentReward.type === 'points' || currentReward.type === 'puzzleKey' ? (
+            {currentReward.type === 'points' || currentReward.type === 'puzzleKey' || currentReward.type === 'snack' ? (
               /* Points reward - show in colored card */
               <motion.div
                 initial={{ y: -50 }}
@@ -584,6 +575,13 @@ export function BonusWheel({
                 <div className="flex items-center justify-center gap-2 text-yellow-300 text-xl font-bold mb-2">
                   <span>⭐</span>
                   <span>+{totalPointsEarned} Points</span>
+                </div>
+              )}
+
+              {snacksEarned > 0 && (
+                <div className="flex items-center justify-center gap-2 text-red-300 text-lg font-bold mb-2">
+                  <span>🍎</span>
+                  <span>+{snacksEarned} pet {snacksEarned === 1 ? 'snack' : 'snacks'}</span>
                 </div>
               )}
 
