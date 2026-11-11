@@ -9,7 +9,8 @@ import { useCharacterSprites } from '../hooks/useCharacterSprites';
 import { useChild } from '../context/ChildContext';
 import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
-import { addBuddyBrush, buddyPet, withPetProgress } from '../utils/petProgress';
+import { addSnacks, withPetProgress } from '../utils/petProgress';
+import { PetFeeding } from '../components/Pets/PetFeeding';
 import { useContent } from '../context/ContentContext';
 import { CompositeStoryImage } from '../components/CompositeStoryImage';
 import { MysteryChest } from '../components/MysteryChest';
@@ -54,6 +55,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   const [petNameAudioUrls, setPetNameAudioUrls] = useState<string[]>([]);
   const [petNamePossessiveAudioUrls, setPetNamePossessiveAudioUrls] = useState<string[]>([]);
   const [showMysteryChest, setShowMysteryChest] = useState(false);
+  const [showFeeding, setShowFeeding] = useState(false);
   // New task bonus flow state
   const [showInitialCompletion, setShowInitialCompletion] = useState(false); // "Amazing job" screen first
   const [showTaskCheckIn, setShowTaskCheckIn] = useState(false);
@@ -234,9 +236,8 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
     // Mark chapter as complete
     await completeChapter(chapterIndex);
 
-    // The buddy pet grows from every finished brush, in story mode too.
-    const buddy = buddyPet(child, getPetById(child.activePetId)?.name);
-    await updateChild({ modeProgress: withPetProgress(child.modeProgress, addBuddyBrush(child, buddy.id)) });
+    // Every finished brush puts a pet snack in the bag, in story mode too.
+    await updateChild({ modeProgress: withPetProgress(child.modeProgress, addSnacks(child, 1)) });
 
     // Check if task bonus feature is enabled
     const picked = pickTasksForBrushing(resolveTaskConfig(child.taskConfig));
@@ -277,6 +278,12 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
 
   const handleChestClose = () => {
     setShowMysteryChest(false);
+    setShowFeeding(true);
+  };
+
+  // Feeding screen is the last step before leaving
+  const handleFeedingDone = () => {
+    setShowFeeding(false);
     setHasExited(true);
     onComplete(pointsEarned);
   };
@@ -301,8 +308,7 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
   // Bonus wheel complete handler
   const handleWheelComplete = () => {
     setShowBonusWheel(false);
-    setHasExited(true);
-    onComplete(pointsEarned);
+    setShowFeeding(true);
   };
 
   const {
@@ -873,6 +879,10 @@ export function BrushingScreen({ onComplete, onExit }: BrushingScreenProps) {
         onComplete={handleWheelComplete}
       />
     );
+  }
+
+  if (showFeeding) {
+    return <PetFeeding onDone={handleFeedingDone} />;
   }
 
   // Render mystery chest overlay (legacy fallback when task bonus is disabled)

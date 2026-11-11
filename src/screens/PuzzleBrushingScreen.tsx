@@ -23,8 +23,9 @@ import { calculateSessionPoints, PUZZLE_COMPLETION_BONUS } from '../utils/points
 import { isToday } from '../utils/streakCalculator';
 import type { ChestReward, TaskCheckInResult } from '../types';
 import { resolveTaskConfig, pickTasksForBrushing } from '../utils/tasks';
-import { addBuddyBrush, buddyPet, setBuddy, withPetProgress, getPetProgress } from '../utils/petProgress';
+import { addSnacks, setBuddy, withPetProgress } from '../utils/petProgress';
 import { friendPetId, getRosterPet } from '../data/petRoster';
+import { PetFeeding } from '../components/Pets/PetFeeding';
 
 const TOTAL_SECONDS = 120;
 const STAGE_SECONDS = TOTAL_SECONDS / BRUSH_STAGES.length;
@@ -32,7 +33,7 @@ const STAGE_SECONDS = TOTAL_SECONDS / BRUSH_STAGES.length;
 // ?fast speeds the timer up 10x so a whole session can be checked in 12 seconds.
 const TICK_MS = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('fast') ? 100 : 1000;
 
-type Phase = 'countdown' | 'brushing' | 'reveal' | 'friend' | 'checkin' | 'wheel' | 'chest';
+type Phase = 'countdown' | 'brushing' | 'reveal' | 'friend' | 'checkin' | 'wheel' | 'chest' | 'feed';
 
 interface PuzzleBrushingScreenProps {
   onComplete: (newPieceIndex: number | null) => void;
@@ -81,9 +82,8 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     const points = calculateSessionPoints(newStreak, false, isFirstBrushOfDay, false);
     const total = points.total + (completed ? PUZZLE_COMPLETION_BONUS : 0);
     await addPoints(total);
-    // The buddy grows from every finished brush.
-    const buddy = buddyPet(child, getPetById(child.activePetId)?.name);
-    await updateChild({ modeProgress: withPetProgress(withPuzzleProgress(child, next), addBuddyBrush(child, buddy.id)) });
+    // Every finished brush puts a snack in the bag, fed to a pet at the end.
+    await updateChild({ modeProgress: withPetProgress(withPuzzleProgress(child, next), addSnacks(child, 1)) });
 
     setPointsEarned(total);
     setPuzzleDone(completed);
@@ -105,7 +105,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
     } else if (completed) {
       afterCelebration(2200, () => say(finishedVoice(puzzle)));
     }
-  }, [child, puzzle, pieceIndex, secretPiece, startProgress, playSound, updateStreak, addPoints, updateChild, say, playSequence, getPetById]);
+  }, [child, puzzle, pieceIndex, secretPiece, startProgress, playSound, updateStreak, addPoints, updateChild, say, playSequence]);
 
   const { elapsedSeconds, isRunning, start, pause, resume } = useBrushingTimer(handleTimerComplete, undefined, TICK_MS);
 
@@ -211,7 +211,7 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         collectedAccessories={child.collectedAccessories}
         offerPuzzleKey={hasLockedPuzzles(getPuzzleProgress(child))}
         onRewardClaimed={handleReward}
-        onComplete={finish}
+        onComplete={() => setPhase('feed')}
       />
     );
   }
@@ -222,14 +222,16 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         collectedStickers={child.collectedStickers}
         collectedAccessories={child.collectedAccessories}
         onRewardClaimed={handleReward}
-        onClose={finish}
+        onClose={() => setPhase('feed')}
       />
     );
+  }
+  if (phase === 'feed') {
+    return <PetFeeding voice={voiceOn} onDone={finish} />;
   }
 
   if (phase === 'friend') {
     const newPet = getRosterPet(friendPetId(puzzle.id));
-    const currentBuddyName = getRosterPet(getPetProgress(child).buddy)?.name ?? buddyPet(child, pet?.name).name;
     const next = () => {
       if (puzzleDone) say(finishedVoice(puzzle));
       setPhase(bonusEnabled ? 'checkin' : 'chest');
@@ -266,17 +268,14 @@ export function PuzzleBrushingScreen({ onComplete, onExit }: PuzzleBrushingScree
         <motion.button
           whileTap={{ scale: 0.95 }}
           onClick={async () => {
-            // Adopted already (found friends are pets); this makes it the buddy.
+            // Adopted already (found friends are pets); the snack screen opens on them.
             if (newPet) await updateChild({ modeProgress: withPetProgress(child.modeProgress, setBuddy(child, newPet.id)) });
             next();
           }}
           className="bg-primary text-white font-bold py-4 px-10 rounded-full text-xl shadow-lg"
         >
-          Brush with {newPet?.name ?? 'my new friend'}!
+          Welcome home, {newPet?.name ?? 'friend'}!
         </motion.button>
-        <button onClick={next} className="text-text/60 font-semibold underline">
-          Keep brushing with {currentBuddyName}
-        </button>
       </div>
     );
   }

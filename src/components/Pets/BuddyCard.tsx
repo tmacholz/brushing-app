@@ -2,8 +2,9 @@ import { motion } from 'framer-motion';
 import { PetArt, StageStars } from './PetArt';
 import { brushesToNextStage, stageProgress, stageFor, type RosterPet } from '../../data/petRoster';
 
-// The home screen buddy: the pet at its stage, its stars and a growth bar.
-export function BuddyCard({ pet, brushes, onClick }: { pet: RosterPet; brushes: number; onClick: () => void }) {
+// The home screen pet (the one fed last): its stage, stars and growth bar.
+// With snacks left in the bag it offers to feed them.
+export function BuddyCard({ pet, brushes, snacks = 0, onClick }: { pet: RosterPet; brushes: number; snacks?: number; onClick: () => void }) {
   const stage = stageFor(brushes);
   const left = brushesToNextStage(brushes);
   return (
@@ -30,8 +31,11 @@ export function BuddyCard({ pet, brushes, onClick }: { pet: RosterPet; brushes: 
         <p className="mt-1 text-xs text-text/60 font-medium">
           {left === null
             ? `${pet.name} is all grown up!`
-            : `${left} more ${left === 1 ? 'brush' : 'brushes'} until ${pet.name} grows!`}
+            : `${left} more ${left === 1 ? 'snack' : 'snacks'} until ${pet.name} grows!`}
         </p>
+        {snacks > 0 && (
+          <p className="mt-0.5 text-xs font-bold text-primary">🍎 {snacks} {snacks === 1 ? 'snack' : 'snacks'} in your bag. Tap to feed!</p>
+        )}
       </div>
     </motion.button>
   );

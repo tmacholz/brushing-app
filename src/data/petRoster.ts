@@ -1,6 +1,7 @@
 // Pets that level up. A kid's pets are the starters (Bubbles and Fern) plus
 // every hidden friend they have found in puzzle mode. Each pet grows through
-// 3 stages, but only from brushes done while it is the kid's buddy.
+// 3 stages, from snacks fed to it after brushing (one snack per brush,
+// plus any the bonus wheel gives).
 //
 // Art: public/pets/stages/<id>-<stage>.webp (made by scripts/generate-pet-stages.mjs).
 // A friend's stage 1 is its puzzle friend image.
@@ -17,7 +18,7 @@ export interface RosterPet {
   puzzle?: Puzzle;            // where a friend hides
 }
 
-// Brushes with this pet as buddy needed to reach each stage.
+// Snacks fed to this pet needed to reach each stage.
 export const STAGE_THRESHOLDS: Record<PetStage, number> = { 1: 0, 2: 14, 3: 42 };
 export const MAX_STAGE: PetStage = 3;
 

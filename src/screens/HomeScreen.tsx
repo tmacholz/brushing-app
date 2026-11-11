@@ -7,6 +7,7 @@ import { useAudio } from '../context/AudioContext';
 import { usePets } from '../context/PetsContext';
 import { BuddyCard } from '../components/Pets/BuddyCard';
 import { LevelUpCelebration } from '../components/Pets/LevelUpCelebration';
+import { PetFeeding } from '../components/Pets/PetFeeding';
 import { buddyPet, getPetProgress, markLevelUpSeen, pendingLevelUp, petBrushes, withPetProgress } from '../utils/petProgress';
 import { useContent } from '../context/ContentContext';
 import { getStreakLevel } from '../utils/streakCalculator';
@@ -47,6 +48,7 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
   const [switchingPuzzle, setSwitchingPuzzle] = useState(false);
   const [unlockTarget, setUnlockTarget] = useState<Puzzle | null>(null);
   const [viewingPiece, setViewingPiece] = useState<number | null>(null);
+  const [feeding, setFeeding] = useState(false);
   const { playSequence: playVoiceSequence, stop: stopVoice } = usePuzzleVoice(true);
 
   // Set by the puzzle brushing screen so the new piece snaps into the board.
@@ -259,10 +261,21 @@ export function HomeScreen({ onNavigate }: HomeScreenProps) {
 
       {/* Buddy pet: grows with every brush */}
       <div className="mb-5">
-        <BuddyCard pet={buddy} brushes={petBrushes(petProgress, buddy.id)} onClick={() => handleNavigate('pet-select')} />
+        <BuddyCard
+          pet={buddy}
+          brushes={petBrushes(petProgress, buddy.id)}
+          snacks={petProgress.food}
+          onClick={() => (petProgress.food > 0 ? setFeeding(true) : handleNavigate('pet-select'))}
+        />
       </div>
 
-      {levelUp && (
+      {feeding && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <PetFeeding onDone={() => setFeeding(false)} />
+        </div>
+      )}
+
+      {levelUp && !feeding && (
         <LevelUpCelebration
           pet={levelUp.pet}
           stage={levelUp.stage}

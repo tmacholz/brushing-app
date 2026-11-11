@@ -6,6 +6,7 @@ import { useToast } from './ToastContext';
 import { getBrushById } from '../data/brushes';
 import { calculateStreak, getDateString } from '../utils/streakCalculator';
 import { apiFetch } from '../services/api';
+import { addSnacks, withPetProgress } from '../utils/petProgress';
 
 const ACTIVE_CHILD_KEY = 'brushquest_active_child_id';
 const OLD_STORAGE_KEY = 'brushquest_data';
@@ -549,6 +550,8 @@ export function ChildProvider({ children }: { children: ReactNode }) {
     } else if (reward.type === 'accessory' && reward.isNew) {
       const newAccessories = [...child.collectedAccessories, reward.collectible.id];
       await updateChild({ collectedAccessories: newAccessories });
+    } else if (reward.type === 'snack') {
+      await updateChild({ modeProgress: withPetProgress(child.modeProgress, addSnacks(child, reward.amount)) });
     }
     // If not new, the reward is a duplicate - no action needed
   }, [child, addPoints, updateChild]);

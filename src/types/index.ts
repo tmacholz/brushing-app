@@ -329,7 +329,8 @@ export type ChestReward =
   | { type: 'points'; amount: number }
   | { type: 'sticker'; collectible: Collectible; isNew: boolean }
   | { type: 'accessory'; collectible: Collectible; isNew: boolean }
-  | { type: 'puzzleKey' }; // puzzle mode: unlocks any locked puzzle for free
+  | { type: 'puzzleKey' } // puzzle mode: unlocks any locked puzzle for free
+  | { type: 'snack'; amount: number }; // goes in the snack bag, fed to a pet after brushing
 
 // Equipped accessories per pet
 export type EquippedAccessories = Record<string, string[]>;

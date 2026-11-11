@@ -1,6 +1,7 @@
-// Pick the buddy pet you brush with. Pets are the starters plus every hidden
+// See your pets and pick the one shown on the home screen (the snack screen
+// after brushing opens on it too). Pets are the starters plus every hidden
 // friend found in puzzle mode; friends still hiding show as silhouettes.
-// Pets can't be bought: they grow from brushes instead.
+// Pets can't be bought: they grow from snacks instead.
 import { motion } from 'framer-motion';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useChild } from '../context/ChildContext';
@@ -9,7 +10,7 @@ import { usePets } from '../context/PetsContext';
 import { PetArt, StageStars } from '../components/Pets/PetArt';
 import { brushesToNextStage, type RosterPet } from '../data/petRoster';
 import {
-  buddyPet, getPetProgress, hiddenPets, ownedPets, petBrushes, petStage, setBuddy, withPetProgress,
+  buddyPet, getPetProgress, hiddenPets, ownedPets, petBrushes, petHearts, petStage, setBuddy, withPetProgress,
 } from '../utils/petProgress';
 
 interface PetSelectScreenProps {
@@ -54,7 +55,7 @@ export function PetSelectScreen({ onBack }: PetSelectScreenProps) {
         <h1 className="text-2xl font-bold text-text">My Pets</h1>
       </div>
       <p className="text-text/60 text-sm mb-4">
-        Pick a buddy to brush with. Your buddy grows a little with every brush!
+        Every brush earns a snack. Feed your pets snacks after brushing to help them grow!
       </p>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -78,7 +79,7 @@ export function PetSelectScreen({ onBack }: PetSelectScreenProps) {
               <p className="mt-1 font-bold text-text">{pet.name}</p>
               <StageStars stage={stage} />
               <p className="mt-1 text-[11px] text-text/50 font-medium">
-                {left === null ? 'All grown up!' : `${left} to grow`}
+                {left === null ? `All grown up! ❤️ ${petHearts(progress, pet.id)}` : `${left} snacks to grow`}
               </p>
             </motion.button>
           );

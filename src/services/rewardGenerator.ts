@@ -308,6 +308,13 @@ export function getRewardDisplayInfo(reward: ChestReward): {
         emoji: '✨',
         color: 'from-purple-400 to-indigo-600',
       };
+    case 'snack':
+      return {
+        title: reward.amount > 1 ? `${reward.amount} Pet Snacks!` : 'Pet Snack!',
+        subtitle: 'Feed it to a pet to help it grow',
+        emoji: '🍎',
+        color: 'from-red-400 to-rose-500',
+      };
     case 'puzzleKey':
       return {
         title: 'Puzzle Key!',
