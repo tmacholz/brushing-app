@@ -72,7 +72,9 @@ for (const [i, line] of todo.entries()) {
       // The app plays small mp3s (about 17 KB each). The 0.8 volume leaves headroom, since Gemini's clips peak at full scale.
       const wav = resolve(outDir, `${line.key}.wav`);
       const mp3 = resolve(outDir, `${line.key}.mp3`);
-      const ff = spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', wav, '-af', 'volume=0.8', '-ac', '1', '-c:a', 'libmp3lame', '-b:a', '48k', mp3]);
+      // A pitched line is sped up and raised (asetrate), e.g. the pet munching.
+      const filters = line.pitch ? `asetrate=${rate}*${line.pitch},aresample=${rate},volume=0.8` : 'volume=0.8';
+      const ff = spawnSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', wav, '-af', filters, '-ac', '1', '-c:a', 'libmp3lame', '-b:a', '48k', mp3]);
       if (ff.status === 0) unlinkSync(wav);
       else console.warn(`  ffmpeg failed or is missing; left ${line.key}.wav (convert it to .mp3 for the app)`);
       console.log(`✓ ${line.key}: ${line.text}`);

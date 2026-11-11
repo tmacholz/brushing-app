@@ -417,7 +417,8 @@ export const PUZZLE_MUSIC_URL: string | null =
 // served as static files, so brushing never spends the daily TTS quota.
 // If a clip is missing the app falls back to the device's own speech voice.
 
-export interface VoiceLine { key: string; text: string }
+// pitch > 1 records the line, then speeds it up and raises it (a cute pet voice).
+export interface VoiceLine { key: string; text: string; pitch?: number }
 
 export const stageVoice = (stage: number): VoiceLine => ({
   key: `stage-${stage}`,
@@ -491,10 +492,11 @@ export const levelUpVoice = (stage: number): VoiceLine => ({
 
 // Feeding screen after brushing (components/Pets/PetFeeding.tsx).
 export const feedIntroVoice: VoiceLine = { key: 'feed-intro', text: 'Snack time! Tap a snack to feed your pet.' };
+// The pet munching, in a pitched-up Kore voice; one is picked at random per snack.
 export const feedYumVoices: VoiceLine[] = [
-  { key: 'feed-yum-1', text: 'Yum!' },
-  { key: 'feed-yum-2', text: 'Mmm, tasty!' },
-  { key: 'feed-yum-3', text: 'Num num num!' },
+  { key: 'feed-nom-1', text: 'Num num num!', pitch: 1.35 },
+  { key: 'feed-nom-2', text: 'Nom nom nom nom!', pitch: 1.35 },
+  { key: 'feed-nom-3', text: 'Mmm, num num num!', pitch: 1.35 },
 ];
 // A fully grown pet gets a heart instead of growing.
 export const feedLoveVoice: VoiceLine = { key: 'feed-love', text: 'I love you!' };
