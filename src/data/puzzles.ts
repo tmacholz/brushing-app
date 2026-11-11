@@ -501,7 +501,7 @@ export const feedYumVoices: VoiceLine[] = [
   { key: 'feed-yum-2', text: 'Mmm, tasty!', pitch: 1.35 },
 ];
 // A fully grown pet gets a heart instead of growing.
-export const feedLoveVoice: VoiceLine = { key: 'feed-love', text: 'I love you!', pitch: 1.35 };
+export const feedLoveVoice: VoiceLine = { key: 'feed-thanks', text: 'Thank you!', pitch: 1.35 };
 
 const POSITIONS = [
   'top-left', 'top-center', 'top-right',
